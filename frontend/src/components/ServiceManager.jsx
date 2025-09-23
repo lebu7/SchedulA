@@ -18,13 +18,13 @@ const ServiceManager = () => {
   }, []);
 
   const fetchServices = async () => {
-    try {
-      const response = await api.get('/services');
-      setServices(response.data);
-    } catch (error) {
-      console.error('Error fetching services:', error);
-    }
-  };
+  try {
+    const response = await api.get('/my-services');
+    setServices(response.data);
+  } catch (error) {
+    console.error('Error fetching services:', error);
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();

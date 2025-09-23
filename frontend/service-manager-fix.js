@@ -9,3 +9,4 @@ const fetchServices = async () => {
     const publicResponse = await api.get('/services');
     setServices(publicResponse.data);
   }
+};
