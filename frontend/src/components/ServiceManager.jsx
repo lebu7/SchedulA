@@ -5,6 +5,7 @@ const ServiceManager = () => {
   const [services, setServices] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -18,17 +19,19 @@ const ServiceManager = () => {
   }, []);
 
   const fetchServices = async () => {
-  try {
-    const response = await api.get('/my-services');
-    setServices(response.data);
-  } catch (error) {
-    console.error('Error fetching services:', error);
-  }
-};
+    try {
+      const response = await api.get('/services');
+      setServices(response.data);
+    } catch (error) {
+      console.error('Error fetching services:', error);
+      setError('Failed to load services');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
     try {
       await api.post('/services', formData);
@@ -40,9 +43,9 @@ const ServiceManager = () => {
         price: '',
         category: 'beauty'
       });
-      fetchServices(); // Refresh the list
+      await fetchServices();
     } catch (error) {
-      console.error('Error creating service:', error);
+      setError(error.response?.data?.error || 'Failed to create service');
     } finally {
       setLoading(false);
     }
@@ -56,47 +59,44 @@ const ServiceManager = () => {
   };
 
   const categoryLabels = {
-    beauty: 'Beauty & Personal Care',
-    health: 'Health & Wellness', 
+    beauty: 'Beauty',
+    health: 'Health',
     fitness: 'Fitness',
-    professional: 'Professional Services',
+    professional: 'Professional',
     other: 'Other'
   };
 
   return (
     <div className="service-manager">
       <div className="service-header">
-        <h2>📊 Service Management</h2>
-        <button 
-          onClick={() => setShowForm(true)} 
-          className="add-service-btn"
-        >
-          ➕ Add New Service
+        <h2>📊 My Services</h2>
+        <button onClick={() => setShowForm(true)} className="add-service-btn">
+          ➕ Add Service
         </button>
       </div>
+
+      {error && <div className="error-message">{error}</div>}
 
       {showForm && (
         <div className="service-form-modal">
           <div className="service-form">
-            <h3>Create New Service</h3>
+            <h3>Add New Service</h3>
             <form onSubmit={handleSubmit}>
               <input
                 type="text"
                 name="name"
-                placeholder="Service Name (e.g., Haircut, Consultation)"
+                placeholder="Service Name"
                 value={formData.name}
                 onChange={handleChange}
                 required
               />
-              
               <textarea
                 name="description"
-                placeholder="Service Description"
+                placeholder="Description"
                 value={formData.description}
                 onChange={handleChange}
                 rows="3"
               />
-              
               <select name="category" value={formData.category} onChange={handleChange} required>
                 <option value="beauty">Beauty & Personal Care</option>
                 <option value="health">Health & Wellness</option>
@@ -104,7 +104,6 @@ const ServiceManager = () => {
                 <option value="professional">Professional Services</option>
                 <option value="other">Other</option>
               </select>
-              
               <div className="form-row">
                 <input
                   type="number"
@@ -116,22 +115,17 @@ const ServiceManager = () => {
                   step="15"
                   required
                 />
-                
                 <input
                   type="number"
                   name="price"
                   placeholder="Price (KES)"
                   value={formData.price}
                   onChange={handleChange}
-                  min="0"
                   step="50"
                 />
               </div>
-              
               <div className="form-actions">
-                <button type="button" onClick={() => setShowForm(false)}>
-                  Cancel
-                </button>
+                <button type="button" onClick={() => setShowForm(false)}>Cancel</button>
                 <button type="submit" disabled={loading}>
                   {loading ? 'Creating...' : 'Create Service'}
                 </button>
@@ -142,11 +136,9 @@ const ServiceManager = () => {
       )}
 
       <div className="services-list">
-        <h3>My Services ({services.length})</h3>
-        
         {services.length === 0 ? (
           <div className="empty-state">
-            <p>No services added yet. Create your first service to get started!</p>
+            <p>No services yet. Create your first service!</p>
           </div>
         ) : (
           <div className="services-grid">
@@ -156,19 +148,10 @@ const ServiceManager = () => {
                   <h4>{service.name}</h4>
                   <span className="category-badge">{categoryLabels[service.category]}</span>
                 </div>
-                
-                {service.description && (
-                  <p className="service-description">{service.description}</p>
-                )}
-                
+                {service.description && <p>{service.description}</p>}
                 <div className="service-details">
-                  <span>⏱️ {service.duration_minutes} minutes</span>
+                  <span>⏱️ {service.duration_minutes} min</span>
                   {service.price && <span>💰 KES {service.price}</span>}
-                </div>
-                
-                <div className="service-actions">
-                  <button className="edit-btn">Edit</button>
-                  <button className="delete-btn">Delete</button>
                 </div>
               </div>
             ))}

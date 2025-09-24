@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { authService } from '../services/auth';
 
-const AuthForm = ({ onAuthSuccess, onAuthError, onClose }) => {
+const AuthForm = ({ onAuthSuccess, onClose }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
@@ -32,9 +32,7 @@ const AuthForm = ({ onAuthSuccess, onAuthError, onClose }) => {
       
       onAuthSuccess(response.user);
     } catch (err) {
-      const errorMessage = err.response?.data?.error || err.message || 'Authentication failed';
-      setError(errorMessage);
-      onAuthError(err);
+      setError(err.response?.data?.error || 'Authentication failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -54,11 +52,7 @@ const AuthForm = ({ onAuthSuccess, onAuthError, onClose }) => {
         
         <h2>{isLogin ? 'Login' : 'Register'}</h2>
         
-        {error && (
-          <div className="error">
-            <strong>Error:</strong> {error}
-          </div>
-        )}
+        {error && <div className="error">{error}</div>}
         
         <form onSubmit={handleSubmit}>
           {!isLogin && (
@@ -71,12 +65,7 @@ const AuthForm = ({ onAuthSuccess, onAuthError, onClose }) => {
                 onChange={handleChange}
                 required
               />
-              <select
-                name="user_type"
-                value={formData.user_type}
-                onChange={handleChange}
-                required
-              >
+              <select name="user_type" value={formData.user_type} onChange={handleChange} required>
                 <option value="client">Client</option>
                 <option value="provider">Service Provider</option>
               </select>
@@ -124,11 +113,7 @@ const AuthForm = ({ onAuthSuccess, onAuthError, onClose }) => {
         
         <p>
           {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <button 
-            type="button" 
-            className="link-btn"
-            onClick={() => setIsLogin(!isLogin)}
-          >
+          <button type="button" className="link-btn" onClick={() => setIsLogin(!isLogin)}>
             {isLogin ? 'Register' : 'Login'}
           </button>
         </p>

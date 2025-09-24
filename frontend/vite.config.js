@@ -5,16 +5,18 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
-    host: true,  // This allows external access in Codespaces
+    host: true,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
+        secure: false,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   },
-  build: {
-    outDir: 'dist'
+  define: {
+    'process.env': {}
   }
 })
