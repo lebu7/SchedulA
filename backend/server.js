@@ -187,9 +187,9 @@ app.post('/api/services', authenticateToken, async (req, res) => {
     }
     const result = await db.run(
             `INSERT INTO appointments 
-            (client_id, service_id, provider_id, appointment_date, end_date, notes) 
-            VALUES (?, ?, ?, ?, ?, ?)`,
-           [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes]
+            (client_id, service_id, provider_id, appointment_date, end_date, notes, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes, 'pending']
 );
 
     const newService = await db.get(`
