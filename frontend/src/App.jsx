@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import AuthForm from './components/AuthForm';
-import ServiceManager from './components/ServiceManager';
+import ServiceList from './components/ServiceList';
 import AppointmentManager from './components/AppointmentManager';
+import ProviderProfile from './components/ProviderProfile';
 import { authService, setupAuthListener } from './services/auth';
 import { healthCheck } from './services/api';
 import './App.css';
@@ -11,16 +12,14 @@ function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [backendStatus, setBackendStatus] = useState('checking');
   const [activeTab, setActiveTab] = useState('services');
+  const [viewProvider, setViewProvider] = useState(null);
 
   useEffect(() => {
-    // Initial auth state
     const currentUser = authService.getCurrentUser();
     if (currentUser) setUser(currentUser);
 
-    // Check backend connection
     checkBackendConnection();
 
-    // Auth change listener
     const removeListener = setupAuthListener(() => {
       const updatedUser = authService.getCurrentUser();
       setUser(updatedUser);
@@ -54,7 +53,12 @@ function App() {
     checkBackendConnection();
   };
 
-  // Render loading while backend is checked
+  const openProvider = (providerId) => {
+    setViewProvider(providerId);
+    setActiveTab('provider');
+  };
+
+  // Loading state
   if (backendStatus === 'checking') {
     return (
       <div className="app-loading">
@@ -67,7 +71,7 @@ function App() {
     );
   }
 
-  // Render connection error screen
+  // Connection error
   if (backendStatus === 'error') {
     return (
       <div className="app-error">
@@ -161,6 +165,11 @@ function App() {
                   <div><strong>Client:</strong> client@example.com / client123</div>
                 </div>
               </div>
+
+              {/* Show services preview even for guests */}
+              <div style={{ marginTop: 24 }}>
+                <ServiceList onOpenProvider={openProvider} />
+              </div>
             </div>
           </div>
         ) : (
@@ -182,7 +191,7 @@ function App() {
             <nav className="dashboard-nav">
               <button
                 className={activeTab === 'services' ? 'active' : ''}
-                onClick={() => setActiveTab('services')}
+                onClick={() => { setActiveTab('services'); setViewProvider(null); }}
               >
                 {user.user_type === 'provider' ? 'My Services' : 'Find Services'}
               </button>
@@ -196,10 +205,12 @@ function App() {
 
             {/* Tab Content */}
             <div className="dashboard-content">
-              {activeTab === 'services' ? (
-                <ServiceManager />
-              ) : (
-                <AppointmentManager user={user} />
+              {activeTab === 'services' && (
+                <ServiceList forProvider={user.user_type === 'provider' ? user.id : null} onOpenProvider={openProvider} />
+              )}
+              {activeTab === 'bookings' && <AppointmentManager user={user} />}
+              {activeTab === 'provider' && viewProvider && (
+                <ProviderProfile providerId={viewProvider} onBook={() => setActiveTab('bookings')} />
               )}
             </div>
           </div>
