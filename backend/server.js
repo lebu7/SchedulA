@@ -11,10 +11,9 @@ const PORT = process.env.PORT || 5000;
 
 // ==================== MIDDLEWARE ====================
 app.use(cors({
-  origin: true, // Allow all origins in development
+  origin: true,
   credentials: true
 }));
-
 app.use(express.json({ limit: '10mb' }));
 
 // Logging middleware
@@ -28,11 +27,9 @@ const authenticateToken = (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-
     if (!token) {
       return res.status(401).json({ error: 'Access token required' });
     }
-
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) {
         return res.status(403).json({ error: 'Invalid or expired token' });
@@ -46,11 +43,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ==================== UTILITY FUNCTIONS ====================
-const validateEmail = (email) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-};
-
+const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const sanitizeUser = (user) => {
   const { password, ...userWithoutPassword } = user;
   return userWithoutPassword;
@@ -68,35 +61,28 @@ app.get('/', (req, res) => {
   });
 });
 
-// User registration
+// -------------------- AUTH --------------------
 app.post('/api/register', async (req, res) => {
   try {
     const { email, password, name, user_type = 'client', phone, business_name } = req.body;
-
-    // Validation
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required' });
     }
-
     if (!validateEmail(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
-
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
-
     if (!['client', 'provider'].includes(user_type)) {
       return res.status(400).json({ error: 'Invalid user type' });
     }
 
-    // Check if user exists
     const existingUser = await db.get('SELECT id FROM users WHERE email = ?', [email]);
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
-    // Hash password and create user
     const hashedPassword = await bcrypt.hash(password, 12);
     const result = await db.run(
       `INSERT INTO users (email, password, name, user_type, phone, business_name) 
@@ -104,13 +90,11 @@ app.post('/api/register', async (req, res) => {
       [email, hashedPassword, name, user_type, phone, business_name]
     );
 
-    // Get created user
     const newUser = await db.get(
       'SELECT id, email, name, user_type, phone, business_name, created_at FROM users WHERE id = ?',
       [result.id]
     );
 
-    // Generate token
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, user_type: newUser.user_type },
       process.env.JWT_SECRET,
@@ -123,66 +107,52 @@ app.post('/api/register', async (req, res) => {
       token,
       user: newUser
     });
-
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Server error during registration' });
   }
 });
 
-// User login
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
-
-    // Find user
     const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
-
-    // Check password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
-
-    // Generate token
     const token = jwt.sign(
       { id: user.id, email: user.email, user_type: user.user_type },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-
     res.json({
       success: true,
       message: 'Login successful',
       token,
       user: sanitizeUser(user)
     });
-
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login' });
   }
 });
 
-// Get user profile
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
     const user = await db.get(
       'SELECT id, email, name, user_type, phone, business_name, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
-
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
     res.json({ success: true, user });
   } catch (error) {
     console.error('Profile error:', error);
@@ -190,7 +160,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Get all services (public)
+// -------------------- SERVICES --------------------
 app.get('/api/services', async (req, res) => {
   try {
     const services = await db.query(`
@@ -200,7 +170,6 @@ app.get('/api/services', async (req, res) => {
       WHERE s.is_available = 1
       ORDER BY s.created_at DESC
     `);
-    
     res.json({ success: true, data: services });
   } catch (error) {
     console.error('Services fetch error:', error);
@@ -208,58 +177,42 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
-// Create service (providers only)
 app.post('/api/services', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') {
       return res.status(403).json({ error: 'Only service providers can create services' });
     }
-
     const { name, description, duration_minutes = 60, price, category } = req.body;
-
     if (!name || !category) {
       return res.status(400).json({ error: 'Service name and category are required' });
     }
-
-    // Create service
     const result = await db.run(
       `INSERT INTO services (provider_id, name, description, duration_minutes, price, category) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [req.user.id, name, description, duration_minutes, price, category]
     );
-
-    // Get created service with provider info
     const newService = await db.get(`
       SELECT s.*, u.name as provider_name, u.business_name 
       FROM services s 
       JOIN users u ON s.provider_id = u.id 
       WHERE s.id = ?
     `, [result.id]);
-
-    res.status(201).json({
-      success: true,
-      message: 'Service created successfully',
-      data: newService
-    });
-
+    res.status(201).json({ success: true, message: 'Service created successfully', data: newService });
   } catch (error) {
     console.error('Service creation error:', error);
     res.status(500).json({ error: 'Failed to create service' });
   }
 });
 
-// Get services for current provider
 app.get('/api/my-services', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') {
       return res.status(403).json({ error: 'Access denied' });
     }
-
     const services = await db.query(
       'SELECT * FROM services WHERE provider_id = ? ORDER BY created_at DESC',
       [req.user.id]
     );
-    
     res.json({ success: true, data: services });
   } catch (error) {
     console.error('My services error:', error);
@@ -267,7 +220,7 @@ app.get('/api/my-services', authenticateToken, async (req, res) => {
   }
 });
 
-// Get appointments
+// -------------------- APPOINTMENTS --------------------
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   try {
     let appointments;
@@ -290,7 +243,6 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
         ORDER BY a.appointment_date DESC
       `, [req.user.id]);
     }
-
     res.json({ success: true, data: appointments });
   } catch (error) {
     console.error('Appointments error:', error);
@@ -298,46 +250,31 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
   }
 });
 
-// Create appointment
 app.post('/api/appointments', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'client') {
       return res.status(403).json({ error: 'Only clients can book appointments' });
     }
-
     const { service_id, appointment_date, client_notes } = req.body;
-
     if (!service_id || !appointment_date) {
       return res.status(400).json({ error: 'Service ID and appointment date are required' });
     }
-
-    // Get service details
     const service = await db.get(`
       SELECT s.*, u.id as provider_id 
       FROM services s 
       JOIN users u ON s.provider_id = u.id 
       WHERE s.id = ?
     `, [service_id]);
-
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
-
-    // Calculate end date
     const endDate = new Date(new Date(appointment_date).getTime() + service.duration_minutes * 60000);
-
-    // Create appointment
-    const result = await db.run(
+    await db.run(
       `INSERT INTO appointments (client_id, service_id, provider_id, appointment_date, end_date, client_notes) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes]
     );
-
-    res.status(201).json({
-      success: true,
-      message: 'Appointment booked successfully'
-    });
-
+    res.status(201).json({ success: true, message: 'Appointment booked successfully' });
   } catch (error) {
     console.error('Appointment creation error:', error);
     res.status(500).json({ error: 'Failed to book appointment' });
@@ -345,10 +282,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 });
 
 // ==================== ERROR HANDLING ====================
-app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
-});
-
+app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((error, req, res, next) => {
   console.error('Unhandled error:', error);
   res.status(500).json({ error: 'Internal server error' });
@@ -367,7 +301,6 @@ app.listen(PORT, () => {
   console.log('🚀 SchedulA Backend Server Started!');
   console.log('🚀 ======================================');
   console.log(`🚀 Port: ${PORT}`);
-  console.log(`🚀 Environment: ${process.env.NODE_ENV}`);
   console.log(`🚀 Health: http://localhost:${PORT}/`);
   console.log('🚀 ======================================');
 });

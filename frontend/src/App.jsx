@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AuthForm from './components/AuthForm';
 import ServiceManager from './components/ServiceManager';
+import AppointmentManager from './components/AppointmentManager';
 import { authService, setupAuthListener } from './services/auth';
 import { healthCheck } from './services/api';
 import './App.css';
@@ -12,21 +13,18 @@ function App() {
   const [activeTab, setActiveTab] = useState('services');
 
   useEffect(() => {
-    // Check initial auth state
+    // Initial auth state
     const currentUser = authService.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-    }
+    if (currentUser) setUser(currentUser);
 
     // Check backend connection
     checkBackendConnection();
 
-    // Listen for auth changes (login/logout)
+    // Auth change listener
     const removeListener = setupAuthListener(() => {
       const updatedUser = authService.getCurrentUser();
       setUser(updatedUser);
     });
-
     return removeListener;
   }, []);
 
@@ -56,7 +54,7 @@ function App() {
     checkBackendConnection();
   };
 
-  // Render different states based on backend status
+  // Render loading while backend is checked
   if (backendStatus === 'checking') {
     return (
       <div className="app-loading">
@@ -69,6 +67,7 @@ function App() {
     );
   }
 
+  // Render connection error screen
   if (backendStatus === 'error') {
     return (
       <div className="app-error">
@@ -76,7 +75,7 @@ function App() {
           <h1>🚀 SchedulA</h1>
           <h2>Connection Issue</h2>
           <p>Unable to connect to the backend server.</p>
-          
+
           <div className="error-actions">
             <button onClick={handleRetryConnection} className="retry-btn">
               🔄 Retry Connection
@@ -96,7 +95,7 @@ function App() {
     );
   }
 
-  // Main application
+  // Main app
   return (
     <div className="app">
       {/* Header */}
@@ -106,7 +105,6 @@ function App() {
             <h1>🚀 SchedulA</h1>
             <p>Nairobi Service Booking System</p>
           </div>
-          
           <div className="header-status">
             <span className="status-badge connected">✅ Connected</span>
             {user && (
@@ -121,15 +119,14 @@ function App() {
       {/* Main Content */}
       <main className="app-main">
         {!user ? (
-          // Welcome screen for unauthenticated users
+          // Welcome screen
           <div className="welcome-screen">
             <div className="welcome-content">
               <div className="welcome-hero">
                 <h2>Book Services in Nairobi</h2>
                 <p>Connect with the best service providers in Nairobi</p>
-                
                 <div className="welcome-actions">
-                  <button 
+                  <button
                     onClick={() => setShowAuth(true)}
                     className="cta-button"
                   >
@@ -147,7 +144,6 @@ function App() {
                     <li>Manage your bookings</li>
                   </ul>
                 </div>
-
                 <div className="feature-card">
                   <h3>💼 For Providers</h3>
                   <ul>
@@ -161,18 +157,14 @@ function App() {
               <div className="demo-info">
                 <h4>Quick Start with Demo Accounts:</h4>
                 <div className="demo-accounts">
-                  <div>
-                    <strong>Provider:</strong> salon@nairobi.com / provider123
-                  </div>
-                  <div>
-                    <strong>Client:</strong> client@example.com / client123
-                  </div>
+                  <div><strong>Provider:</strong> salon@nairobi.com / provider123</div>
+                  <div><strong>Client:</strong> client@example.com / client123</div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          // Dashboard for authenticated users
+          // Dashboard
           <div className="dashboard">
             {/* User Info */}
             <div className="user-info-card">
@@ -188,13 +180,13 @@ function App() {
 
             {/* Navigation */}
             <nav className="dashboard-nav">
-              <button 
+              <button
                 className={activeTab === 'services' ? 'active' : ''}
                 onClick={() => setActiveTab('services')}
               >
                 {user.user_type === 'provider' ? 'My Services' : 'Find Services'}
               </button>
-              <button 
+              <button
                 className={activeTab === 'bookings' ? 'active' : ''}
                 onClick={() => setActiveTab('bookings')}
               >
@@ -207,16 +199,7 @@ function App() {
               {activeTab === 'services' ? (
                 <ServiceManager />
               ) : (
-                <div className="coming-soon">
-                  <h3>📅 {user.user_type === 'provider' ? 'Appointment Management' : 'Booking System'}</h3>
-                  <p>This feature is coming soon!</p>
-                  <p>
-                    {user.user_type === 'provider' 
-                      ? 'You will be able to view and manage your appointments here.'
-                      : 'You will be able to book services and manage your appointments here.'
-                    }
-                  </p>
-                </div>
+                <AppointmentManager user={user} />
               )}
             </div>
           </div>
@@ -230,7 +213,7 @@ function App() {
 
       {/* Auth Modal */}
       {showAuth && (
-        <AuthForm 
+        <AuthForm
           onSuccess={handleAuthSuccess}
           onClose={() => setShowAuth(false)}
         />
