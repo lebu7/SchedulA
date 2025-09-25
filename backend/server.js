@@ -186,10 +186,12 @@ app.post('/api/services', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Service name and category are required' });
     }
     const result = await db.run(
-      `INSERT INTO services (provider_id, name, description, duration_minutes, price, category) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.user.id, name, description, duration_minutes, price, category]
-    );
+            `INSERT INTO appointments 
+            (client_id, service_id, provider_id, appointment_date, end_date, notes) 
+            VALUES (?, ?, ?, ?, ?, ?)`,
+           [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes]
+);
+
     const newService = await db.get(`
       SELECT s.*, u.name as provider_name, u.business_name 
       FROM services s 
