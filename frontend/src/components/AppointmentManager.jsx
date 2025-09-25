@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { servicesAPI, appointmentsAPI } from '../services/api';
+import './AppointmentManager.css'; // we'll style it separately
 
 function AppointmentManager({ user }) {
   const [services, setServices] = useState([]);
@@ -12,7 +13,6 @@ function AppointmentManager({ user }) {
   const [appointmentDate, setAppointmentDate] = useState('');
   const [clientNotes, setClientNotes] = useState('');
 
-  // Load services (for clients) or appointments (for providers)
   useEffect(() => {
     if (user.user_type === 'client') {
       loadServices();
@@ -75,115 +75,114 @@ function AppointmentManager({ user }) {
   // ============ RENDER ==============
   if (loading) return <p>Loading...</p>;
 
-  return (
-    <div className="appointment-manager">
-      {user.user_type === 'client' ? (
-        <div>
-          <h2>📋 Book an Appointment</h2>
+  if (user.user_type === 'client') {
+    return (
+      <div className="appointment-manager">
+        <h2>📋 Book an Appointment</h2>
 
-          {/* Search */}
+        {/* Search bar */}
+        <div className="search-bar">
           <input
             type="text"
-            placeholder="Search services (e.g. Salon, Cleaning)..."
+            placeholder="Search services (e.g. Massage, Salon, Cleaning)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-box"
           />
+        </div>
 
-          {/* Service List */}
-          <div className="service-list">
-            {services
-              .filter((s) =>
-                s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                s.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                s.business_name?.toLowerCase().includes(searchTerm.toLowerCase())
-              )
-              .map((service) => (
-                <div key={service.id} className="service-card">
-                  <h3>{service.name}</h3>
-                  <p>{service.description}</p>
-                  <p>
-                    <strong>Provider:</strong> {service.provider_name}{' '}
-                    ({service.business_name || 'Independent'})
-                  </p>
-                  <p>
-                    <strong>Category:</strong> {service.category}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {service.duration_minutes} min
-                  </p>
-                  <p>
-                    <strong>Price:</strong> KSh {service.price}
-                  </p>
-                  <button onClick={() => handleBookClick(service)}>
-                    Book This Service
-                  </button>
-                </div>
-              ))}
-          </div>
-
-          {/* Booking Dialog */}
-          {showBookingDialog && selectedService && (
-            <div className="dialog-backdrop">
-              <div className="dialog">
-                <h3>📅 Book: {selectedService.name}</h3>
+        {/* Services Grid */}
+        <div className="services-grid">
+          {services
+            .filter((s) =>
+              s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              s.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              s.business_name?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .map((service) => (
+              <div key={service.id} className="service-card">
+                <h3>{service.name}</h3>
+                <p className="desc">{service.description}</p>
                 <p>
-                  Provider: {selectedService.provider_name} (
-                  {selectedService.business_name || 'Independent'})
+                  <strong>Provider:</strong> {service.provider_name}{' '}
+                  ({service.business_name || 'Independent'})
                 </p>
+                <p>
+                  <strong>Category:</strong> {service.category}
+                </p>
+                <p>
+                  <strong>Duration:</strong> {service.duration_minutes} min
+                </p>
+                <p>
+                  <strong>Price:</strong> KSh {service.price}
+                </p>
+                <button onClick={() => handleBookClick(service)}>
+                  📅 Book Now
+                </button>
+              </div>
+            ))}
+          {services.length === 0 && <p>No services available yet.</p>}
+        </div>
 
-                <label>
-                  Appointment Date & Time:
-                  <input
-                    type="datetime-local"
-                    value={appointmentDate}
-                    onChange={(e) => setAppointmentDate(e.target.value)}
-                  />
-                </label>
+        {/* Booking Dialog */}
+        {showBookingDialog && selectedService && (
+          <div className="dialog-backdrop">
+            <div className="dialog">
+              <h3>📅 Book: {selectedService.name}</h3>
+              <p>
+                Provider: {selectedService.provider_name} (
+                {selectedService.business_name || 'Independent'})
+              </p>
 
-                <label>
-                  Notes (optional):
-                  <textarea
-                    value={clientNotes}
-                    onChange={(e) => setClientNotes(e.target.value)}
-                  />
-                </label>
+              <label>
+                Appointment Date & Time:
+                <input
+                  type="datetime-local"
+                  value={appointmentDate}
+                  onChange={(e) => setAppointmentDate(e.target.value)}
+                />
+              </label>
 
-                <div className="dialog-actions">
-                  <button onClick={handleConfirmBooking}>Confirm Booking</button>
-                  <button
-                    onClick={() => setShowBookingDialog(false)}
-                    className="cancel-btn"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              <label>
+                Notes (optional):
+                <textarea
+                  value={clientNotes}
+                  onChange={(e) => setClientNotes(e.target.value)}
+                />
+              </label>
+
+              <div className="dialog-actions">
+                <button onClick={handleConfirmBooking}>Confirm</button>
+                <button
+                  onClick={() => setShowBookingDialog(false)}
+                  className="cancel-btn"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Provider view
+  return (
+    <div>
+      <h2>📅 My Appointments</h2>
+      {appointments.length === 0 ? (
+        <p>No appointments yet.</p>
       ) : (
-        <div>
-          <h2>📅 My Appointments</h2>
-          {appointments.length === 0 ? (
-            <p>No appointments yet.</p>
-          ) : (
-            <ul className="appointment-list">
-              {appointments.map((appt) => (
-                <li key={appt.id} className="appointment-item">
-                  <strong>{appt.service_name}</strong> with{' '}
-                  {appt.client_name || appt.provider_name} <br />
-                  <span>
-                    {new Date(appt.appointment_date).toLocaleString()}
-                  </span>
-                  {appt.client_notes && (
-                    <p>Notes: {appt.client_notes}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <ul className="appointment-list">
+          {appointments.map((appt) => (
+            <li key={appt.id} className="appointment-item">
+              <strong>{appt.service_name}</strong> with{' '}
+              {appt.client_name || appt.provider_name} <br />
+              <span>{new Date(appt.appointment_date).toLocaleString()}</span>
+              {appt.client_notes && <p>Notes: {appt.client_notes}</p>}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
