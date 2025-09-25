@@ -1,72 +1,67 @@
+// frontend/src/services/api.js
 import axios from 'axios';
 
-// ==================== API CONFIGURATION ====================
-let API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-// normalize to always end with /api
-if (!API_BASE_URL.endsWith('/api')) {
-  API_BASE_URL = API_BASE_URL.replace(/\/+$/, '') + '/api';
-}
+// Base API url (Vite env or proxy)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 console.log('🔗 Frontend URL:', window.location.origin);
 console.log('🔗 API Base URL:', API_BASE_URL);
 
-// Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' }
 });
 
-// ==================== INTERCEPTORS ====================
-api.interceptors.request.use((config) => {
+// Request interceptor (attach token)
+api.interceptors.request.use(cfg => {
   const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  console.log(`🚀 ${config.method?.toUpperCase()} ${config.url}`, config.data || '');
-  return config;
-}, (error) => Promise.reject(error));
+  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  return cfg;
+}, err => Promise.reject(err));
 
-api.interceptors.response.use(
-  (response) => {
-    console.log(`✅ ${response.status} ${response.config.url}`);
-    return response;
-  },
-  (error) => {
-    console.error('❌ Response error:', error.response?.status, error.message);
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.dispatchEvent(new Event('storage'));
-    }
-    return Promise.reject(error);
+// Response interceptor
+api.interceptors.response.use(res => res, err => {
+  console.error('API response error', err?.response?.status, err?.message);
+  if (err.response?.status === 401) {
+    localStorage.removeItem('token'); localStorage.removeItem('user'); window.dispatchEvent(new Event('storage'));
   }
-);
+  return Promise.reject(err);
+});
 
-// ==================== API METHODS ====================
+// Auth
 export const authAPI = {
-  login: async (credentials) => (await api.post('/login', credentials)).data,
-  register: async (userData) => (await api.post('/register', userData)).data,
-  getProfile: async () => (await api.get('/profile')).data
+  login: (credentials) => api.post('/login', credentials).then(r => r.data),
+  register: (data) => api.post('/register', data).then(r => r.data),
+  getProfile: () => api.get('/profile').then(r => r.data)
 };
 
+// Services
 export const servicesAPI = {
-  getAll: async () => (await api.get('/services')).data,
-  getMyServices: async () => (await api.get('/my-services')).data,
-  create: async (serviceData) => (await api.post('/services', serviceData)).data
+  list: (params = {}) => api.get('/services', { params }).then(r => r.data),
+  create: (data) => api.post('/services', data).then(r => r.data),
+  update: (id, data) => api.put(`/services/${id}`, data).then(r => r.data),
+  remove: (id) => api.delete(`/services/${id}`).then(r => r.data),
+  providerServices: (providerId) => api.get(`/providers/${providerId}`).then(r => r.data)
 };
 
+// Appointments
 export const appointmentsAPI = {
-  getAll: async () => (await api.get('/appointments')).data,
-  create: async (appointmentData) => (await api.post('/appointments', appointmentData)).data
+  list: () => api.get('/appointments').then(r => r.data),
+  create: (data) => api.post('/appointments', data).then(r => r.data),
+  update: (id, data) => api.put(`/appointments/${id}`, data).then(r => r.data),
+  remove: (id) => api.delete(`/appointments/${id}`).then(r => r.data),
+  latest: () => api.get('/appointments/latest').then(r => r.data)
 };
 
-// ==================== HEALTH CHECK ====================
+// Health check (call server root)
 export const healthCheck = async () => {
   try {
-    const base = API_BASE_URL.replace(/\/api\/?$/, '');
-    const response = await axios.get(base + '/', { timeout: 5000 });
-    return response.data;
-  } catch (error) {
-    throw new Error(`Backend connection failed: ${error.response?.status || error.message}`);
+    const base = (import.meta.env.VITE_API_URL || '/api').replace(/\/api\/?$/, '');
+    const res = await axios.get(base + '/', { timeout: 5000 });
+    return res.data;
+  } catch (err) {
+    throw new Error(err.response?.status || err.message);
   }
 };
 
