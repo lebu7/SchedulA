@@ -186,12 +186,10 @@ app.post('/api/services', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Service name and category are required' });
     }
     const result = await db.run(
-            `INSERT INTO appointments 
-            (client_id, service_id, provider_id, appointment_date, end_date, notes, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes, 'pending']
-);
-
+      `INSERT INTO services (provider_id, name, description, duration_minutes, price, category) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [req.user.id, name, description, duration_minutes, price, category]
+    );
     const newService = await db.get(`
       SELECT s.*, u.name as provider_name, u.business_name 
       FROM services s 
@@ -269,15 +267,27 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
+
+    // calculate end_date using service duration
     const endDate = new Date(new Date(appointment_date).getTime() + service.duration_minutes * 60000);
+
     await db.run(
-      `INSERT INTO appointments (client_id, service_id, provider_id, appointment_date, end_date, client_notes) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes]
+      `INSERT INTO appointments 
+       (client_id, service_id, provider_id, appointment_date, end_date, status, notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        service_id,
+        service.provider_id,
+        appointment_date,
+        endDate.toISOString(),
+        'scheduled',
+        client_notes || null
+      ]
     );
     res.status(201).json({ success: true, message: 'Appointment booked successfully' });
   } catch (error) {
-    console.error('Appointment creation error:', error);
+    console.error('❌ Appointment creation error:', error);
     res.status(500).json({ error: 'Failed to book appointment' });
   }
 });
