@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../services/auth';
+import api from '../services/api';
 
 const BookingCalendar = () => {
   const [services, setServices] = useState([]);

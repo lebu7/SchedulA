@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import AuthForm from './components/AuthForm';
 import ServiceManager from './components/ServiceManager';
-import BookingCalendar from './components/BookingCalendar';
-import { authService } from './services/auth';
+import { authService, setupAuthListener } from './services/auth';
+import { healthCheck } from './services/api';
 import './App.css';
 
 function App() {
@@ -12,208 +12,229 @@ function App() {
   const [activeTab, setActiveTab] = useState('services');
 
   useEffect(() => {
+    // Check initial auth state
     const currentUser = authService.getCurrentUser();
     if (currentUser) {
       setUser(currentUser);
-      console.log('User found in storage:', currentUser);
     }
-    checkBackendStatus();
+
+    // Check backend connection
+    checkBackendConnection();
+
+    // Listen for auth changes (login/logout)
+    const removeListener = setupAuthListener(() => {
+      const updatedUser = authService.getCurrentUser();
+      setUser(updatedUser);
+    });
+
+    return removeListener;
   }, []);
 
-  const checkBackendStatus = async () => {
+  const checkBackendConnection = async () => {
     try {
       setBackendStatus('checking');
-      console.log('Checking backend connection...');
-      const data = await authService.testConnection();
+      await healthCheck();
       setBackendStatus('connected');
-      console.log('Backend status: Connected', data);
     } catch (error) {
       setBackendStatus('error');
-      console.error('Backend status: Error', error.message);
+      console.error('Backend connection failed:', error);
     }
   };
 
   const handleAuthSuccess = (userData) => {
-    console.log('Authentication successful:', userData);
     setUser(userData);
     setShowAuth(false);
   };
 
   const handleLogout = () => {
-    authService.logout();
+    authService.clearAuth();
     setUser(null);
     setActiveTab('services');
   };
 
-  const retryConnection = () => {
-    checkBackendStatus();
+  const handleRetryConnection = () => {
+    checkBackendConnection();
   };
 
-  // Show loading screen while checking connection
+  // Render different states based on backend status
   if (backendStatus === 'checking') {
     return (
-      <div className="App">
-        <div className="loading-screen">
+      <div className="app-loading">
+        <div className="loading-content">
           <h1>🚀 SchedulA</h1>
-          <p>Connecting to backend server...</p>
+          <p>Connecting to server...</p>
           <div className="spinner"></div>
-          <p><small>Testing: https://fuzzy-engine-pgppr769gr7f645-5000.app.github.dev</small></p>
         </div>
       </div>
     );
   }
 
-  // Show error screen if backend is not connected
   if (backendStatus === 'error') {
     return (
-      <div className="App">
-        <div className="error-screen">
+      <div className="app-error">
+        <div className="error-content">
           <h1>🚀 SchedulA</h1>
-          <div className="error-content">
-            <h2>Backend Connection Failed</h2>
-            <p>The frontend cannot connect to the backend server.</p>
-            
-            <div className="connection-details">
-              <h3>Connection Details:</h3>
-              <p><strong>Frontend:</strong> {window.location.origin}</p>
-              <p><strong>Backend:</strong> https://fuzzy-engine-pgppr769gr7f645-5000.app.github.dev</p>
-            </div>
+          <h2>Connection Issue</h2>
+          <p>Unable to connect to the backend server.</p>
+          
+          <div className="error-actions">
+            <button onClick={handleRetryConnection} className="retry-btn">
+              🔄 Retry Connection
+            </button>
+          </div>
 
-            <div className="error-steps">
-              <h3>To fix this:</h3>
-              <ol>
-                <li>Make sure the backend is running on port 5000</li>
-                <li>Check that port 5000 is set to <strong>Public</strong> in Codespaces</li>
-                <li>Try opening the backend URL directly:
-                  <br />
-                  <a href="https://fuzzy-engine-pgppr769gr7f645-5000.app.github.dev" target="_blank" rel="noopener noreferrer">
-                    https://fuzzy-engine-pgppr769gr7f645-5000.app.github.dev
-                  </a>
-                </li>
-                <li>If the link above works, click "Retry Connection" below</li>
-              </ol>
-            </div>
-            
-            <div className="test-buttons">
-              <button onClick={() => window.open('https://fuzzy-engine-pgppr769gr7f645-5000.app.github.dev', '_blank')} className="test-btn">
-                🔗 Test Backend URL
-              </button>
-              <button onClick={retryConnection} className="retry-btn">
-                🔄 Retry Connection
-              </button>
-            </div>
+          <div className="error-help">
+            <h3>To resolve this:</h3>
+            <ol>
+              <li>Ensure the backend server is running on port 5000</li>
+              <li>Check that port 5000 is accessible</li>
+              <li>Refresh the page after starting the server</li>
+            </ol>
           </div>
         </div>
       </div>
     );
   }
 
-  // Main application - Backend is connected!
+  // Main application
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>🚀 SchedulA</h1>
-        <p>Nairobi Booking System</p>
-
-        <div className="status-bar">
-          <span className="status connected">✅ Backend Connected</span>
-          {user && (
-            <span className={`user-type ${user.user_type}`}>
-              {user.user_type.toUpperCase()}
-            </span>
-          )}
+    <div className="app">
+      {/* Header */}
+      <header className="app-header">
+        <div className="header-content">
+          <div className="header-title">
+            <h1>🚀 SchedulA</h1>
+            <p>Nairobi Service Booking System</p>
+          </div>
+          
+          <div className="header-status">
+            <span className="status-badge connected">✅ Connected</span>
+            {user && (
+              <span className={`user-badge ${user.user_type}`}>
+                {user.user_type.toUpperCase()}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
-      <main className="App-main">
+      {/* Main Content */}
+      <main className="app-main">
         {!user ? (
+          // Welcome screen for unauthenticated users
           <div className="welcome-screen">
             <div className="welcome-content">
-              <h2>Welcome to SchedulA! 🎉</h2>
-              <p>Backend connection established successfully!</p>
-              <button onClick={() => setShowAuth(true)} className="cta-button">
-                Get Started
-              </button>
-              
-              <div className="feature-grid">
-                <div className="feature">
-                  <h3>👥 For Clients</h3>
-                  <p>Book appointments easily</p>
-                </div>
-                <div className="feature">
-                  <h3>💼 For Providers</h3>
-                  <p>Manage your services</p>
+              <div className="welcome-hero">
+                <h2>Book Services in Nairobi</h2>
+                <p>Connect with the best service providers in Nairobi</p>
+                
+                <div className="welcome-actions">
+                  <button 
+                    onClick={() => setShowAuth(true)}
+                    className="cta-button"
+                  >
+                    Get Started
+                  </button>
                 </div>
               </div>
 
-              <div className="demo-accounts">
-                <h4>Demo Accounts:</h4>
-                <p><strong>Provider:</strong> beauty@salon.com / provider123</p>
-                <p><strong>Client:</strong> client@example.com / client123</p>
+              <div className="features-grid">
+                <div className="feature-card">
+                  <h3>👥 For Clients</h3>
+                  <ul>
+                    <li>Book appointments easily</li>
+                    <li>Discover local services</li>
+                    <li>Manage your bookings</li>
+                  </ul>
+                </div>
+
+                <div className="feature-card">
+                  <h3>💼 For Providers</h3>
+                  <ul>
+                    <li>Manage your services</li>
+                    <li>Accept bookings online</li>
+                    <li>Grow your business</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="demo-info">
+                <h4>Quick Start with Demo Accounts:</h4>
+                <div className="demo-accounts">
+                  <div>
+                    <strong>Provider:</strong> salon@nairobi.com / provider123
+                  </div>
+                  <div>
+                    <strong>Client:</strong> client@example.com / client123
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         ) : (
+          // Dashboard for authenticated users
           <div className="dashboard">
-            <div className="user-info">
-              <h2>Welcome, {user.name}! 👋</h2>
-              <p>You are logged in as a <strong>{user.user_type}</strong></p>
-              {user.business_name && <p>Business: {user.business_name}</p>}
-              <button onClick={handleLogout} className="logout-btn">Logout</button>
+            {/* User Info */}
+            <div className="user-info-card">
+              <div className="user-details">
+                <h2>Welcome, {user.name}! 👋</h2>
+                <p>You are logged in as a <strong>{user.user_type}</strong></p>
+                {user.business_name && <p>Business: {user.business_name}</p>}
+              </div>
+              <button onClick={handleLogout} className="logout-btn">
+                Logout
+              </button>
             </div>
 
+            {/* Navigation */}
             <nav className="dashboard-nav">
               <button 
                 className={activeTab === 'services' ? 'active' : ''}
                 onClick={() => setActiveTab('services')}
               >
-                {user.user_type === 'provider' ? 'My Services' : 'Browse Services'}
+                {user.user_type === 'provider' ? 'My Services' : 'Find Services'}
               </button>
               <button 
                 className={activeTab === 'bookings' ? 'active' : ''}
                 onClick={() => setActiveTab('bookings')}
               >
-                {user.user_type === 'provider' ? 'Appointments' : 'Book Appointment'}
+                {user.user_type === 'provider' ? 'Appointments' : 'My Bookings'}
               </button>
             </nav>
 
+            {/* Tab Content */}
             <div className="dashboard-content">
-              {activeTab === 'services' && (
-                user.user_type === 'provider' ? (
-                  <ServiceManager />
-                ) : (
-                  <div className="services-browse">
-                    <h3>Available Services</h3>
-                    <p>Service browsing feature coming soon!</p>
-                  </div>
-                )
-              )}
-
-              {activeTab === 'bookings' && (
-                user.user_type === 'client' ? (
-                  <BookingCalendar />
-                ) : (
-                  <div className="appointments-view">
-                    <h3>My Appointments</h3>
-                    <p>Appointment management coming soon!</p>
-                  </div>
-                )
+              {activeTab === 'services' ? (
+                <ServiceManager />
+              ) : (
+                <div className="coming-soon">
+                  <h3>📅 {user.user_type === 'provider' ? 'Appointment Management' : 'Booking System'}</h3>
+                  <p>This feature is coming soon!</p>
+                  <p>
+                    {user.user_type === 'provider' 
+                      ? 'You will be able to view and manage your appointments here.'
+                      : 'You will be able to book services and manage your appointments here.'
+                    }
+                  </p>
+                </div>
               )}
             </div>
           </div>
         )}
       </main>
 
+      {/* Footer */}
+      <footer className="app-footer">
+        <p>SchedulA &copy; 2024 - Making Nairobi's services accessible to everyone</p>
+      </footer>
+
+      {/* Auth Modal */}
       {showAuth && (
         <AuthForm 
-          onAuthSuccess={handleAuthSuccess}
+          onSuccess={handleAuthSuccess}
           onClose={() => setShowAuth(false)}
         />
       )}
-
-      <footer className="App-footer">
-        <p>SchedulA &copy; 2024 - Backend: Port 5000 | Frontend: Port 3000</p>
-      </footer>
     </div>
   );
 }

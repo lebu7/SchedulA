@@ -6,17 +6,12 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        secure: false
       }
     }
-  },
-  define: {
-    'process.env': {}
   }
 })

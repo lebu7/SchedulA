@@ -4,52 +4,67 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-const database = require('./database');
+const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// ==================== MIDDLEWARE ====================
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: true, // Allow all origins in development
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
-// Request logging
+// Logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 
 // JWT Authentication Middleware
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
-  if (token == null) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
     }
-    req.user = user;
-    next();
-  });
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+      if (err) {
+        return res.status(403).json({ error: 'Invalid or expired token' });
+      }
+      req.user = user;
+      next();
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Authentication error' });
+  }
+};
+
+// ==================== UTILITY FUNCTIONS ====================
+const validateEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const sanitizeUser = (user) => {
+  const { password, ...userWithoutPassword } = user;
+  return userWithoutPassword;
 };
 
 // ==================== ROUTES ====================
 
 // Health check
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
+    success: true,
     message: '🚀 SchedulA Backend API is running!',
     version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    database: 'SQLite (Persistent)'
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -63,36 +78,47 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'Email, password, and name are required' });
     }
 
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    if (!['client', 'provider'].includes(user_type)) {
+      return res.status(400).json({ error: 'Invalid user type' });
+    }
+
     // Check if user exists
-    const existingUser = await database.get('SELECT * FROM users WHERE email = ?', [email]);
+    const existingUser = await db.get('SELECT id FROM users WHERE email = ?', [email]);
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists with this email' });
     }
 
-    // Hash password
+    // Hash password and create user
     const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Create user
-    const result = await database.run(
+    const result = await db.run(
       `INSERT INTO users (email, password, name, user_type, phone, business_name) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [email, hashedPassword, name, user_type, phone, business_name]
     );
 
     // Get created user
-    const newUser = await database.get(
+    const newUser = await db.get(
       'SELECT id, email, name, user_type, phone, business_name, created_at FROM users WHERE id = ?',
       [result.id]
     );
 
     // Generate token
     const token = jwt.sign(
-      { id: newUser.id, email: newUser.email, user_type: newUser.user_type, name: newUser.name },
+      { id: newUser.id, email: newUser.email, user_type: newUser.user_type },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({
+    res.status(201).json({
+      success: true,
       message: 'User registered successfully',
       token,
       user: newUser
@@ -114,7 +140,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     // Find user
-    const user = await database.get('SELECT * FROM users WHERE email = ?', [email]);
+    const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) {
       return res.status(400).json({ error: 'Invalid email or password' });
     }
@@ -127,18 +153,16 @@ app.post('/api/login', async (req, res) => {
 
     // Generate token
     const token = jwt.sign(
-      { id: user.id, email: user.email, user_type: user.user_type, name: user.name },
+      { id: user.id, email: user.email, user_type: user.user_type },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    // Return user without password
-    const { password: _, ...userResponse } = user;
-
     res.json({
+      success: true,
       message: 'Login successful',
       token,
-      user: userResponse
+      user: sanitizeUser(user)
     });
 
   } catch (error) {
@@ -150,7 +174,7 @@ app.post('/api/login', async (req, res) => {
 // Get user profile
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
-    const user = await database.get(
+    const user = await db.get(
       'SELECT id, email, name, user_type, phone, business_name, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
@@ -159,37 +183,34 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user });
+    res.json({ success: true, user });
   } catch (error) {
     console.error('Profile error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Get all services (public) - FIXED
+// Get all services (public)
 app.get('/api/services', async (req, res) => {
   try {
-    console.log('Fetching all services...');
-    const services = await database.query(`
+    const services = await db.query(`
       SELECT s.*, u.name as provider_name, u.business_name 
       FROM services s 
       JOIN users u ON s.provider_id = u.id 
       WHERE s.is_available = 1
       ORDER BY s.created_at DESC
     `);
-    console.log('Services found:', services.length);
-    res.json(services);
+    
+    res.json({ success: true, data: services });
   } catch (error) {
     console.error('Services fetch error:', error);
-    res.status(500).json({ error: 'Server error fetching services: ' + error.message });
+    res.status(500).json({ error: 'Failed to fetch services' });
   }
 });
 
 // Create service (providers only)
 app.post('/api/services', authenticateToken, async (req, res) => {
   try {
-    console.log('Create service request from user:', req.user.id);
-    
     if (req.user.user_type !== 'provider') {
       return res.status(403).json({ error: 'Only service providers can create services' });
     }
@@ -201,60 +222,57 @@ app.post('/api/services', authenticateToken, async (req, res) => {
     }
 
     // Create service
-    const result = await database.run(
+    const result = await db.run(
       `INSERT INTO services (provider_id, name, description, duration_minutes, price, category) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [req.user.id, name, description, duration_minutes, price, category]
     );
 
-    // Get created service
-    const newService = await database.get(
-      `SELECT s.*, u.name as provider_name, u.business_name 
-       FROM services s 
-       JOIN users u ON s.provider_id = u.id 
-       WHERE s.id = ?`,
-      [result.id]
-    );
+    // Get created service with provider info
+    const newService = await db.get(`
+      SELECT s.*, u.name as provider_name, u.business_name 
+      FROM services s 
+      JOIN users u ON s.provider_id = u.id 
+      WHERE s.id = ?
+    `, [result.id]);
 
-    console.log('Service created successfully:', newService.name);
-    res.json({
+    res.status(201).json({
+      success: true,
       message: 'Service created successfully',
-      service: newService
+      data: newService
     });
 
   } catch (error) {
     console.error('Service creation error:', error);
-    res.status(500).json({ error: 'Server error creating service: ' + error.message });
+    res.status(500).json({ error: 'Failed to create service' });
   }
 });
 
 // Get services for current provider
 app.get('/api/my-services', authenticateToken, async (req, res) => {
   try {
-    console.log('Fetching services for user:', req.user.id);
-    
     if (req.user.user_type !== 'provider') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const services = await database.query(
+    const services = await db.query(
       'SELECT * FROM services WHERE provider_id = ? ORDER BY created_at DESC',
       [req.user.id]
     );
-    console.log('User services found:', services.length);
-    res.json(services);
+    
+    res.json({ success: true, data: services });
   } catch (error) {
     console.error('My services error:', error);
-    res.status(500).json({ error: 'Server error fetching services: ' + error.message });
+    res.status(500).json({ error: 'Failed to fetch services' });
   }
 });
 
-// Get appointments for user
+// Get appointments
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   try {
     let appointments;
     if (req.user.user_type === 'provider') {
-      appointments = await database.query(`
+      appointments = await db.query(`
         SELECT a.*, s.name as service_name, u.name as client_name 
         FROM appointments a
         JOIN services s ON a.service_id = s.id
@@ -263,7 +281,7 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
         ORDER BY a.appointment_date DESC
       `, [req.user.id]);
     } else {
-      appointments = await database.query(`
+      appointments = await db.query(`
         SELECT a.*, s.name as service_name, u.name as provider_name, u.business_name 
         FROM appointments a
         JOIN services s ON a.service_id = s.id
@@ -273,10 +291,10 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
       `, [req.user.id]);
     }
 
-    res.json(appointments);
+    res.json({ success: true, data: appointments });
   } catch (error) {
     console.error('Appointments error:', error);
-    res.status(500).json({ error: 'Server error fetching appointments' });
+    res.status(500).json({ error: 'Failed to fetch appointments' });
   }
 });
 
@@ -294,7 +312,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
     }
 
     // Get service details
-    const service = await database.get(`
+    const service = await db.get(`
       SELECT s.*, u.id as provider_id 
       FROM services s 
       JOIN users u ON s.provider_id = u.id 
@@ -308,51 +326,39 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
     // Calculate end date
     const endDate = new Date(new Date(appointment_date).getTime() + service.duration_minutes * 60000);
 
-    // Check for conflicts
-    const existingAppointment = await database.get(
-      'SELECT * FROM appointments WHERE provider_id = ? AND appointment_date = ?',
-      [service.provider_id, appointment_date]
-    );
-
-    if (existingAppointment) {
-      return res.status(400).json({ error: 'Time slot is already booked' });
-    }
-
     // Create appointment
-    const result = await database.run(
+    const result = await db.run(
       `INSERT INTO appointments (client_id, service_id, provider_id, appointment_date, end_date, client_notes) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), client_notes]
     );
 
-    // Get created appointment
-    const newAppointment = await database.get(`
-      SELECT a.*, s.name as service_name, u.name as provider_name, u.business_name 
-      FROM appointments a
-      JOIN services s ON a.service_id = s.id
-      JOIN users u ON a.provider_id = u.id
-      WHERE a.id = ?
-    `, [result.id]);
-
-    res.json({
-      message: 'Appointment booked successfully',
-      appointment: newAppointment
+    res.status(201).json({
+      success: true,
+      message: 'Appointment booked successfully'
     });
 
   } catch (error) {
     console.error('Appointment creation error:', error);
-    res.status(500).json({ error: 'Server error creating appointment' });
+    res.status(500).json({ error: 'Failed to book appointment' });
   }
 });
 
-// Error handling
+// ==================== ERROR HANDLING ====================
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
 app.use((error, req, res, next) => {
-  console.error('Server error:', error);
+  console.error('Unhandled error:', error);
   res.status(500).json({ error: 'Internal server error' });
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🔄 Shutting down gracefully...');
+  await db.close();
+  process.exit(0);
 });
 
 // Start server
@@ -361,7 +367,7 @@ app.listen(PORT, () => {
   console.log('🚀 SchedulA Backend Server Started!');
   console.log('🚀 ======================================');
   console.log(`🚀 Port: ${PORT}`);
-  console.log(`🚀 Database: SQLite (Persistent)`);
   console.log(`🚀 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🚀 Health: http://localhost:${PORT}/`);
   console.log('🚀 ======================================');
 });
