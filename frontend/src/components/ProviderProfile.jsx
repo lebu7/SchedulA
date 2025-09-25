@@ -1,53 +1,68 @@
+// frontend/src/components/ProviderProfile.jsx
 import React, { useEffect, useState } from 'react';
-import { servicesAPI } from '../services/api';
+import { servicesAPI, appointmentsAPI } from '../services/api';
 import './ProviderProfile.css';
 
-function ProviderProfile({ providerId, onBack, onBook }) {
+const ProviderProfile = ({ providerId, onBook }) => {
+  const [provider, setProvider] = useState(null);
   const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadProviderServices();
-  }, [providerId]);
-
-  const loadProviderServices = async () => {
+  async function load() {
     try {
       setLoading(true);
-      const all = await servicesAPI.getAll();
-      const filtered = (all.data || []).filter(s => s.provider_id === providerId);
-      setServices(filtered);
+      const res = await servicesAPI.providerServices(providerId);
+      setProvider(res.data.provider);
+      setServices(res.data.services || []);
     } catch (err) {
-      console.error('Failed to load provider services', err);
+      console.error('Provider load failed', err);
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(()=>{ if (providerId) load(); }, [providerId]);
+
+  const handleBook = (s) => {
+    // emit a simple flow: open the global booking UI - in App.jsx we switch to bookings.
+    // For simplicity, open the appointment modal here or call an external callback
+    // We'll open a prompt for date/time (quick)
+    const date = prompt('Enter date/time (YYYY-MM-DDTHH:MM): e.g. 2025-09-25T14:30');
+    if (!date) return;
+    const notes = prompt('Notes (optional):') || null;
+    appointmentsAPI.create({ service_id: s.id, appointment_date: date, notes }).then(()=> {
+      alert('Booked successfully'); if (onBook) onBook();
+    }).catch(err => { alert(err.response?.data?.error || err.message || 'Booking failed'); });
   };
 
-  if (loading) return <p>Loading provider services...</p>;
+  if (!provider) return <div>Loading provider...</div>;
 
   return (
     <div className="provider-profile">
-      <button className="back-btn" onClick={onBack}>⬅ Back</button>
-      <h2>Provider Services</h2>
+      <div className="provider-header">
+        <h2>{provider.name}</h2>
+        {provider.business_name && <p>{provider.business_name}</p>}
+        {provider.phone && <p>📞 {provider.phone}</p>}
+      </div>
 
-      {services.length === 0 ? (
-        <p>No services found for this provider.</p>
-      ) : (
-        <div className="provider-services-grid">
-          {services.map(service => (
-            <div key={service.id} className="provider-service-card">
-              <h3>{service.name}</h3>
-              <p>{service.description}</p>
-              <p><strong>Category:</strong> {service.category}</p>
-              <p><strong>Duration:</strong> {service.duration_minutes} min</p>
-              <p><strong>Price:</strong> KSh {service.price}</p>
-              <button onClick={() => onBook(service)}>📅 Book</button>
+      <div className="provider-services">
+        <h3>Services</h3>
+        {services.length === 0 ? <p>No services</p> : services.map(s => (
+          <div key={s.id} className="service-card">
+            <h4>{s.name}</h4>
+            <p>{s.description}</p>
+            <div className="service-meta">
+              <span>⏱ {s.duration_minutes || 60} min</span>
+              <span>💰 {s.price ? `KES ${s.price}` : 'Free'}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="service-actions">
+              <button className="primary-btn" onClick={() => handleBook(s)}>Book</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
-}
+};
 
 export default ProviderProfile;
