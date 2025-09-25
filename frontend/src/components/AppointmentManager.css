@@ -1,3 +1,5 @@
+/* frontend/src/components/AppointmentManager.css */
+
 .appointment-manager {
   padding: 1rem;
 }
@@ -8,116 +10,105 @@
 
 .search-bar input {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
+  padding: 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
 }
 
-.services-grid {
+.services-grid,
+.appointments-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
 }
 
-.service-card {
+.service-card,
+.appointment-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 1rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  transition: transform 0.2s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-.service-card:hover {
-  transform: translateY(-3px);
-}
-
-.service-card h3 {
+.service-card h3,
+.appointment-card h4 {
   margin-top: 0;
 }
 
-.service-card .desc {
-  color: #666;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
-
-.service-card button {
+.actions {
   margin-top: 0.5rem;
-  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+button {
+  padding: 0.4rem 0.8rem;
   border: none;
-  border-radius: 8px;
-  background: #0077ff;
-  color: white;
+  border-radius: 6px;
   cursor: pointer;
 }
 
-.service-card button:hover {
-  background: #005fcc;
+button:hover {
+  opacity: 0.9;
 }
 
-.link-btn {
-  background: none;
-  border: none;
-  color: #0077ff;
-  cursor: pointer;
-  padding: 0;
-  font-weight: bold;
+button.cancel-btn {
+  background: #ccc;
 }
 
-.link-btn:hover {
-  text-decoration: underline;
+button:disabled {
+  background: #eee;
+  cursor: not-allowed;
 }
 
+.appointment-card.scheduled {
+  border-left: 4px solid #007bff;
+}
+.appointment-card.completed {
+  border-left: 4px solid #28a745;
+}
+.appointment-card.cancelled {
+  border-left: 4px solid #dc3545;
+}
+.appointment-card.no-show {
+  border-left: 4px solid #ffc107;
+}
+
+/* Dialog */
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0,0,0,0.4);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
 }
 
 .dialog {
-  background: #fff;
-  border-radius: 12px;
-  padding: 2rem;
-  max-width: 400px;
-  width: 100%;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  width: 350px;
+  max-width: 90%;
 }
 
 .dialog label {
   display: block;
-  margin-top: 1rem;
+  margin: 0.5rem 0;
 }
 
 .dialog input,
 .dialog textarea {
   width: 100%;
-  padding: 8px;
-  margin-top: 0.3rem;
+  padding: 0.4rem;
   border: 1px solid #ccc;
   border-radius: 6px;
 }
 
 .dialog-actions {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-}
-
-.dialog-actions button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.dialog-actions .cancel-btn {
-  background: #ddd;
-}
-
-.dialog-actions button:first-child {
-  background: #0077ff;
-  color: white;
 }
