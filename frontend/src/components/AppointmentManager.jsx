@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { servicesAPI, appointmentsAPI } from '../services/api';
-import './AppointmentManager.css'; // we'll style it separately
+import ProviderProfile from './ProviderProfile';
+import './AppointmentManager.css';
 
 function AppointmentManager({ user }) {
   const [services, setServices] = useState([]);
@@ -12,6 +13,8 @@ function AppointmentManager({ user }) {
   const [selectedService, setSelectedService] = useState(null);
   const [appointmentDate, setAppointmentDate] = useState('');
   const [clientNotes, setClientNotes] = useState('');
+
+  const [viewingProvider, setViewingProvider] = useState(null);
 
   useEffect(() => {
     if (user.user_type === 'client') {
@@ -80,48 +83,56 @@ function AppointmentManager({ user }) {
       <div className="appointment-manager">
         <h2>📋 Book an Appointment</h2>
 
-        {/* Search bar */}
-        <div className="search-bar">
-          <input
-            type="text"
-            placeholder="Search services (e.g. Massage, Salon, Cleaning)..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+        {/* Provider profile view */}
+        {viewingProvider ? (
+          <ProviderProfile
+            providerId={viewingProvider}
+            onBack={() => setViewingProvider(null)}
+            onBook={(service) => handleBookClick(service)}
           />
-        </div>
+        ) : (
+          <>
+            {/* Search bar */}
+            <div className="search-bar">
+              <input
+                type="text"
+                placeholder="Search services (e.g. Massage, Salon, Cleaning)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
 
-        {/* Services Grid */}
-        <div className="services-grid">
-          {services
-            .filter((s) =>
-              s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              s.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              s.business_name?.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            .map((service) => (
-              <div key={service.id} className="service-card">
-                <h3>{service.name}</h3>
-                <p className="desc">{service.description}</p>
-                <p>
-                  <strong>Provider:</strong> {service.provider_name}{' '}
-                  ({service.business_name || 'Independent'})
-                </p>
-                <p>
-                  <strong>Category:</strong> {service.category}
-                </p>
-                <p>
-                  <strong>Duration:</strong> {service.duration_minutes} min
-                </p>
-                <p>
-                  <strong>Price:</strong> KSh {service.price}
-                </p>
-                <button onClick={() => handleBookClick(service)}>
-                  📅 Book Now
-                </button>
-              </div>
-            ))}
-          {services.length === 0 && <p>No services available yet.</p>}
-        </div>
+            {/* Services Grid */}
+            <div className="services-grid">
+              {services
+                .filter((s) =>
+                  s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.business_name?.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+                .map((service) => (
+                  <div key={service.id} className="service-card">
+                    <h3>{service.name}</h3>
+                    <p className="desc">{service.description}</p>
+                    <p>
+                      <strong>Provider:</strong>{' '}
+                      <button
+                        className="link-btn"
+                        onClick={() => setViewingProvider(service.provider_id)}
+                      >
+                        {service.provider_name} ({service.business_name || 'Independent'})
+                      </button>
+                    </p>
+                    <p><strong>Category:</strong> {service.category}</p>
+                    <p><strong>Duration:</strong> {service.duration_minutes} min</p>
+                    <p><strong>Price:</strong> KSh {service.price}</p>
+                    <button onClick={() => handleBookClick(service)}>📅 Book Now</button>
+                  </div>
+                ))}
+              {services.length === 0 && <p>No services available yet.</p>}
+            </div>
+          </>
+        )}
 
         {/* Booking Dialog */}
         {showBookingDialog && selectedService && (
