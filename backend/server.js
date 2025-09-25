@@ -167,7 +167,6 @@ app.get('/api/services', async (req, res) => {
       SELECT s.*, u.name as provider_name, u.business_name 
       FROM services s 
       JOIN users u ON s.provider_id = u.id 
-      WHERE s.is_available = 1
       ORDER BY s.created_at DESC
     `);
     res.json({ success: true, data: services });
