@@ -1,4 +1,4 @@
-// frontend/src/services/api.js
+// src/services/api.js
 import axios from 'axios';
 
 // Base API url (Vite env or proxy)
