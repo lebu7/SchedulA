@@ -1,7 +1,7 @@
 // frontend/src/components/AppointmentManager.jsx
 import React, { useState, useEffect } from "react";
-import { appointmentsAPI, servicesAPI } from "../services/api";
-import "./AppointmentManager.css";
+import { appointmentsAPI, servicesAPI } from "./services/api";
+import "./components/AppointmentManager.css";
 
 function AppointmentManager({ user }) {
   const [appointments, setAppointments] = useState([]);
