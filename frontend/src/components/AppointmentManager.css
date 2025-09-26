@@ -112,3 +112,29 @@ button:disabled {
   justify-content: flex-end;
   gap: 0.5rem;
 }
+/* Remove scrollbars & fit screen */
+.appointment-manager {
+  overflow: hidden;
+  max-height: 100%;
+}
+
+/* Nav buttons */
+.appt-nav {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.appt-nav button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #f1f1f1;
+  transition: 0.2s;
+}
+
+.appt-nav button.active {
+  background: #007bff;
+  color: white;
+}

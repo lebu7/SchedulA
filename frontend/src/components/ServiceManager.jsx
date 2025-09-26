@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { servicesAPI } from '../services/api';
-import { authService } from '../services/auth';
+// frontend/src/components/ServiceManager.jsx
+import React, { useState, useEffect } from "react";
+import { servicesAPI } from "../services/api";
+import "./ServiceManager.css";
 
-const ServiceManager = () => {
+function ServiceManager({ user }) {
   const [services, setServices] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [editingService, setEditingService] = useState(null);
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
+    name: "",
+    description: "",
     duration_minutes: 60,
-    price: '',
-    category: 'beauty'
+    price: 0,
+    category: "other",
+    is_available: 1,
   });
 
   useEffect(() => {
@@ -22,249 +23,170 @@ const ServiceManager = () => {
   const loadServices = async () => {
     try {
       setLoading(true);
-      setError('');
-      
-      if (!authService.isProvider()) {
-        setError('Only service providers can manage services');
-        return;
-      }
-
-      const response = await servicesAPI.getMyServices();
-      
-      if (response.success) {
-        setServices(response.data || []);
-      } else {
-        setError(response.error || 'Failed to load services');
-      }
-      
+      const data = await servicesAPI.list();
+      setServices(data.data || []);
     } catch (error) {
-      setError(error.response?.data?.error || 'Failed to load services');
+      console.error("Failed to fetch services:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateService = async (e) => {
-    e.preventDefault();
-    
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this service?")) return;
     try {
-      setLoading(true);
-      setError('');
-
-      const response = await servicesAPI.create(formData);
-      
-      if (response.success) {
-        setShowForm(false);
-        setFormData({
-          name: '',
-          description: '',
-          duration_minutes: 60,
-          price: '',
-          category: 'beauty'
-        });
-        await loadServices(); // Reload the list
-      } else {
-        setError(response.error || 'Failed to create service');
-      }
-      
+      await servicesAPI.remove(id);
+      alert("✅ Service deleted!");
+      loadServices();
     } catch (error) {
-      setError(error.response?.data?.error || 'Failed to create service');
-    } finally {
-      setLoading(false);
+      console.error("Delete failed:", error);
+      alert("❌ Failed to delete service.");
     }
   };
 
-  const handleChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
+  const handleEdit = (service) => {
+    setEditingService(service);
+    setFormData({ ...service });
   };
 
-  const categoryLabels = {
-    beauty: 'Beauty & Personal Care',
-    health: 'Health & Wellness',
-    fitness: 'Fitness',
-    professional: 'Professional Services',
-    other: 'Other'
+  const handleUpdate = async () => {
+    try {
+      await servicesAPI.update(editingService.id, formData);
+      alert("✅ Service updated!");
+      setEditingService(null);
+      loadServices();
+    } catch (error) {
+      console.error("Update failed:", error);
+      alert("❌ Failed to update service.");
+    }
   };
 
-  if (!authService.isProvider()) {
-    return (
-      <div className="service-manager">
-        <div className="access-denied">
-          <h3>🔒 Access Restricted</h3>
-          <p>Service management is only available for service providers.</p>
-          <p>Please register as a provider to offer your services.</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <p>Loading...</p>;
 
   return (
     <div className="service-manager">
-      <div className="service-header">
-        <h2>📊 Manage Your Services</h2>
-        <button 
-          onClick={() => setShowForm(true)}
-          className="primary-btn"
-          disabled={loading}
-        >
-          ➕ Add New Service
-        </button>
-      </div>
+      <h2>
+        {user?.user_type === "provider" ? "💼 My Services" : "🔎 Services"}
+      </h2>
 
-      {error && (
-        <div className="error-banner">
-          <span>{error}</span>
-          <button onClick={loadServices}>Retry</button>
-        </div>
-      )}
+      <div className="services-grid">
+        {services.map((s) => (
+          <div key={s.id} className="service-card">
+            <h3>{s.name}</h3>
+            <p className="desc">{s.description}</p>
+            <p>
+              <strong>Provider:</strong> {s.provider_name} (
+              {s.business_name || "Independent"})
+            </p>
+            <p>
+              <strong>Category:</strong> {s.category}
+            </p>
+            <p>
+              <strong>Duration:</strong> {s.duration_minutes} min
+            </p>
+            <p>
+              <strong>Price:</strong> KSh {s.price}
+            </p>
 
-      {showForm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h3>Create New Service</h3>
-              <button onClick={() => setShowForm(false)}>×</button>
-            </div>
-            
-            <form onSubmit={handleCreateService}>
-              <div className="form-group">
-                <label>Service Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="e.g., Haircut, Massage, Consultation"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Description</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  placeholder="Describe your service..."
-                  rows="3"
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Duration (minutes) *</label>
-                  <input
-                    type="number"
-                    name="duration_minutes"
-                    value={formData.duration_minutes}
-                    onChange={handleChange}
-                    min="15"
-                    step="15"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Price (KES)</label>
-                  <input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleChange}
-                    placeholder="0 for free service"
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Category *</label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleChange}
-                  required
+            {user?.user_type === "provider" && user.id === s.provider_id ? (
+              <div className="service-actions">
+                <button onClick={() => handleEdit(s)}>✏️ Edit</button>
+                <button
+                  className="delete-btn"
+                  onClick={() => handleDelete(s.id)}
                 >
-                  <option value="beauty">Beauty & Personal Care</option>
-                  <option value="health">Health & Wellness</option>
-                  <option value="fitness">Fitness</option>
-                  <option value="professional">Professional Services</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div className="form-actions">
-                <button 
-                  type="button" 
-                  onClick={() => setShowForm(false)}
-                  className="secondary-btn"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="primary-btn"
-                >
-                  {loading ? 'Creating...' : 'Create Service'}
+                  🗑️ Delete
                 </button>
               </div>
-            </form>
+            ) : (
+              <button disabled className="disabled-btn">
+                📌 Provider: {s.provider_name}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Edit Dialog */}
+      {editingService && (
+        <div className="dialog-backdrop">
+          <div className="dialog">
+            <h3>✏️ Edit Service</h3>
+
+            <label>
+              Name:
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              Description:
+              <textarea
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+              />
+            </label>
+
+            <label>
+              Duration (minutes):
+              <input
+                type="number"
+                value={formData.duration_minutes}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    duration_minutes: parseInt(e.target.value, 10),
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Price (KSh):
+              <input
+                type="number"
+                value={formData.price}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    price: parseFloat(e.target.value),
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Category:
+              <input
+                type="text"
+                value={formData.category}
+                onChange={(e) =>
+                  setFormData({ ...formData, category: e.target.value })
+                }
+              />
+            </label>
+
+            <div className="dialog-actions">
+              <button onClick={handleUpdate}>💾 Save</button>
+              <button
+                onClick={() => setEditingService(null)}
+                className="cancel-btn"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      <div className="services-content">
-        {loading && services.length === 0 ? (
-          <div className="loading-state">Loading services...</div>
-        ) : services.length === 0 ? (
-          <div className="empty-state">
-            <h3>No services yet</h3>
-            <p>Create your first service to start accepting bookings!</p>
-            <button 
-              onClick={() => setShowForm(true)}
-              className="primary-btn"
-            >
-              Create Your First Service
-            </button>
-          </div>
-        ) : (
-          <div className="services-grid">
-            <div className="services-stats">
-              <p>Showing {services.length} service(s)</p>
-            </div>
-            
-            {services.map(service => (
-              <div key={service.id} className="service-card">
-                <div className="service-card-header">
-                  <h4>{service.name}</h4>
-                  <span className="category-tag">
-                    {categoryLabels[service.category] || service.category}
-                  </span>
-                </div>
-                
-                {service.description && (
-                  <p className="service-description">{service.description}</p>
-                )}
-                
-                <div className="service-details">
-                  <span>⏱️ {service.duration_minutes} minutes</span>
-                  <span>💰 {service.price ? `KES ${service.price}` : 'Free'}</span>
-                </div>
-                
-                <div className="service-actions">
-                  <small>Created: {new Date(service.created_at).toLocaleDateString()}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
-};
+}
 
 export default ServiceManager;
