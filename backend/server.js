@@ -54,7 +54,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// register
+// ================= Auth =================
 app.post('/api/register', async (req, res) => {
   try {
     const { email, password, name, user_type = 'client', phone, business_name } = req.body;
@@ -82,7 +82,6 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// login
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -102,7 +101,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// profile
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
     const user = await db.get('SELECT id, email, name, user_type, phone, business_name, created_at FROM users WHERE id = ?', [req.user.id]);
@@ -115,7 +113,6 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
 });
 
 // ================= Services =================
-// list services with optional search q (search by name / category)
 app.get('/api/services', async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
@@ -147,7 +144,6 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
-// create service (provider only)
 app.post('/api/services', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') return res.status(403).json({ error: 'Only service providers can create services' });
@@ -168,7 +164,6 @@ app.post('/api/services', authenticateToken, async (req, res) => {
   }
 });
 
-// update service (provider only, own service)
 app.put('/api/services/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') return res.status(403).json({ error: 'Only providers can update services' });
@@ -202,7 +197,6 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// delete service (provider only, own service)
 app.delete('/api/services/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') return res.status(403).json({ error: 'Only providers can delete services' });
@@ -219,7 +213,6 @@ app.delete('/api/services/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// get provider profile
 app.get('/api/providers/:id', async (req, res) => {
   try {
     const providerId = parseInt(req.params.id, 10);
@@ -235,8 +228,6 @@ app.get('/api/providers/:id', async (req, res) => {
 });
 
 // ================= Appointments =================
-
-// fetch appointments (client sees their, provider sees theirs)
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   try {
     let appointments;
@@ -246,7 +237,7 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
         FROM appointments a
         JOIN services s ON a.service_id = s.id
         JOIN users u ON a.client_id = u.id
-        WHERE a.provider_id = ?
+        WHERE a.provider_id = ? AND a.provider_deleted = 0
         ORDER BY a.appointment_date DESC
       `, [req.user.id]);
     } else {
@@ -255,7 +246,7 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
         FROM appointments a
         JOIN services s ON a.service_id = s.id
         JOIN users u ON a.provider_id = u.id
-        WHERE a.client_id = ?
+        WHERE a.client_id = ? AND a.client_deleted = 0
         ORDER BY a.appointment_date DESC
       `, [req.user.id]);
     }
@@ -266,7 +257,6 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
   }
 });
 
-// create appointment (client)
 app.post('/api/appointments', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'client') return res.status(403).json({ error: 'Only clients can book appointments' });
@@ -281,8 +271,8 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
     const endDate = new Date(new Date(appointment_date).getTime() + duration * 60000);
 
     const result = await db.run(
-      `INSERT INTO appointments (client_id, service_id, provider_id, appointment_date, end_date, status, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      `INSERT INTO appointments (client_id, service_id, provider_id, appointment_date, end_date, status, notes, client_deleted, provider_deleted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [req.user.id, service_id, service.provider_id, appointment_date, endDate.toISOString(), 'scheduled', notes || null]
     );
 
@@ -293,7 +283,6 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
   }
 });
 
-// update appointment (reschedule or change status) - client can update their own when scheduled; provider can update status / notes for their appointments
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
   try {
     const apptId = parseInt(req.params.id, 10);
@@ -301,20 +290,15 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     if (!appt) return res.status(404).json({ error: 'Appointment not found' });
 
     const body = req.body;
-
-    // Authorization:
     if (req.user.user_type === 'client' && appt.client_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
     if (req.user.user_type === 'provider' && appt.provider_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
 
-    // Build updates
     const updates = [];
     const params = [];
 
     if (body.appointment_date !== undefined) {
       updates.push('appointment_date = ?');
       params.push(body.appointment_date);
-
-      // recalc end_date if duration known
       const service = await db.get('SELECT duration_minutes FROM services WHERE id = ?', [appt.service_id]);
       const duration = (service && service.duration_minutes) ? service.duration_minutes : 60;
       const newEnd = new Date(new Date(body.appointment_date).getTime() + duration * 60000).toISOString();
@@ -338,7 +322,6 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// delete appointment (client deletes own, provider can delete theirs too)
 app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
   try {
     const apptId = parseInt(req.params.id, 10);
@@ -348,41 +331,22 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
     if (req.user.user_type === 'client' && appt.client_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
     if (req.user.user_type === 'provider' && appt.provider_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
 
-    await db.run('DELETE FROM appointments WHERE id = ?', [apptId]);
-    res.json({ success: true, message: 'Appointment deleted' });
+    if (req.user.user_type === 'client') {
+      await db.run('UPDATE appointments SET client_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [apptId]);
+    } else {
+      await db.run('UPDATE appointments SET provider_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [apptId]);
+    }
+
+    const updated = await db.get('SELECT client_deleted, provider_deleted FROM appointments WHERE id = ?', [apptId]);
+    if (updated && updated.client_deleted && updated.provider_deleted) {
+      await db.run('DELETE FROM appointments WHERE id = ?', [apptId]);
+      return res.json({ success: true, message: 'Appointment permanently deleted' });
+    }
+
+    res.json({ success: true, message: 'Appointment deleted for your view' });
   } catch (err) {
     console.error('Appointment delete error:', err);
     res.status(500).json({ error: 'Failed to delete appointment' });
-  }
-});
-
-// latest appointment helper
-app.get('/api/appointments/latest', authenticateToken, async (req, res) => {
-  try {
-    let latest;
-    if (req.user.user_type === 'client') {
-      latest = await db.get(`
-        SELECT a.*, s.name as service_name, u.name as provider_name
-        FROM appointments a
-        JOIN services s ON a.service_id = s.id
-        JOIN users u ON a.provider_id = u.id
-        WHERE a.client_id = ?
-        ORDER BY a.created_at DESC LIMIT 1
-      `, [req.user.id]);
-    } else {
-      latest = await db.get(`
-        SELECT a.*, s.name as service_name, u.name as client_name
-        FROM appointments a
-        JOIN services s ON a.service_id = s.id
-        JOIN users u ON a.client_id = u.id
-        WHERE a.provider_id = ?
-        ORDER BY a.created_at DESC LIMIT 1
-      `, [req.user.id]);
-    }
-    res.json({ success: true, data: latest });
-  } catch (err) {
-    console.error('Latest appointment fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch latest appointment' });
   }
 });
 
