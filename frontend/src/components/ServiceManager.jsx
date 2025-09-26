@@ -1,205 +1,288 @@
-import React, { useState, useEffect } from "react";
-import { servicesAPI } from "../services/api";
-import ProviderProfile from "./ProviderProfile";
-import "./ServiceManager.css";
+// src/components/ServiceManager.jsx
+import React, { useState, useEffect, useRef } from 'react';
+import { servicesAPI, appointmentsAPI } from '@/services/api';
+import { authService } from '@/services/auth';
+import ProviderProfile from '@/components/ProviderProfile';
+import '@/components/ServiceManager.css';
 
-function ServiceManager({ user }) {
+const emptyForm = {
+  name: '',
+  description: '',
+  duration_minutes: 60,
+  price: 0,
+  category: 'other',
+  is_available: 1
+};
+
+export default function ServiceManager({ user }) {
+  const isProvider = user?.user_type === 'provider';
   const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  // viewing provider
-  const [viewingProviderId, setViewingProviderId] = useState(null);
-  // booking dialog for quick book from list (client)
-  const [showBooking, setShowBooking] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [editingServiceId, setEditingServiceId] = useState(null);
+
+  // client view
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewingProvider, setViewingProvider] = useState(null);
+  const [showBookingDialog, setShowBookingDialog] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
-  const [bookingDate, setBookingDate] = useState("");
-  const [bookingNotes, setBookingNotes] = useState("");
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const searchTimer = useRef(null);
 
   useEffect(() => {
-    loadServices();
-  }, []);
+    load();
+    // eslint-disable-next-line
+  }, [user]);
 
-  const loadServices = async (q = "") => {
+  const load = async (q = '') => {
     try {
       setLoading(true);
-      const params = {};
-      if (q) params.q = q;
-      const res = await servicesAPI.list(params);
+      const res = await servicesAPI.list(q ? { q } : {});
       setServices(res.data || []);
     } catch (err) {
-      console.error("Failed to load services", err);
+      console.error('Failed to load services', err);
+      setServices([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // live search: call backend if you want server-side search, or filter client-side
+  // live search (debounced)
   useEffect(() => {
-    const term = searchTerm.trim();
-    if (term === "") {
-      loadServices();
-      return;
-    }
-    // Debounce simple: wait 250ms after last keystroke
-    const t = setTimeout(() => loadServices(term), 250);
-    return () => clearTimeout(t);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      load(searchTerm.trim());
+    }, 250);
+    return () => clearTimeout(searchTimer.current);
   }, [searchTerm]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this service?")) return;
+  // ---------- Provider CRUD ----------
+  const openCreate = () => {
+    setEditing(true);
+    setEditingServiceId(null);
+    setForm(emptyForm);
+  };
+
+  const openEdit = (s) => {
+    setEditing(true);
+    setEditingServiceId(s.id);
+    setForm({
+      name: s.name,
+      description: s.description,
+      duration_minutes: s.duration_minutes,
+      price: s.price,
+      category: s.category,
+      is_available: s.is_available
+    });
+  };
+
+  const handleSaveService = async (e) => {
+    e.preventDefault();
+    try {
+      if (!form.name) return alert('Name required');
+      if (editingServiceId) {
+        await servicesAPI.update(editingServiceId, form);
+        alert('Service updated');
+      } else {
+        await servicesAPI.create(form);
+        alert('Service created');
+      }
+      setEditing(false);
+      load();
+    } catch (err) {
+      console.error('Save service failed', err);
+      alert('Failed to save service');
+    }
+  };
+
+  const handleDeleteService = async (id) => {
+    if (!confirm('Delete this service?')) return;
     try {
       await servicesAPI.remove(id);
-      await loadServices(searchTerm);
+      alert('Service deleted');
+      load();
     } catch (err) {
-      console.error("Delete failed", err);
-      alert("Failed to delete service");
+      console.error('Delete failed', err);
+      alert('Failed to delete service');
     }
   };
 
-  const handleEdit = async (service) => {
-    // simple inline edit prompts (you can replace with modal later)
-    const name = prompt("Service name:", service.name);
-    if (name === null) return;
-    const description = prompt("Description:", service.description || "");
-    if (description === null) return;
-    const duration = prompt("Duration (minutes):", service.duration_minutes || 60);
-    if (duration === null) return;
-    const price = prompt("Price (KES):", service.price ?? 0);
-    if (price === null) return;
-    const category = prompt("Category:", service.category || "other");
-    if (category === null) return;
-
-    try {
-      await servicesAPI.update(service.id, {
-        name,
-        description,
-        duration_minutes: parseInt(duration, 10) || 60,
-        price: Number(price) || 0,
-        category,
-      });
-      await loadServices(searchTerm);
-    } catch (err) {
-      console.error("Update failed", err);
-      alert("Failed to update service");
-    }
-  };
-
-  const openProvider = (providerId) => {
-    setViewingProviderId(providerId);
-  };
-
-  const closeProvider = () => {
-    setViewingProviderId(null);
-  };
-
-  const openBooking = (service) => {
+  // ---------- Client booking ----------
+  const handleBookClick = (service) => {
     setSelectedService(service);
-    setBookingDate("");
-    setBookingNotes("");
-    setShowBooking(true);
+    setAppointmentDate('');
+    setNotes('');
+    setShowBookingDialog(true);
   };
 
-  const confirmBooking = async () => {
-    if (!bookingDate) {
-      alert("Please pick date & time");
-      return;
-    }
+  const handleConfirmBooking = async () => {
+    if (!appointmentDate) return alert('Select a date/time');
     try {
-      await servicesAPI.providerServices; // noop to satisfy linter if unused
-      // call appointments endpoint via global api in frontend (use appointmentsAPI)
-      const { default: api } = await import("../services/api");
-      // We need to call appointmentsAPI.create — import it specifically
-      const { appointmentsAPI } = await import("../services/api");
       await appointmentsAPI.create({
         service_id: selectedService.id,
-        appointment_date: bookingDate,
-        client_notes: bookingNotes,
+        appointment_date: appointmentDate,
+        notes: notes || ''
       });
-      alert("✅ Appointment booked");
-      setShowBooking(false);
+      alert('✅ Appointment booked successfully!');
+      setShowBookingDialog(false);
     } catch (err) {
-      console.error("Booking failed:", err);
-      alert("❌ Failed to book appointment");
+      console.error('Booking failed', err);
+      alert('❌ Failed to book appointment, please try again.');
     }
   };
 
-  if (loading) return <p>Loading services...</p>;
+  // For provider, clicking provider name opens ProviderProfile (shouldn't appear for provider)
+  const openProvider = (providerId) => {
+    setViewingProvider(providerId);
+  };
 
-  // If viewing provider profile
-  if (viewingProviderId) {
-    return <ProviderProfile providerId={viewingProviderId} onBack={closeProvider} onBook={(s) => openBooking(s)} user={user} />;
-  }
+  // Render
+  if (loading) return <div className="loading-state">Loading services...</div>;
 
-  // Render service grid
-  return (
-    <div className="service-manager">
-      <div className="service-header">
-        <h2>{user.user_type === "provider" ? "📋 My Services" : "🔎 Find Services"}</h2>
-        <div className="search-area">
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search services, providers, categories..."
-            className="search-input"
-          />
+  // Provider view: management area
+  if (isProvider) {
+    return (
+      <div className="service-manager provider-view">
+        <div className="service-header">
+          <h2>📊 My Services</h2>
+          <div style={{display: 'flex', gap: '0.5rem'}}>
+            <button className="primary-btn" onClick={openCreate}>➕ Add New Service</button>
+            <button onClick={() => load()} className="secondary-btn">🔄 Refresh</button>
+          </div>
         </div>
-      </div>
 
-      <div className="services-grid">
-        {services.length === 0 && <p>No services found.</p>}
-
-        {services.map((s) => (
-          <div key={s.id} className="service-card">
-            <div>
-              <h3>{s.name}</h3>
-              <p className="desc">{s.description}</p>
-              <p><strong>Category:</strong> {s.category}</p>
-              <p><strong>Duration:</strong> {s.duration_minutes} min</p>
-              <p><strong>Price:</strong> KSh {s.price ?? "0"}</p>
-              <p>
-                <strong>Provider:</strong>{" "}
-                <button className="link-btn" onClick={() => openProvider(s.provider_id)}>
-                  {s.provider_name} {s.business_name ? `(${s.business_name})` : ""}
-                </button>
-              </p>
-            </div>
-
-            <div className="card-actions">
-              {user.user_type === "client" && (
-                <>
-                  <button className="book-btn" onClick={() => openBooking(s)}>📅 Book Now</button>
-                </>
-              )}
-
-              {user.user_type === "provider" && s.provider_id === user.id && (
-                <>
-                  <button className="edit-btn" onClick={() => handleEdit(s)}>✏️ Edit</button>
-                  <button className="delete-btn" onClick={() => handleDelete(s.id)}>🗑 Delete</button>
-                </>
-              )}
+        {editing && (
+          <div className="modal-overlay">
+            <div className="modal">
+              <div className="modal-header">
+                <h3>{editingServiceId ? 'Edit Service' : 'Create New Service'}</h3>
+                <button onClick={() => setEditing(false)}>×</button>
+              </div>
+              <form onSubmit={handleSaveService}>
+                <div className="form-group">
+                  <label>Service Name *</label>
+                  <input name="name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea name="description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows="3" />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Duration (minutes)</label>
+                    <input type="number" name="duration_minutes" value={form.duration_minutes} min="15" step="15" onChange={e => setForm({...form, duration_minutes: Number(e.target.value)})} />
+                  </div>
+                  <div className="form-group">
+                    <label>Price (KES)</label>
+                    <input type="number" name="price" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Category</label>
+                  <input name="category" value={form.category} onChange={e => setForm({...form, category: e.target.value})} />
+                </div>
+                <div className="form-actions">
+                  <button type="button" onClick={() => setEditing(false)} className="secondary-btn">Cancel</button>
+                  <button type="submit" className="primary-btn">{editingServiceId ? 'Save' : 'Create'}</button>
+                </div>
+              </form>
             </div>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Booking dialog (from service list) */}
-      {showBooking && selectedService && (
+        <div className="services-grid provider-grid">
+          {services.length === 0 ? (
+            <div className="empty-state">You have no services yet.</div>
+          ) : services.map(s => (
+            <div key={s.id} className="service-card">
+              <div className="service-card-header">
+                <h4>{s.name}</h4>
+                <span className="category-tag">{s.category}</span>
+              </div>
+              {s.description && <p className="service-description">{s.description}</p>}
+              <div className="service-details">
+                <span>⏱️ {s.duration_minutes} min</span>
+                <span>💰 {s.price ? `KES ${s.price}` : 'Free'}</span>
+              </div>
+              <div className="service-actions">
+                <button className="secondary-btn" onClick={() => openEdit(s)}>✏️ Edit</button>
+                <button className="secondary-btn" onClick={() => handleDeleteService(s.id)}>🗑️ Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Client view: Find Services
+  return (
+    <div className="service-manager client-view">
+      {viewingProvider ? (
+        <ProviderProfile providerId={viewingProvider} onBack={() => setViewingProvider(null)} onBook={(service) => handleBookClick(service)} />
+      ) : (
+        <>
+          <div className="service-header">
+            <h2>🔎 Find Services</h2>
+            <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}>
+              <input
+                className="search-input"
+                placeholder="Search services (eg. Massage, Haircut, Fitness)..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+              <button className="secondary-btn" onClick={() => { setSearchTerm(''); load(); }}>Reset</button>
+            </div>
+          </div>
+
+          <div className="services-grid client-grid">
+            {services.length === 0 ? <div className="empty-state">No services found.</div> :
+              services.map(service => (
+                <div key={service.id} className="service-card">
+                  <div className="service-card-header">
+                    <h4>{service.name}</h4>
+                    <span className="category-tag">{service.category}</span>
+                  </div>
+                  {service.description && <p className="service-description">{service.description}</p>}
+                  <div className="service-details">
+                    <span>⏱️ {service.duration_minutes} min</span>
+                    <span>💰 {service.price ? `KES ${service.price}` : 'Free'}</span>
+                  </div>
+
+                  <div className="service-actions">
+                    <button className="primary-btn" onClick={() => handleBookClick(service)}>📅 Book Now</button>
+                    <button className="link-btn" onClick={() => openProvider(service.provider_id)}>{service.provider_name}</button>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        </>
+      )}
+
+      {/* Booking Dialog (client) */}
+      {showBookingDialog && selectedService && (
         <div className="dialog-backdrop">
           <div className="dialog">
-            <h3>Book: {selectedService.name}</h3>
-            <p>Provider: {selectedService.provider_name} {selectedService.business_name ? `(${selectedService.business_name})` : ""}</p>
+            <h3>📅 Book: {selectedService.name}</h3>
+            <p>Provider: {selectedService.provider_name} ({selectedService.business_name || 'Independent'})</p>
+
             <label>
-              Date & Time
-              <input type="datetime-local" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} />
+              Appointment Date & Time:
+              <input type="datetime-local" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} />
             </label>
+
             <label>
-              Notes (optional)
-              <textarea value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} />
+              Notes (optional):
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
             </label>
 
             <div className="dialog-actions">
-              <button onClick={confirmBooking}>Confirm</button>
-              <button className="cancel-btn" onClick={() => setShowBooking(false)}>Cancel</button>
+              <button onClick={handleConfirmBooking} className="primary-btn">Confirm</button>
+              <button onClick={() => setShowBookingDialog(false)} className="cancel-btn">Cancel</button>
             </div>
           </div>
         </div>
@@ -207,5 +290,3 @@ function ServiceManager({ user }) {
     </div>
   );
 }
-
-export default ServiceManager;
