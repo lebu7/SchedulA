@@ -1,190 +1,223 @@
-// frontend/src/App.jsx
+// frontend/src/components/AppointmentManager.jsx
 import React, { useState, useEffect } from "react";
-import AuthForm from "./components/AuthForm";
-import ServiceManager from "./components/ServiceManager";
-import AppointmentManager from "./components/AppointmentManager";
-import { authService, setupAuthListener } from "./services/auth";
-import { healthCheck } from "./services/api";
-import "./App.css";
+import { appointmentsAPI, servicesAPI } from "../services/api";
+import "./AppointmentManager.css";
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [showAuth, setShowAuth] = useState(false);
-  const [backendStatus, setBackendStatus] = useState("checking");
-  const [activeTab, setActiveTab] = useState("services");
+function AppointmentManager({ user }) {
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [showDialog, setShowDialog] = useState(false);
+  const [selectedAppt, setSelectedAppt] = useState(null);
+  const [newDate, setNewDate] = useState("");
 
   useEffect(() => {
-    const currentUser = authService.getCurrentUser();
-    if (currentUser) setUser(currentUser);
-
-    checkBackendConnection();
-
-    const removeListener = setupAuthListener(() => {
-      const updatedUser = authService.getCurrentUser();
-      setUser(updatedUser);
-    });
-    return removeListener;
+    loadAppointments();
   }, []);
 
-  const checkBackendConnection = async () => {
+  const loadAppointments = async () => {
     try {
-      setBackendStatus("checking");
-      await healthCheck();
-      setBackendStatus("connected");
-    } catch (error) {
-      setBackendStatus("error");
-      console.error("Backend connection failed:", error);
+      setLoading(true);
+      const data = await appointmentsAPI.list();
+      setAppointments(data.data || []);
+    } catch (err) {
+      console.error("Failed to load appointments:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAuthSuccess = (userData) => {
-    setUser(userData);
-    setShowAuth(false);
+  // --------- Actions ----------
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this appointment?"))
+      return;
+    try {
+      await appointmentsAPI.remove(id);
+      loadAppointments();
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
   };
 
-  const handleLogout = () => {
-    authService.clearAuth();
-    setUser(null);
-    setActiveTab("services");
+  const handleReschedule = (appt) => {
+    setSelectedAppt(appt);
+    setNewDate("");
+    setShowDialog(true);
   };
 
-  const handleRetryConnection = () => {
-    checkBackendConnection();
+  const confirmReschedule = async () => {
+    if (!newDate) {
+      alert("Pick a new date and time");
+      return;
+    }
+    try {
+      await appointmentsAPI.update(selectedAppt.id, {
+        appointment_date: newDate,
+      });
+      setShowDialog(false);
+      setSelectedAppt(null);
+      loadAppointments();
+    } catch (err) {
+      console.error("Reschedule failed:", err);
+    }
   };
 
-  // Connection check screens
-  if (backendStatus === "checking") {
-    return (
-      <div className="app-loading">
-        <div className="loading-content">
-          <h1>🚀 SchedulA</h1>
-          <p>Connecting to server...</p>
-          <div className="spinner"></div>
-        </div>
-      </div>
+  const handleRebook = async (appt) => {
+    try {
+      await appointmentsAPI.create({
+        service_id: appt.service_id,
+        appointment_date: new Date().toISOString(),
+        notes: appt.notes || "",
+      });
+      loadAppointments();
+    } catch (err) {
+      console.error("Rebook failed:", err);
+    }
+  };
+
+  const handleStatusChange = async (appt, status) => {
+    try {
+      await appointmentsAPI.update(appt.id, { status });
+      loadAppointments();
+    } catch (err) {
+      console.error("Status update failed:", err);
+    }
+  };
+
+  // --------- Renders ----------
+  if (loading) return <p>Loading appointments...</p>;
+
+  if (user.user_type === "client") {
+    const pending = appointments.filter((a) => a.status === "scheduled");
+    const completed = appointments.filter((a) =>
+      ["completed", "cancelled", "no-show"].includes(a.status)
     );
-  }
 
-  if (backendStatus === "error") {
     return (
-      <div className="app-error">
-        <div className="error-content">
-          <h1>🚀 SchedulA</h1>
-          <h2>Connection Issue</h2>
-          <p>Unable to connect to the backend server.</p>
-          <button onClick={handleRetryConnection} className="retry-btn">
-            🔄 Retry Connection
-          </button>
-        </div>
-      </div>
-    );
-  }
+      <div className="appointment-manager">
+        <h2>📅 My Bookings</h2>
 
-  // ----------------- Main App -----------------
-  return (
-    <div className="app">
-      {/* Header */}
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-title">
-            <h1>🚀 SchedulA</h1>
-            <p>Nairobi Service Booking System</p>
-          </div>
-          <div className="header-status">
-            <span className="status-badge connected">✅ Connected</span>
-            {user && (
-              <span className={`user-badge ${user.user_type}`}>
-                {user.user_type.toUpperCase()}
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
+        <section>
+          <h3>⏳ Pending</h3>
+          {pending.length === 0 ? (
+            <p>No pending bookings.</p>
+          ) : (
+            <div className="appointments-grid">
+              {pending.map((appt) => (
+                <div key={appt.id} className="appointment-card">
+                  <h4>{appt.service_name}</h4>
+                  <p>
+                    With {appt.provider_name} ({appt.business_name || "Independent"})
+                  </p>
+                  <p>{new Date(appt.appointment_date).toLocaleString()}</p>
+                  {appt.notes && <p>Notes: {appt.notes}</p>}
 
-      <main className="app-main">
-        {!user ? (
-          // Guest welcome
-          <div className="welcome-screen">
-            <h2>Book Services in Nairobi</h2>
-            <button onClick={() => setShowAuth(true)} className="cta-button">
-              Get Started
-            </button>
-          </div>
-        ) : (
-          <div className="dashboard">
-            {/* User info */}
-            <div className="user-info-card">
-              <div className="user-details">
-                <h2>Welcome, {user.name}! 👋</h2>
-                <p>You are logged in as <strong>{user.user_type}</strong></p>
-                {user.business_name && <p>Business: {user.business_name}</p>}
-              </div>
-              <button onClick={handleLogout} className="logout-btn">
-                Logout
-              </button>
+                  <div className="card-actions">
+                    <button onClick={() => handleReschedule(appt)}>
+                      ✏️ Reschedule
+                    </button>
+                    <button
+                      className="danger-btn"
+                      onClick={() => handleDelete(appt.id)}
+                    >
+                      ❌ Cancel
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
+          )}
+        </section>
 
-            {/* Navigation */}
-            <nav className="dashboard-nav">
-              {user.user_type === "client" && (
-                <>
-                  <button
-                    className={activeTab === "services" ? "active" : ""}
-                    onClick={() => setActiveTab("services")}
-                  >
-                    Find Services
-                  </button>
-                  <button
-                    className={activeTab === "bookings" ? "active" : ""}
-                    onClick={() => setActiveTab("bookings")}
-                  >
-                    My Bookings
-                  </button>
-                </>
-              )}
+        <section>
+          <h3>✅ Completed / Past</h3>
+          {completed.length === 0 ? (
+            <p>No past bookings.</p>
+          ) : (
+            <div className="appointments-grid">
+              {completed.map((appt) => (
+                <div key={appt.id} className="appointment-card past">
+                  <h4>{appt.service_name}</h4>
+                  <p>
+                    With {appt.provider_name} ({appt.business_name || "Independent"})
+                  </p>
+                  <p>{new Date(appt.appointment_date).toLocaleString()}</p>
+                  {appt.notes && <p>Notes: {appt.notes}</p>}
 
-              {user.user_type === "provider" && (
-                <>
-                  <button
-                    className={activeTab === "services" ? "active" : ""}
-                    onClick={() => setActiveTab("services")}
-                  >
-                    My Services
-                  </button>
-                  <button
-                    className={activeTab === "bookings" ? "active" : ""}
-                    onClick={() => setActiveTab("bookings")}
-                  >
-                    Appointments
-                  </button>
-                </>
-              )}
-            </nav>
+                  <div className="card-actions">
+                    <button onClick={() => handleRebook(appt)}>🔄 Rebook</button>
+                    <button
+                      className="danger-btn"
+                      onClick={() => handleDelete(appt.id)}
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-            {/* Tab Content */}
-            <div className="dashboard-content">
-              {activeTab === "services" ? (
-                <ServiceManager user={user} />
-              ) : (
-                <AppointmentManager user={user} />
-              )}
+        {/* Reschedule Dialog */}
+        {showDialog && selectedAppt && (
+          <div className="dialog-backdrop">
+            <div className="dialog">
+              <h3>Reschedule {selectedAppt.service_name}</h3>
+              <input
+                type="datetime-local"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+              />
+              <div className="dialog-actions">
+                <button onClick={confirmReschedule}>Confirm</button>
+                <button onClick={() => setShowDialog(false)}>Cancel</button>
+              </div>
             </div>
           </div>
         )}
-      </main>
+      </div>
+    );
+  }
 
-      <footer className="app-footer">
-        <p>SchedulA © 2024 - Nairobi's Service Booking System</p>
-      </footer>
+  // -------- Provider View --------
+  return (
+    <div className="appointment-manager">
+      <h2>📅 My Appointments</h2>
+      {appointments.length === 0 ? (
+        <p>No appointments yet.</p>
+      ) : (
+        <div className="appointments-grid">
+          {appointments.map((appt) => (
+            <div key={appt.id} className="appointment-card">
+              <h4>{appt.service_name}</h4>
+              <p>Client: {appt.client_name}</p>
+              <p>{new Date(appt.appointment_date).toLocaleString()}</p>
+              {appt.notes && <p>Notes: {appt.notes}</p>}
 
-      {showAuth && (
-        <AuthForm
-          onSuccess={handleAuthSuccess}
-          onClose={() => setShowAuth(false)}
-        />
+              <div className="card-actions">
+                <select
+                  value={appt.status}
+                  onChange={(e) => handleStatusChange(appt, e.target.value)}
+                >
+                  <option value="scheduled">Scheduled</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="no-show">No-Show</option>
+                </select>
+                <button
+                  className="danger-btn"
+                  onClick={() => handleDelete(appt.id)}
+                >
+                  🗑️ Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-export default App;
+export default AppointmentManager;

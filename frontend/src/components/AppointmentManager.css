@@ -1,67 +1,176 @@
-/* frontend/src/components/AppointmentManager.css */
-
+/* Root container */
 .appointment-manager {
-  padding: 1rem;
+  padding: 1.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  height: calc(100vh - 150px); /* subtract header + footer */
+  overflow: hidden; /* no scrollbar */
 }
 
-.search-bar {
-  margin-bottom: 1rem;
+.appointment-manager h2 {
+  text-align: center;
+  margin-bottom: 0.5rem;
+  font-size: 1.6rem;
+  color: #222;
 }
 
-.search-bar input {
-  width: 100%;
-  padding: 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
+.appointment-manager section h3 {
+  margin-bottom: 0.75rem;
+  color: #444;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0.25rem;
+  font-size: 1.2rem;
 }
 
-.services-grid,
+/* Grid of appointment cards */
 .appointments-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
+  flex: 1;
+  overflow-y: auto; /* scroll only inside the grid */
+  padding-right: 0.25rem;
 }
 
-.service-card,
+/* Cards */
 .appointment-card {
   background: #fff;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 1rem;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-.service-card h3,
-.appointment-card h4 {
-  margin-top: 0;
-}
-
-.actions {
-  margin-top: 0.5rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease;
+}
+
+.appointment-card:hover {
+  transform: translateY(-3px);
+}
+
+.appointment-card h4 {
+  margin: 0 0 0.5rem;
+  color: #222;
+  font-size: 1.1rem;
+}
+
+.appointment-card p {
+  margin: 0.25rem 0;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.appointment-card.past {
+  opacity: 0.85;
+}
+
+/* Buttons */
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
   flex-wrap: wrap;
+}
+
+.card-actions button,
+.card-actions select {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  background: #007bff;
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.card-actions button:hover {
+  background: #0056b3;
+}
+
+.card-actions .danger-btn {
+  background: #dc3545;
+}
+
+.card-actions .danger-btn:hover {
+  background: #a71d2a;
+}
+
+.card-actions select {
+  background: #f1f1f1;
+  color: #333;
+  border: 1px solid #ccc;
+  font-size: 0.85rem;
+}
+
+/* Dialog */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 99;
+}
+
+.dialog {
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 12px;
+  width: 350px;
+  max-width: 90%;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.dialog h3 {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.dialog input {
+  width: 100%;
+  margin: 0.5rem 0 1rem;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.dialog-actions {
+  display: flex;
   gap: 0.5rem;
 }
 
-button {
-  padding: 0.4rem 0.8rem;
+.dialog-actions button {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
+  font-size: 0.9rem;
+  background: #007bff;
+  color: #fff;
 }
 
-button:hover {
-  opacity: 0.9;
+.dialog-actions button:hover {
+  background: #0056b3;
 }
 
-button.cancel-btn {
-  background: #ccc;
+.dialog-actions .cancel-btn {
+  background: #aaa;
 }
 
-button:disabled {
-  background: #eee;
-  cursor: not-allowed;
+.dialog-actions .cancel-btn:hover {
+  background: #777;
 }
 
+/* Status colors */
 .appointment-card.scheduled {
   border-left: 4px solid #007bff;
 }
@@ -73,68 +182,4 @@ button:disabled {
 }
 .appointment-card.no-show {
   border-left: 4px solid #ffc107;
-}
-
-/* Dialog */
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.dialog {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  width: 350px;
-  max-width: 90%;
-}
-
-.dialog label {
-  display: block;
-  margin: 0.5rem 0;
-}
-
-.dialog input,
-.dialog textarea {
-  width: 100%;
-  padding: 0.4rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-}
-
-.dialog-actions {
-  margin-top: 1rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-/* Remove scrollbars & fit screen */
-.appointment-manager {
-  overflow: hidden;
-  max-height: 100%;
-}
-
-/* Nav buttons */
-.appt-nav {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-.appt-nav button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  background: #f1f1f1;
-  transition: 0.2s;
-}
-
-.appt-nav button.active {
-  background: #007bff;
-  color: white;
 }
