@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from "react";
-import { appointmentsAPI, servicesAPI } from "../services/api";
-import ProviderProfile from "./ProviderProfile";
-import "./AppointmentManager.css";
+// src/components/AppointmentManager.jsx
+import React, { useEffect, useState } from 'react';
+import { appointmentsAPI } from '@/services/api';
+import '@/components/AppointmentManager.css';
 
-function AppointmentManager({ user }) {
+const statusColors = {
+  scheduled: '#0ea5a4',
+  completed: '#22c55e',
+  cancelled: '#ef4444',
+  'no-show': '#f59e0b'
+};
+
+export default function AppointmentManager({ user }) {
+  const isProvider = user?.user_type === 'provider';
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Reschedule dialog
-  const [showReschedule, setShowReschedule] = useState(false);
-  const [selectedAppt, setSelectedAppt] = useState(null);
-  const [newDate, setNewDate] = useState("");
-
-  // Provider profile view when clicking provider from booking
-  const [viewingProvider, setViewingProvider] = useState(null);
-
-  useEffect(() => {
-    loadAppointments();
-  }, []);
+  // UI state for reschedule / save status
+  const [editingId, setEditingId] = useState(null);
+  const [editedDate, setEditedDate] = useState('');
+  const [editedStatus, setEditedStatus] = useState('');
+  const [editedNotes, setEditedNotes] = useState('');
 
   const loadAppointments = async () => {
     try {
@@ -25,174 +27,187 @@ function AppointmentManager({ user }) {
       const res = await appointmentsAPI.list();
       setAppointments(res.data || []);
     } catch (err) {
-      console.error("Failed to fetch appointments:", err);
+      console.error('Failed to fetch appointments', err);
+      setAppointments([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this appointment?")) return;
+  useEffect(() => {
+    loadAppointments();
+    // eslint-disable-next-line
+  }, [user]);
+
+  const onStartEdit = (appt) => {
+    setEditingId(appt.id);
+    setEditedDate(appt.appointment_date ? appt.appointment_date.slice(0,16) : '');
+    setEditedStatus(appt.status);
+    setEditedNotes(appt.notes || '');
+  };
+
+  const onSaveEdit = async () => {
+    try {
+      const payload = {};
+      if (editedDate) payload.appointment_date = editedDate;
+      if (editedStatus) payload.status = editedStatus;
+      if (editedNotes !== undefined) payload.notes = editedNotes;
+      await appointmentsAPI.update(editingId, payload);
+      setEditingId(null);
+      await loadAppointments();
+    } catch (err) {
+      console.error('Save failed', err);
+      alert('Failed to save changes.');
+    }
+  };
+
+  const onCancelAppointment = async (id) => {
+    if (!confirm('Cancel this appointment?')) return;
+    try {
+      await appointmentsAPI.update(id, { status: 'cancelled' });
+      await loadAppointments();
+    } catch (err) {
+      console.error('Cancel failed', err);
+      alert('Failed to cancel.');
+    }
+  };
+
+  const onDelete = async (id) => {
+    if (!confirm('Remove this appointment from your view? (This will hide it for you)')) return;
     try {
       await appointmentsAPI.remove(id);
       await loadAppointments();
     } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete appointment");
+      console.error('Delete failed', err);
+      alert('Failed to delete/hide appointment.');
     }
   };
 
-  const openReschedule = (appt) => {
-    setSelectedAppt(appt);
-    setNewDate("");
-    setShowReschedule(true);
-  };
-
-  const confirmReschedule = async () => {
-    if (!newDate) {
-      alert("Pick a new date");
-      return;
-    }
+  const onRebook = async (service_id) => {
+    const dt = prompt('Enter new date/time (YYYY-MM-DDTHH:MM)'); // simple fallback
+    if (!dt) return;
     try {
-      await appointmentsAPI.update(selectedAppt.id, { appointment_date: newDate });
-      setShowReschedule(false);
-      setSelectedAppt(null);
+      await appointmentsAPI.create({ service_id, appointment_date: dt });
+      alert('Rebooked!');
       await loadAppointments();
     } catch (err) {
-      console.error("Reschedule failed:", err);
-      alert("Failed to reschedule");
+      console.error('Rebook failed', err);
+      alert('Failed to rebook');
     }
   };
 
-  const handleRebook = async (appt) => {
-    try {
-      await appointmentsAPI.create({
-        service_id: appt.service_id,
-        appointment_date: new Date().toISOString(),
-        client_notes: appt.notes || "",
-      });
-      alert("Rebooked");
-      await loadAppointments();
-    } catch (err) {
-      console.error("Rebook failed:", err);
-      alert("Failed to rebook");
-    }
-  };
+  // split pending / completed for client
+  const pending = appointments.filter(a => a.status === 'scheduled');
+  const completed = appointments.filter(a => a.status !== 'scheduled');
 
-  const changeStatus = async (appt, status) => {
-    try {
-      await appointmentsAPI.update(appt.id, { status });
-      await loadAppointments();
-    } catch (err) {
-      console.error("Status update failed:", err);
-      alert("Failed to update status");
-    }
-  };
-
-  if (loading) return <p>Loading...</p>;
-
-  // client view: two groups
-  if (user.user_type === "client") {
-    const pending = appointments.filter((a) => a.status === "scheduled");
-    const completed = appointments.filter((a) => a.status !== "scheduled");
-
-    return (
-      <div className="appointment-manager">
-        <h2>📋 My Bookings</h2>
-
-        <section>
-          <h3>⏳ Pending</h3>
-          {pending.length === 0 ? <p>No pending bookings.</p> : (
-            <div className="appointments-grid">
-              {pending.map((appt) => (
-                <div key={appt.id} className={`appointment-card ${appt.status || "scheduled"}`}>
-                  <div>
-                    <h4>{appt.service_name}</h4>
-                    <p>Provider: <button className="link-btn" onClick={() => setViewingProvider(appt.provider_id)}>{appt.provider_name}</button></p>
-                    <p>{new Date(appt.appointment_date).toLocaleString()}</p>
-                    {appt.notes && <p>Notes: {appt.notes}</p>}
-                  </div>
-                  <div className="card-actions">
-                    <button onClick={() => openReschedule(appt)}>✏️ Reschedule</button>
-                    <button className="danger-btn" onClick={() => handleDelete(appt.id)}>❌ Cancel</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section>
-          <h3>✅ Completed / Past</h3>
-          {completed.length === 0 ? <p>No past bookings.</p> : (
-            <div className="appointments-grid">
-              {completed.map((appt) => (
-                <div key={appt.id} className={`appointment-card ${appt.status || "completed"}`}>
-                  <div>
-                    <h4>{appt.service_name}</h4>
-                    <p>Provider: <button className="link-btn" onClick={() => setViewingProvider(appt.provider_id)}>{appt.provider_name}</button></p>
-                    <p>{new Date(appt.appointment_date).toLocaleString()}</p>
-                    {appt.notes && <p>Notes: {appt.notes}</p>}
-                  </div>
-                  <div className="card-actions">
-                    <button onClick={() => handleRebook(appt)}>🔄 Rebook</button>
-                    <button className="danger-btn" onClick={() => handleDelete(appt.id)}>🗑 Delete</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Reschedule dialog */}
-        {showReschedule && selectedAppt && (
-          <div className="dialog-backdrop">
-            <div className="dialog">
-              <h3>Reschedule {selectedAppt.service_name}</h3>
-              <input type="datetime-local" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
-              <div className="dialog-actions">
-                <button onClick={confirmReschedule}>Confirm</button>
-                <button className="cancel-btn" onClick={() => setShowReschedule(false)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Provider profile */}
-        {viewingProvider && <ProviderProfile providerId={viewingProvider} onBack={() => setViewingProvider(null)} onBook={() => {}} user={user} />}
-      </div>
-    );
-  }
-
-  // provider view
   return (
-    <div className="appointment-manager">
-      <h2>📅 My Appointments</h2>
-      {appointments.length === 0 ? <p>No appointments yet.</p> : (
-        <div className="appointments-grid">
-          {appointments.map((appt) => (
-            <div key={appt.id} className={`appointment-card ${appt.status || ""}`}>
-              <div>
-                <h4>{appt.service_name}</h4>
-                <p>Client: {appt.client_name}</p>
-                <p>{new Date(appt.appointment_date).toLocaleString()}</p>
-                {appt.notes && <p>Notes: {appt.notes}</p>}
+    <div className="appointment-manager-page">
+      <h2>{isProvider ? '📅 My Appointments' : '📋 My Bookings'}</h2>
+
+      {loading ? <p>Loading...</p> : (
+        <div className="appointments-pane">
+          {/* CLIENT VIEW */}
+          {!isProvider && (
+            <>
+              <section className="appointments-section">
+                <h3>Pending</h3>
+                <div className="cards-container">
+                  {pending.length === 0 ? <div className="empty-state">No pending bookings</div> :
+                    pending.map(a => (
+                      <div key={a.id} className="appointment-card scheduled">
+                        <div className="card-top">
+                          <div className="card-title">{a.service_name}</div>
+                          <div className="card-meta">{a.duration_minutes} min • KES {a.price || '0'}</div>
+                        </div>
+                        <div className="card-body">
+                          <div><strong>Provider:</strong> {a.provider_name} ({a.business_name || 'Independent'})</div>
+                          <div><strong>When:</strong> {new Date(a.appointment_date).toLocaleString()}</div>
+                          {a.notes && <div className="muted">Notes: {a.notes}</div>}
+                        </div>
+                        <div className="card-actions">
+                          <button onClick={() => onStartEdit(a)} className="secondary-btn">Reschedule</button>
+                          <button onClick={() => onCancelAppointment(a.id)} className="secondary-btn">Cancel</button>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </section>
+
+              <section className="appointments-section">
+                <h3>Completed / Past</h3>
+                <div className="cards-container">
+                  {completed.length === 0 ? <div className="empty-state">No past bookings</div> :
+                    completed.map(a => (
+                      <div key={a.id} className={`appointment-card ${a.status || 'completed'}`}>
+                        <div className="card-top">
+                          <div className="card-title">{a.service_name}</div>
+                          <div className="card-meta">{a.duration_minutes} min • KES {a.price || '0'}</div>
+                        </div>
+                        <div className="card-body">
+                          <div><strong>Provider:</strong> {a.provider_name}</div>
+                          <div><strong>When:</strong> {new Date(a.appointment_date).toLocaleString()}</div>
+                          <div><strong>Status:</strong> {a.status}</div>
+                          {a.notes && <div className="muted">Notes: {a.notes}</div>}
+                        </div>
+                        <div className="card-actions">
+                          <button onClick={() => onRebook(a.service_id)} className="primary-btn">Rebook</button>
+                          <button onClick={() => onDelete(a.id)} className="secondary-btn">Delete</button>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* PROVIDER VIEW */}
+          {isProvider && (
+            <section className="appointments-section provider-appointments">
+              <div className="cards-container">
+                {appointments.length === 0 ? <div className="empty-state">No appointments yet</div> :
+                  appointments.map(a => (
+                    <div key={a.id} className="appointment-card provider-card">
+                      <div className="card-top">
+                        <div className="card-title">{a.service_name}</div>
+                        <div className="card-meta">{a.duration_minutes} min • KES {a.price || '0'}</div>
+                      </div>
+                      <div className="card-body">
+                        <div><strong>Client:</strong> {a.client_name} {a.client_phone ? `(${a.client_phone})` : ''}</div>
+                        <div><strong>When:</strong> {new Date(a.appointment_date).toLocaleString()}</div>
+                        <div><strong>Notes:</strong> {a.notes || '—'}</div>
+                      </div>
+
+                      <div className="card-actions provider-actions">
+                        {editingId === a.id ? (
+                          <>
+                            <select value={editedStatus} onChange={e => setEditedStatus(e.target.value)}>
+                              <option value="scheduled">scheduled</option>
+                              <option value="completed">completed</option>
+                              <option value="cancelled">cancelled</option>
+                              <option value="no-show">no-show</option>
+                            </select>
+                            <input type="datetime-local" value={editedDate} onChange={e => setEditedDate(e.target.value)} />
+                            <button className="primary-btn" onClick={onSaveEdit}>Save</button>
+                            <button className="secondary-btn" onClick={() => setEditingId(null)}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="status-pill" style={{ background: statusColors[a.status || 'scheduled'] || '#ddd' }}>{a.status}</span>
+                            <button className="secondary-btn" onClick={() => onStartEdit(a)}>Edit</button>
+                            <button className="secondary-btn" onClick={() => onDelete(a.id)}>Delete</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                }
               </div>
-              <div className="card-actions">
-                <select value={appt.status} onChange={(e) => changeStatus(appt, e.target.value)}>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="no-show">No-show</option>
-                </select>
-                <button className="danger-btn" onClick={() => handleDelete(appt.id)}>🗑 Delete</button>
-              </div>
-            </div>
-          ))}
+            </section>
+          )}
         </div>
       )}
     </div>
   );
 }
-
-export default AppointmentManager;
