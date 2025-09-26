@@ -54,7 +54,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// register
+// ---------------- Auth ----------------
 app.post('/api/register', async (req, res) => {
   try {
     const { email, password, name, user_type = 'client', phone, business_name } = req.body;
@@ -83,7 +83,6 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// login
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -103,7 +102,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// profile
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
     const user = await db.get('SELECT id, email, name, user_type, phone, business_name, created_at FROM users WHERE id = ?', [req.user.id]);
@@ -115,14 +113,15 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// ================= Services =================
-// list services with optional search q (search by name / category / business)
+// ---------------- Services ----------------
 app.get('/api/services', async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     const category = (req.query.category || '').trim();
 
-    let baseSql = `SELECT s.*, u.name as provider_name, u.business_name FROM services s JOIN users u ON s.provider_id = u.id`;
+    let baseSql = `SELECT s.*, u.name as provider_name, u.business_name 
+                   FROM services s 
+                   JOIN users u ON s.provider_id = u.id`;
     const params = [];
     const filters = [];
 
@@ -130,12 +129,10 @@ app.get('/api/services', async (req, res) => {
       filters.push('(s.name LIKE ? OR s.description LIKE ? OR s.category LIKE ? OR u.name LIKE ? OR u.business_name LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
     }
-
     if (category) {
       filters.push('s.category = ?');
       params.push(category);
     }
-
     if (filters.length) baseSql += ' WHERE ' + filters.join(' AND ');
 
     baseSql += ' ORDER BY s.created_at DESC';
@@ -148,7 +145,7 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
-// create service (provider only)
+// create service
 app.post('/api/services', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') return res.status(403).json({ error: 'Only service providers can create services' });
@@ -170,7 +167,7 @@ app.post('/api/services', authenticateToken, async (req, res) => {
   }
 });
 
-// update service (provider only, own service)
+// update service
 app.put('/api/services/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') return res.status(403).json({ error: 'Only providers can update services' });
@@ -204,7 +201,7 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// delete service (provider only, own service)
+// delete service
 app.delete('/api/services/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'provider') return res.status(403).json({ error: 'Only providers can delete services' });
@@ -221,7 +218,7 @@ app.delete('/api/services/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// get provider profile (provider info + their services)
+// provider profile
 app.get('/api/providers/:id', async (req, res) => {
   try {
     const providerId = parseInt(req.params.id, 10);
@@ -236,14 +233,11 @@ app.get('/api/providers/:id', async (req, res) => {
   }
 });
 
-// ================= Appointments =================
-
-// fetch appointments (client sees their non-deleted, provider sees theirs non-deleted)
+// ---------------- Appointments ----------------
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   try {
     let appointments;
     if (req.user.user_type === 'provider') {
-      // only appointments that provider has not hidden
       appointments = await db.query(`
         SELECT a.*, s.name as service_name, s.duration_minutes, s.price, u.name as client_name, u.phone as client_phone
         FROM appointments a
@@ -253,7 +247,6 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
         ORDER BY a.appointment_date DESC
       `, [req.user.id]);
     } else {
-      // client: only appointments the client hasn't hidden
       appointments = await db.query(`
         SELECT a.*, s.name as service_name, s.duration_minutes, s.price, u.name as provider_name, u.business_name, u.phone as provider_phone
         FROM appointments a
@@ -270,7 +263,6 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
   }
 });
 
-// create appointment (client)
 app.post('/api/appointments', authenticateToken, async (req, res) => {
   try {
     if (req.user.user_type !== 'client') return res.status(403).json({ error: 'Only clients can book appointments' });
@@ -298,14 +290,12 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
   }
 });
 
-// update appointment (reschedule, change status or notes) - client for own reschedule, provider for status/notes
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
   try {
     const apptId = parseInt(req.params.id, 10);
     const appt = await db.get('SELECT * FROM appointments WHERE id = ?', [apptId]);
     if (!appt) return res.status(404).json({ error: 'Appointment not found' });
 
-    // Authorization:
     if (req.user.user_type === 'client' && appt.client_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
     if (req.user.user_type === 'provider' && appt.provider_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
 
@@ -317,7 +307,6 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
       updates.push('appointment_date = ?');
       params.push(body.appointment_date);
 
-      // recalc end_date using service duration
       const service = await db.get('SELECT duration_minutes FROM services WHERE id = ?', [appt.service_id]);
       const duration = (service && service.duration_minutes) ? service.duration_minutes : 60;
       const newEnd = new Date(new Date(body.appointment_date).getTime() + duration * 60000).toISOString();
@@ -341,7 +330,7 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// delete appointment (soft delete until both sides delete)
+// soft delete
 app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
   try {
     const apptId = parseInt(req.params.id, 10);
@@ -357,21 +346,19 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
       await db.run('UPDATE appointments SET provider_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [apptId]);
     }
 
-    // if both sides have hidden -> permanent delete
     const updated = await db.get('SELECT client_deleted, provider_deleted FROM appointments WHERE id = ?', [apptId]);
     if (updated && updated.client_deleted && updated.provider_deleted) {
       await db.run('DELETE FROM appointments WHERE id = ?', [apptId]);
-      return res.json({ success: true, message: 'Appointment fully deleted' });
+      return res.json({ success: true, message: 'Appointment permanently deleted (both sides confirmed)' });
     }
 
-    res.json({ success: true, message: 'Appointment hidden for this user' });
+    res.json({ success: true, message: `Appointment hidden for ${req.user.user_type}` });
   } catch (err) {
     console.error('Appointment delete error:', err);
     res.status(500).json({ error: 'Failed to delete appointment' });
   }
 });
 
-// latest appointment helper
 app.get('/api/appointments/latest', authenticateToken, async (req, res) => {
   try {
     let latest;
