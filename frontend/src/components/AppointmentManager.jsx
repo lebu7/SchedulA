@@ -1,268 +1,195 @@
-// frontend/src/components/AppointmentManager.jsx
 import React, { useState, useEffect } from "react";
-import { servicesAPI, appointmentsAPI } from "../services/api";
+import { appointmentsAPI, servicesAPI } from "../services/api";
 import ProviderProfile from "./ProviderProfile";
 import "./AppointmentManager.css";
 
 function AppointmentManager({ user }) {
-  const [services, setServices] = useState([]);
   const [appointments, setAppointments] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [showBookingDialog, setShowBookingDialog] = useState(false);
-  const [selectedService, setSelectedService] = useState(null);
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [clientNotes, setClientNotes] = useState("");
+  // Reschedule dialog
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [selectedAppt, setSelectedAppt] = useState(null);
+  const [newDate, setNewDate] = useState("");
 
+  // Provider profile view when clicking provider from booking
   const [viewingProvider, setViewingProvider] = useState(null);
-  const [activeTab, setActiveTab] = useState("services"); // 👈 separate tabs
 
-  // Load services or appointments
   useEffect(() => {
-    if (user.user_type === "client") {
-      loadServices();
-    } else {
-      loadAppointments();
-    }
-  }, [user]);
-
-  // Search effect — live filter
-  useEffect(() => {
-    if (searchTerm.trim() === "") {
-      setFilteredServices(services);
-    } else {
-      const term = searchTerm.toLowerCase();
-      setFilteredServices(
-        services.filter(
-          (s) =>
-            s.name.toLowerCase().includes(term) ||
-            s.category?.toLowerCase().includes(term) ||
-            s.business_name?.toLowerCase().includes(term) ||
-            s.provider_name?.toLowerCase().includes(term)
-        )
-      );
-    }
-  }, [searchTerm, services]);
-
-  const loadServices = async () => {
-    try {
-      setLoading(true);
-      const data = await servicesAPI.list();
-      setServices(data.data || []);
-      setFilteredServices(data.data || []);
-    } catch (error) {
-      console.error("Failed to fetch services:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    loadAppointments();
+  }, []);
 
   const loadAppointments = async () => {
     try {
       setLoading(true);
-      const data = await appointmentsAPI.list();
-      setAppointments(data.data || []);
-    } catch (error) {
-      console.error("Failed to fetch appointments:", error);
+      const res = await appointmentsAPI.list();
+      setAppointments(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch appointments:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBookClick = (service) => {
-    setSelectedService(service);
-    setAppointmentDate("");
-    setClientNotes("");
-    setShowBookingDialog(true);
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this appointment?")) return;
+    try {
+      await appointmentsAPI.remove(id);
+      await loadAppointments();
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert("Failed to delete appointment");
+    }
   };
 
-  const handleConfirmBooking = async () => {
-    if (!appointmentDate) {
-      alert("Please select a date and time");
+  const openReschedule = (appt) => {
+    setSelectedAppt(appt);
+    setNewDate("");
+    setShowReschedule(true);
+  };
+
+  const confirmReschedule = async () => {
+    if (!newDate) {
+      alert("Pick a new date");
       return;
     }
     try {
+      await appointmentsAPI.update(selectedAppt.id, { appointment_date: newDate });
+      setShowReschedule(false);
+      setSelectedAppt(null);
+      await loadAppointments();
+    } catch (err) {
+      console.error("Reschedule failed:", err);
+      alert("Failed to reschedule");
+    }
+  };
+
+  const handleRebook = async (appt) => {
+    try {
       await appointmentsAPI.create({
-        service_id: selectedService.id,
-        appointment_date: appointmentDate,
-        notes: clientNotes,
+        service_id: appt.service_id,
+        appointment_date: new Date().toISOString(),
+        client_notes: appt.notes || "",
       });
-      alert("✅ Appointment booked successfully!");
-      setShowBookingDialog(false);
-      loadAppointments();
-      setActiveTab("bookings");
-    } catch (error) {
-      console.error("Booking failed:", error);
-      alert("❌ Failed to book appointment. Please try again.");
+      alert("Rebooked");
+      await loadAppointments();
+    } catch (err) {
+      console.error("Rebook failed:", err);
+      alert("Failed to rebook");
+    }
+  };
+
+  const changeStatus = async (appt, status) => {
+    try {
+      await appointmentsAPI.update(appt.id, { status });
+      await loadAppointments();
+    } catch (err) {
+      console.error("Status update failed:", err);
+      alert("Failed to update status");
     }
   };
 
   if (loading) return <p>Loading...</p>;
 
-  // ========== CLIENT VIEW ==========
+  // client view: two groups
   if (user.user_type === "client") {
+    const pending = appointments.filter((a) => a.status === "scheduled");
+    const completed = appointments.filter((a) => a.status !== "scheduled");
+
     return (
       <div className="appointment-manager">
-        <nav className="appt-nav">
-          <button
-            className={activeTab === "services" ? "active" : ""}
-            onClick={() => setActiveTab("services")}
-          >
-            Find Services
-          </button>
-          <button
-            className={activeTab === "bookings" ? "active" : ""}
-            onClick={() => {
-              setActiveTab("bookings");
-              loadAppointments();
-            }}
-          >
-            My Bookings
-          </button>
-        </nav>
+        <h2>📋 My Bookings</h2>
 
-        {activeTab === "services" && (
-          <>
-            <h2>🔎 Find Services</h2>
-
-            {viewingProvider ? (
-              <ProviderProfile
-                providerId={viewingProvider}
-                onBack={() => setViewingProvider(null)}
-                onBook={(service) => handleBookClick(service)}
-              />
-            ) : (
-              <>
-                <div className="search-bar">
-                  <input
-                    type="text"
-                    placeholder="Search services (e.g. Massage, Salon, Cleaning)..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-
-                <div className="services-grid">
-                  {filteredServices.map((service) => (
-                    <div key={service.id} className="service-card">
-                      <h3>{service.name}</h3>
-                      <p className="desc">{service.description}</p>
-                      <p>
-                        <strong>Provider:</strong>{" "}
-                        <button
-                          className="link-btn"
-                          onClick={() => setViewingProvider(service.provider_id)}
-                        >
-                          {service.provider_name} (
-                          {service.business_name || "Independent"})
-                        </button>
-                      </p>
-                      <p>
-                        <strong>Category:</strong> {service.category}
-                      </p>
-                      <p>
-                        <strong>Duration:</strong> {service.duration_minutes}{" "}
-                        min
-                      </p>
-                      <p>
-                        <strong>Price:</strong> KSh {service.price}
-                      </p>
-                      <button onClick={() => handleBookClick(service)}>
-                        📅 Book Now
-                      </button>
-                    </div>
-                  ))}
-                  {filteredServices.length === 0 && (
-                    <p>No services match your search.</p>
-                  )}
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {activeTab === "bookings" && (
-          <div>
-            <h2>📋 My Bookings</h2>
-            {appointments.length === 0 ? (
-              <p>No bookings yet.</p>
-            ) : (
-              <ul className="appointment-list">
-                {appointments.map((appt) => (
-                  <li key={appt.id} className="appointment-item">
-                    <strong>{appt.service_name}</strong> with{" "}
-                    {appt.provider_name} <br />
-                    <span>
-                      {new Date(appt.appointment_date).toLocaleString()}
-                    </span>
+        <section>
+          <h3>⏳ Pending</h3>
+          {pending.length === 0 ? <p>No pending bookings.</p> : (
+            <div className="appointments-grid">
+              {pending.map((appt) => (
+                <div key={appt.id} className={`appointment-card ${appt.status || "scheduled"}`}>
+                  <div>
+                    <h4>{appt.service_name}</h4>
+                    <p>Provider: <button className="link-btn" onClick={() => setViewingProvider(appt.provider_id)}>{appt.provider_name}</button></p>
+                    <p>{new Date(appt.appointment_date).toLocaleString()}</p>
                     {appt.notes && <p>Notes: {appt.notes}</p>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+                  </div>
+                  <div className="card-actions">
+                    <button onClick={() => openReschedule(appt)}>✏️ Reschedule</button>
+                    <button className="danger-btn" onClick={() => handleDelete(appt.id)}>❌ Cancel</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-        {showBookingDialog && selectedService && (
+        <section>
+          <h3>✅ Completed / Past</h3>
+          {completed.length === 0 ? <p>No past bookings.</p> : (
+            <div className="appointments-grid">
+              {completed.map((appt) => (
+                <div key={appt.id} className={`appointment-card ${appt.status || "completed"}`}>
+                  <div>
+                    <h4>{appt.service_name}</h4>
+                    <p>Provider: <button className="link-btn" onClick={() => setViewingProvider(appt.provider_id)}>{appt.provider_name}</button></p>
+                    <p>{new Date(appt.appointment_date).toLocaleString()}</p>
+                    {appt.notes && <p>Notes: {appt.notes}</p>}
+                  </div>
+                  <div className="card-actions">
+                    <button onClick={() => handleRebook(appt)}>🔄 Rebook</button>
+                    <button className="danger-btn" onClick={() => handleDelete(appt.id)}>🗑 Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Reschedule dialog */}
+        {showReschedule && selectedAppt && (
           <div className="dialog-backdrop">
             <div className="dialog">
-              <h3>📅 Book: {selectedService.name}</h3>
-              <p>
-                Provider: {selectedService.provider_name} (
-                {selectedService.business_name || "Independent"})
-              </p>
-
-              <label>
-                Appointment Date & Time:
-                <input
-                  type="datetime-local"
-                  value={appointmentDate}
-                  onChange={(e) => setAppointmentDate(e.target.value)}
-                />
-              </label>
-
-              <label>
-                Notes (optional):
-                <textarea
-                  value={clientNotes}
-                  onChange={(e) => setClientNotes(e.target.value)}
-                />
-              </label>
-
+              <h3>Reschedule {selectedAppt.service_name}</h3>
+              <input type="datetime-local" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
               <div className="dialog-actions">
-                <button onClick={handleConfirmBooking}>Confirm</button>
-                <button
-                  onClick={() => setShowBookingDialog(false)}
-                  className="cancel-btn"
-                >
-                  Cancel
-                </button>
+                <button onClick={confirmReschedule}>Confirm</button>
+                <button className="cancel-btn" onClick={() => setShowReschedule(false)}>Cancel</button>
               </div>
             </div>
           </div>
         )}
+
+        {/* Provider profile */}
+        {viewingProvider && <ProviderProfile providerId={viewingProvider} onBack={() => setViewingProvider(null)} onBook={() => {}} user={user} />}
       </div>
     );
   }
 
-  // ========== PROVIDER VIEW ==========
+  // provider view
   return (
     <div className="appointment-manager">
       <h2>📅 My Appointments</h2>
-      {appointments.length === 0 ? (
-        <p>No appointments yet.</p>
-      ) : (
-        <ul className="appointment-list">
+      {appointments.length === 0 ? <p>No appointments yet.</p> : (
+        <div className="appointments-grid">
           {appointments.map((appt) => (
-            <li key={appt.id} className="appointment-item">
-              <strong>{appt.service_name}</strong> with {appt.client_name} <br />
-              <span>{new Date(appt.appointment_date).toLocaleString()}</span>
-              {appt.notes && <p>Notes: {appt.notes}</p>}
-            </li>
+            <div key={appt.id} className={`appointment-card ${appt.status || ""}`}>
+              <div>
+                <h4>{appt.service_name}</h4>
+                <p>Client: {appt.client_name}</p>
+                <p>{new Date(appt.appointment_date).toLocaleString()}</p>
+                {appt.notes && <p>Notes: {appt.notes}</p>}
+              </div>
+              <div className="card-actions">
+                <select value={appt.status} onChange={(e) => changeStatus(appt, e.target.value)}>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="no-show">No-show</option>
+                </select>
+                <button className="danger-btn" onClick={() => handleDelete(appt.id)}>🗑 Delete</button>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
