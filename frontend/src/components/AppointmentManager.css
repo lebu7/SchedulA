@@ -75,3 +75,23 @@
 .provider-card { max-width: 700px; }
 
 .muted { color: #666; font-size: 0.9rem; }
+
+.highlight-card {
+  border: 2px solid #3b82f6;
+  background: #f0f7ff;
+}
+
+.reschedule-banner {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #e0efff;
+  color: #1d4ed8;
+  font-size: 0.9rem;
+}
+
+.reschedule-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}

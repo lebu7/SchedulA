@@ -27,8 +27,11 @@ export default function AppointmentManager({ user }) {
     }
   };
 
-  useEffect(() => { loadAppointments(); }, [user]);
+  useEffect(() => {
+    loadAppointments();
+  }, [user]);
 
+  // Provider actions
   const onConfirm = async (id) => {
     await appointmentsAPI.update(id, { status: "completed" });
     loadAppointments();
@@ -43,10 +46,14 @@ export default function AppointmentManager({ user }) {
     const dt = prompt("Enter new proposed date/time (YYYY-MM-DDTHH:MM)");
     const reason = prompt("Enter reason for reschedule");
     if (!dt) return;
-    await appointmentsAPI.custom(`/appointments/${id}/reschedule`, { new_date: dt, notes: reason });
+    await appointmentsAPI.custom(`/appointments/${id}/reschedule`, {
+      new_date: dt,
+      notes: reason,
+    });
     loadAppointments();
   };
 
+  // Client actions
   const onAcceptReschedule = async (id) => {
     await appointmentsAPI.custom(`/appointments/${id}/accept-reschedule`, {});
     loadAppointments();
@@ -57,6 +64,7 @@ export default function AppointmentManager({ user }) {
     loadAppointments();
   };
 
+  // Common
   const onDelete = async (id) => {
     await appointmentsAPI.remove(id);
     loadAppointments();
@@ -71,46 +79,108 @@ export default function AppointmentManager({ user }) {
       ) : (
         <div className="appointments-pane">
           {appointments.map((a) => (
-            <div key={a.id} className="appointment-card">
+            <div
+              key={a.id}
+              className={`appointment-card ${a.status === "reschedule-requested" ? "highlight-card" : ""}`}
+            >
               <div className="card-top">
                 <div className="card-title">{a.service_name}</div>
                 <div className="card-meta">
                   {a.duration_minutes} min • KES {a.price || "0"}
                 </div>
               </div>
+
               <div className="card-body">
                 {isProvider ? (
-                  <div><strong>Client:</strong> {a.client_name}</div>
+                  <div>
+                    <strong>Client:</strong> {a.client_name}
+                  </div>
                 ) : (
-                  <div><strong>Provider:</strong> {a.provider_name}</div>
+                  <div>
+                    <strong>Provider:</strong> {a.provider_name}
+                  </div>
                 )}
-                <div><strong>When:</strong> {new Date(a.appointment_date).toLocaleString()}</div>
                 <div>
-                  <strong>Status:</strong>
-                  <span className="status-pill" style={{background: statusColors[a.status] || "#ddd"}}>
+                  <strong>When:</strong>{" "}
+                  {new Date(a.appointment_date).toLocaleString()}
+                </div>
+                <div>
+                  <strong>Status:</strong>{" "}
+                  <span
+                    className="status-pill"
+                    style={{
+                      background: statusColors[a.status] || "#ddd",
+                    }}
+                  >
                     {a.status}
                   </span>
                 </div>
-                {a.notes && <div className="muted">Notes: {a.notes}</div>}
+
+                {a.status === "reschedule-requested" && (
+                  <div className="reschedule-banner">
+                    <p>
+                      🔔 <strong>{isProvider ? "You proposed a new time" : "Provider requested reschedule"}</strong>
+                    </p>
+                    {a.notes && (
+                      <p className="muted">Reason: {a.notes}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="card-actions">
                 {isProvider ? (
                   <>
-                    <button className="primary-btn" onClick={() => onConfirm(a.id)}>Confirm</button>
-                    <button className="secondary-btn" onClick={() => onReject(a.id)}>Reject</button>
-                    <button className="secondary-btn" onClick={() => onRequestReschedule(a.id)}>Request Reschedule</button>
-                    <button className="secondary-btn" onClick={() => onDelete(a.id)}>Delete</button>
+                    <button
+                      className="primary-btn"
+                      onClick={() => onConfirm(a.id)}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => onReject(a.id)}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => onRequestReschedule(a.id)}
+                    >
+                      Request Reschedule
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => onDelete(a.id)}
+                    >
+                      Delete
+                    </button>
                   </>
                 ) : (
                   <>
-                    {a.status === "reschedule-requested" && (
-                      <>
-                        <button className="primary-btn" onClick={() => onAcceptReschedule(a.id)}>Accept Reschedule</button>
-                        <button className="secondary-btn" onClick={() => onDeclineReschedule(a.id)}>Decline</button>
-                      </>
+                    {a.status === "reschedule-requested" ? (
+                      <div className="reschedule-actions">
+                        <button
+                          className="primary-btn"
+                          onClick={() => onAcceptReschedule(a.id)}
+                        >
+                          ✅ Accept
+                        </button>
+                        <button
+                          className="secondary-btn"
+                          onClick={() => onDeclineReschedule(a.id)}
+                        >
+                          ❌ Decline
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="secondary-btn"
+                        onClick={() => onDelete(a.id)}
+                      >
+                        Delete
+                      </button>
                     )}
-                    <button className="secondary-btn" onClick={() => onDelete(a.id)}>Delete</button>
                   </>
                 )}
               </div>
