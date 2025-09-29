@@ -75,20 +75,25 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
   };
 
   const handleConfirm = async () => {
-    try {
-      if (!date) { setError("Please choose date/time"); return; }
-      await appointmentsAPI.create({
-        service_id: bookService.id,
-        appointment_date: date,
-        notes,
-      });
-      alert("✅ Appointment booked!");
-      setBookService(null);
-      load();
-    } catch (err) {
-      setError(err.response?.data?.error || "Booking failed");
+  try {
+    setError("");
+    if (!date) {
+      setError("Please choose date and time");
+      return;
     }
-  };
+    await appointmentsAPI.create({
+      service_id: bookService.id,
+      appointment_date: date,
+      notes,
+    });
+    alert("✅ Appointment booked!");
+    setBookService(null);
+    load();
+  } catch (err) {
+    const msg = err.response?.data?.error || err.message || "Booking failed";
+    setError(msg);
+  }
+};
 
   return (
     <div className="services-container">

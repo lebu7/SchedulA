@@ -27,15 +27,13 @@ const authenticateToken = (req, res, next) => {
 
 // ---------------- Appointments ----------------
 
-// client books appointment
+// create appointment (client)
 app.post('/api/appointments', authenticateToken, async (req, res) => {
   try {
-    if (req.user.user_type !== 'client')
-      return res.status(403).json({ error: 'Only clients can book appointments' });
+    if (req.user.user_type !== 'client') return res.status(403).json({ error: 'Only clients can book appointments' });
 
     const { service_id, appointment_date, notes } = req.body;
-    if (!service_id || !appointment_date)
-      return res.status(400).json({ error: 'Service ID and appointment date are required' });
+    if (!service_id || !appointment_date) return res.status(400).json({ error: 'Service ID and appointment date are required' });
 
     const service = await db.get(
       'SELECT s.*, u.id as provider_id FROM services s JOIN users u ON s.provider_id = u.id WHERE s.id = ?',
@@ -43,24 +41,26 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
     );
     if (!service) return res.status(404).json({ error: 'Service not found' });
 
-    // check double booking
-    const existing = await db.get(
-      `SELECT * FROM appointments
+    const start = new Date(appointment_date).getTime();
+    const end = start + (service.duration_minutes || 60) * 60000;
+
+    // conflict check
+    const conflict = await db.get(
+      `SELECT id FROM appointments 
        WHERE provider_id = ? AND status = 'scheduled'
-       AND appointment_date = ?`,
-      [service.provider_id, appointment_date]
+         AND appointment_date < ? AND end_date > ?`,
+      [service.provider_id, new Date(end).toISOString(), new Date(start).toISOString()]
     );
-    if (existing) {
-      return res.status(400).json({ error: 'Time slot already booked, choose another' });
+
+    if (conflict) {
+      return res.status(400).json({ error: 'This time slot is already booked. Please choose another time.' });
     }
 
-    const duration = service.duration_minutes || 60;
-    const endDate = new Date(new Date(appointment_date).getTime() + duration * 60000).toISOString();
-
     const result = await db.run(
-      `INSERT INTO appointments (client_id, service_id, provider_id, appointment_date, end_date, status, notes, client_deleted, provider_deleted, created_at, updated_at)
+      `INSERT INTO appointments 
+       (client_id, service_id, provider_id, appointment_date, end_date, status, notes, client_deleted, provider_deleted, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [req.user.id, service_id, service.provider_id, appointment_date, endDate, 'scheduled', notes || null]
+      [req.user.id, service_id, service.provider_id, new Date(start).toISOString(), new Date(end).toISOString(), 'scheduled', notes || null]
     );
 
     const created = await db.get('SELECT * FROM appointments WHERE id = ?', [result.id]);
