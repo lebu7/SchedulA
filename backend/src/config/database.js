@@ -1,17 +1,27 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, '../../database/schedula.db');
+// Ensure database directory exists
+const dbDir = path.join(__dirname, '../../database');
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+  console.log('📁 Created database directory');
+}
+
+const dbPath = path.join(dbDir, 'schedula.db');
+console.log(`📊 Database path: ${dbPath}`);
 
 export const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error('Error opening database:', err.message);
+    console.error('❌ Error opening database:', err.message);
+    console.error('Full error details:', err);
   } else {
-    console.log('Connected to SQLite database.');
+    console.log('✅ Connected to SQLite database successfully');
     initializeDatabase();
   }
 });
@@ -27,7 +37,10 @@ function initializeDatabase() {
     user_type TEXT CHECK(user_type IN ('client', 'provider')) NOT NULL,
     business_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  )`, (err) => {
+    if (err) console.error('Error creating users table:', err);
+    else console.log('✅ Users table ready');
+  });
 
   // Services table
   db.run(`CREATE TABLE IF NOT EXISTS services (
@@ -36,11 +49,14 @@ function initializeDatabase() {
     name TEXT NOT NULL,
     description TEXT,
     category TEXT NOT NULL,
-    duration INTEGER NOT NULL, -- in minutes
+    duration INTEGER NOT NULL,
     price DECIMAL(10,2),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (provider_id) REFERENCES users (id)
-  )`);
+  )`, (err) => {
+    if (err) console.error('Error creating services table:', err);
+    else console.log('✅ Services table ready');
+  });
 
   // Appointments table
   db.run(`CREATE TABLE IF NOT EXISTS appointments (
@@ -57,7 +73,10 @@ function initializeDatabase() {
     FOREIGN KEY (client_id) REFERENCES users (id),
     FOREIGN KEY (provider_id) REFERENCES users (id),
     FOREIGN KEY (service_id) REFERENCES services (id)
-  )`);
+  )`, (err) => {
+    if (err) console.error('Error creating appointments table:', err);
+    else console.log('✅ Appointments table ready');
+  });
 
-  console.log('Database tables initialized');
+  console.log('🎯 Database initialization completed');
 }
