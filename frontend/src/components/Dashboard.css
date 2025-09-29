@@ -1,0 +1,24 @@
+.dashboard h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard .card {
+  margin-bottom: 20px;
+}
+
+.dashboard .card h3 {
+  margin-bottom: 15px;
+  color: #007bff;
+}
+
+.dashboard .card p {
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
