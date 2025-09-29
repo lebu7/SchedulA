@@ -1,4 +1,3 @@
-// src/components/ServiceList.jsx
 import React, { useState, useEffect } from "react";
 import { servicesAPI, appointmentsAPI } from "@/services/api";
 import { authService } from "@/services/auth";
@@ -32,7 +31,7 @@ const ServiceCard = ({ s, user, onBook, onOpenProvider, onEdit, onDelete }) => {
             >
               👤 {s.provider_name}
             </button>
-            <button onClick={() => onBook(s)} className="primary-btn">📅 Book</button>
+            <button onClick={() => onBook(s)} className="primary-btn">📅 Book Now</button>
           </>
         )}
       </div>
@@ -53,7 +52,6 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
   async function load() {
     try {
       setLoading(true);
-      setError("");
       const params = {};
       if (q) params.q = q;
       if (forProvider) params.provider = forProvider;
@@ -61,7 +59,7 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
       setServices(res.data || []);
     } catch (err) {
       console.error("Failed to load services", err);
-      setError("Failed to load services");
+      setServices([]);
     } finally {
       setLoading(false);
     }
@@ -73,12 +71,12 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
     setBookService(s);
     setDate("");
     setNotes("");
+    setError("");
   };
 
   const handleConfirm = async () => {
     try {
-      setError("");
-      if (!date) { setError("Please choose date and time"); return; }
+      if (!date) { setError("Please choose date/time"); return; }
       await appointmentsAPI.create({
         service_id: bookService.id,
         appointment_date: date,
@@ -88,29 +86,7 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
       setBookService(null);
       load();
     } catch (err) {
-      console.error("Booking failed", err);
-      setError(err.response?.data?.error || err.message || "Booking failed");
-    }
-  };
-
-  const handleEdit = async (service) => {
-    const name = prompt("Update service name", service.name);
-    if (!name) return;
-    try {
-      await servicesAPI.update(service.id, { ...service, name });
-      load();
-    } catch (err) {
-      alert("Failed to update service");
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("Delete this service?")) return;
-    try {
-      await servicesAPI.remove(id);
-      load();
-    } catch (err) {
-      alert("Failed to delete service");
+      setError(err.response?.data?.error || "Booking failed");
     }
   };
 
@@ -124,11 +100,7 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
         />
       </div>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : services.length === 0 ? (
-        <p>No services found</p>
-      ) : (
+      {loading ? <p>Loading...</p> : (
         <div className="services-grid">
           {services.map((s) => (
             <ServiceCard
@@ -136,9 +108,7 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
               s={s}
               user={user}
               onBook={handleBookClick}
-              onOpenProvider={(id) => onOpenProvider && onOpenProvider(id)}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
+              onOpenProvider={onOpenProvider}
             />
           ))}
         </div>
@@ -147,34 +117,22 @@ const ServiceList = ({ forProvider = null, onOpenProvider }) => {
       {bookService && (
         <div className="modal-overlay">
           <div className="modal">
-            <h3>Book: {bookService.name}</h3>
-            <p>
-              With: {bookService.provider_name}{" "}
-              {bookService.business_name ? `(${bookService.business_name})` : ""}
-            </p>
+            <h3>📅 Book: {bookService.name}</h3>
+            <p>Provider: {bookService.provider_name} ({bookService.business_name || "Independent"})</p>
 
             <div className="form-group">
-              <label>Choose date & time</label>
-              <input
-                type="datetime-local"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
+              <label>Appointment Date & Time</label>
+              <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="form-group">
               <label>Notes (optional)</label>
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
-
             {error && <div className="error-message">{error}</div>}
 
             <div className="form-actions">
-              <button onClick={() => setBookService(null)} className="secondary-btn">
-                Cancel
-              </button>
-              <button onClick={handleConfirm} className="primary-btn">
-                Confirm Booking
-              </button>
+              <button onClick={() => setBookService(null)} className="secondary-btn">Cancel</button>
+              <button onClick={handleConfirm} className="primary-btn">Confirm Booking</button>
             </div>
           </div>
         </div>
