@@ -9,11 +9,16 @@ function ServiceList({ user }) {
   const [selectedCategory, setSelectedCategory] = useState('')
 
   useEffect(() => {
-    fetchServices()
-  }, [])
+    const delaySearch = setTimeout(() => {
+      fetchServices()
+    }, 300) // 300ms delay for live search
+
+    return () => clearTimeout(delaySearch)
+  }, [searchTerm, selectedCategory])
 
   const fetchServices = async () => {
     try {
+      setLoading(true)
       const params = new URLSearchParams()
       if (searchTerm) params.append('search', searchTerm)
       if (selectedCategory) params.append('category', selectedCategory)
@@ -27,14 +32,12 @@ function ServiceList({ user }) {
     }
   }
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    setLoading(true)
-    fetchServices()
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value)
   }
 
-  if (loading) {
-    return <div className="loading">Loading services...</div>
+  const handleCategoryChange = (e) => {
+    setSelectedCategory(e.target.value)
   }
 
   return (
@@ -43,29 +46,33 @@ function ServiceList({ user }) {
         <div className="service-header">
           <h2>Available Services</h2>
           
-          <form onSubmit={handleSearch} className="search-filters">
+          <div className="search-filters">
             <div className="search-group">
               <input
                 type="text"
-                placeholder="Search services..."
+                placeholder="Search services, providers..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
               />
-              <button type="submit" className="btn btn-primary">Search</button>
             </div>
             
             <select 
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={handleCategoryChange}
             >
               <option value="">All Categories</option>
               <option value="Beauty">Beauty</option>
               <option value="Health">Health</option>
               <option value="Fitness">Fitness</option>
               <option value="Professional">Professional</option>
+              <option value="Automotive">Automotive</option>
+              <option value="Home Services">Home Services</option>
+              <option value="Education">Education</option>
             </select>
-          </form>
+          </div>
         </div>
+
+        {loading && <div className="loading">Searching services...</div>}
 
         <div className="services-grid">
           {services.map(service => (
@@ -74,8 +81,8 @@ function ServiceList({ user }) {
               <p className="service-category">{service.category}</p>
               <p className="service-description">{service.description}</p>
               <div className="service-details">
-                <span>⏱️ {service.duration} min</span>
-                <span>💰 ${service.price}</span>
+                <span>⏱️ {service.duration} minutes</span>
+                <span>💰 KES {service.price}</span>
               </div>
               <div className="service-provider">
                 <strong>{service.provider_name}</strong>
@@ -90,7 +97,7 @@ function ServiceList({ user }) {
           ))}
         </div>
 
-        {services.length === 0 && (
+        {!loading && services.length === 0 && (
           <div className="no-services">
             <p>No services found. Try adjusting your search filters.</p>
           </div>
