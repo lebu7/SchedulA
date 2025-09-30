@@ -126,3 +126,32 @@
   color: #007bff;
   font-weight: 500;
 }
+/* Better Loading States */
+.search-info {
+  background: #e7f3ff;
+  border: 1px solid #b3d9ff;
+  border-radius: 8px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  color: #0066cc;
+}
+
+.search-info p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.no-appointments {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.updating-text {
+  color: #007bff;
+  font-size: 12px;
+  margin-top: 5px;
+  display: block;
+}
