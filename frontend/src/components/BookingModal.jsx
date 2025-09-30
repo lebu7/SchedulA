@@ -6,7 +6,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
   const [notes, setNotes] = useState('')
-  const [availableSlots, setAvailableSlots] = useState([])
   const [loading, setLoading] = useState(false)
   const [booking, setBooking] = useState(false)
   const [error, setError] = useState('')
@@ -26,41 +25,44 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       setLoading(true)
       setError('')
       
-      // Try the available slots endpoint first
+      // Get all appointments to check availability
+      let providerAppointments = []
+      
       try {
-        const response = await api.get(`/appointments/available/${service.id}?date=${selectedDate}`)
-        const bookedSlots = response.data.booked_slots || []
-        setAvailableSlots(bookedSlots)
-        generateTimeSlots(bookedSlots)
+        // Try to get appointments for this specific provider
+        const response = await api.get('/appointments')
+        if (response.data && response.data.appointments) {
+          providerAppointments = Array.isArray(response.data.appointments) 
+            ? response.data.appointments.filter(apt => 
+                apt.provider_id === service.provider_id && apt.status === 'scheduled'
+              )
+            : []
+        }
       } catch (apiError) {
-        console.log('Available slots API failed, using fallback:', apiError)
-        // Fallback: get all appointments and filter for this provider
-        const allAppointments = await api.get('/appointments')
-        const providerAppointments = allAppointments.data.appointments?.filter(apt => 
-          apt.provider_id === service.provider_id && apt.status === 'scheduled'
-        ) || []
-        setAvailableSlots(providerAppointments)
-        generateTimeSlots(providerAppointments)
+        console.log('Appointments API failed:', apiError)
+        // If we can't get appointments, assume no conflicts
+        providerAppointments = []
       }
+      
+      generateTimeSlots(providerAppointments)
     } catch (error) {
-      console.error('Error fetching available slots:', error)
+      console.error('Error in fetchAvailableSlots:', error)
       setError('Failed to load available time slots. Please try again.')
-      setAvailableSlots([])
       generateTimeSlots([])
     } finally {
       setLoading(false)
     }
   }
 
-  const generateTimeSlots = (bookedAppointments) => {
+  const generateTimeSlots = (providerAppointments) => {
     const slots = []
     const startHour = 8 // 8 AM
     const endHour = 18 // 6 PM
     
     // Filter appointments for the selected date
-    const dayAppointments = bookedAppointments.filter(apt => {
+    const dayAppointments = providerAppointments.filter(apt => {
       try {
-        const aptDate = new Date(apt.appointment_date || apt.start).toISOString().split('T')[0]
+        const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0]
         return aptDate === selectedDate
       } catch (error) {
         return false
@@ -70,19 +72,21 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     for (let hour = startHour; hour < endHour; hour++) {
       for (let minute = 0; minute < 60; minute += 30) { // 30-minute intervals
         const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
-        const slotDateTime = `${selectedDate}T${timeString}`
+        const slotDateTime = `${selectedDate}T${timeString}:00`
         
         // Check if slot conflicts with existing appointments
         const isBooked = dayAppointments.some(apt => {
           try {
-            const aptStart = new Date(apt.appointment_date || apt.start)
-            const aptDuration = apt.duration || service.duration
+            const aptStart = new Date(apt.appointment_date)
+            const aptDuration = apt.duration || 60 // Default to 60 minutes if not provided
             const aptEnd = new Date(aptStart.getTime() + aptDuration * 60000)
             const slotStart = new Date(slotDateTime)
             const slotEnd = new Date(slotStart.getTime() + service.duration * 60000)
             
+            // Check for overlap
             return slotStart < aptEnd && slotEnd > aptStart
           } catch (error) {
+            console.error('Error checking appointment conflict:', error)
             return false
           }
         })
@@ -101,7 +105,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     const [hours, minutes] = timeString.split(':').map(Number)
     const period = hours >= 12 ? 'PM' : 'AM'
     const displayHours = hours % 12 || 12
-    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+    return `${displayHours}:${minutes.toString().padStart(2, '0')}`
   }
 
   const handleSubmit = async (e) => {
@@ -142,7 +146,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       // If it's a conflict error, refresh available slots
       if (errorMessage.includes('conflict') || errorMessage.includes('not available') || errorMessage.includes('Time slot')) {
         await fetchAvailableSlots()
-        setSelectedTime('') // Clear selected time as it's no longer available
+        setSelectedTime('')
       }
     } finally {
       setBooking(false)
@@ -164,35 +168,26 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const formatDisplayDate = (dateString) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('en-KE', {
-      weekday: 'long',
+      weekday: 'short',
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric'
     })
   }
 
   const handleDateChange = (e) => {
     setSelectedDate(e.target.value)
-    setSelectedTime('') // Reset time when date changes
-    setError('') // Clear any previous errors
+    setSelectedTime('')
+    setError('')
   }
 
   const handleTimeSelect = (time) => {
     setSelectedTime(time)
-    setError('') // Clear any previous errors
+    setError('')
   }
 
   const availableTimeSlots = timeSlots.filter(slot => slot.available)
   const hasAvailableSlots = availableTimeSlots.length > 0
-
-  // Debug: Log current state
-  console.log('Current state:', {
-    selectedDate,
-    selectedTime,
-    timeSlots,
-    availableTimeSlots,
-    hasAvailableSlots
-  })
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -217,12 +212,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <span className="detail-label">Price:</span>
             <span className="detail-value">KES {service.price}</span>
           </div>
-          {service.business_name && (
-            <div className="service-detail">
-              <span className="detail-label">Business:</span>
-              <span className="detail-value">{service.business_name}</span>
-            </div>
-          )}
         </div>
 
         <form onSubmit={handleSubmit} className="booking-form">
@@ -247,7 +236,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
               className="date-input"
             />
             <small className="field-hint">
-              Select a date between {getMinDate()} and {getMaxDate()}
+              Available from {getMinDate()} to {getMaxDate()}
             </small>
           </div>
 
@@ -255,13 +244,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <div className="form-group">
               <label>Select Time *</label>
               <div className="selected-date-info">
-                Available times for <strong>{formatDisplayDate(selectedDate)}</strong>
+                {formatDisplayDate(selectedDate)}
               </div>
               
               {loading ? (
                 <div className="time-slots-loading">
                   <span className="spinner"></span>
-                  Loading available times...
+                  Checking availability...
                 </div>
               ) : (
                 <>
@@ -275,33 +264,28 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                             className={`time-slot ${selectedTime === slot.time ? 'selected' : ''} ${!slot.available ? 'disabled' : ''}`}
                             onClick={() => slot.available && handleTimeSelect(slot.time)}
                             disabled={!slot.available || booking}
-                            title={slot.available ? `Book at ${slot.displayTime}` : 'Time slot not available'}
                           >
-                            <span className="time-text">{slot.displayTime}</span>
-                            {!slot.available && <span className="slot-status">⛔</span>}
-                            {slot.available && selectedTime === slot.time && <span className="slot-status">✅</span>}
+                            {slot.displayTime}
                           </button>
                         ))}
                       </div>
                     ) : (
                       <div className="no-time-slots">
-                        <p>No time slots generated for this date.</p>
+                        No time slots available
                       </div>
                     )}
                   </div>
                   
                   {!hasAvailableSlots && !loading && timeSlots.length > 0 && (
                     <div className="no-slots-message">
-                      <p>No available time slots for {formatDisplayDate(selectedDate)}.</p>
-                      <p>Please select another date or contact the provider directly.</p>
+                      All time slots are booked for this date
                     </div>
                   )}
                   
                   {hasAvailableSlots && (
                     <div className="slots-summary">
                       <small>
-                        {availableTimeSlots.length} of {timeSlots.length} time slots available
-                        {selectedTime && ` • Selected: ${formatTimeDisplay(selectedTime)}`}
+                        {availableTimeSlots.length} slots available
                       </small>
                     </div>
                   )}
@@ -316,39 +300,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
               id="appointment-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requirements, questions, or notes for the provider..."
-              rows="3"
+              placeholder="Any special requirements or notes..."
+              rows="2"
               disabled={booking}
-              maxLength="500"
+              maxLength="200"
             />
             <small className="field-hint">
-              {notes.length}/500 characters
+              {notes.length}/200 characters
             </small>
           </div>
-
-          {selectedDate && selectedTime && (
-            <div className="booking-summary">
-              <h4>Appointment Summary</h4>
-              <div className="summary-details">
-                <div className="summary-item">
-                  <span>Service:</span>
-                  <span>{service.name}</span>
-                </div>
-                <div className="summary-item">
-                  <span>Date:</span>
-                  <span>{formatDisplayDate(selectedDate)}</span>
-                </div>
-                <div className="summary-item">
-                  <span>Time:</span>
-                  <span>{formatTimeDisplay(selectedTime)}</span>
-                </div>
-                <div className="summary-item total">
-                  <span>Total:</span>
-                  <span>KES {service.price}</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="form-actions">
             <button
@@ -362,7 +322,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={booking || !selectedDate || !selectedTime || !hasAvailableSlots}
+              disabled={booking || !selectedDate || !selectedTime}
             >
               {booking ? (
                 <>
@@ -370,10 +330,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   Booking...
                 </>
               ) : (
-                <>
-                  <span className="btn-icon">📅</span>
-                  Confirm Booking
-                </>
+                'Confirm Booking'
               )}
             </button>
           </div>
