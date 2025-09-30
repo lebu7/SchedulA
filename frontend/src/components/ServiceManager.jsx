@@ -10,9 +10,10 @@ function ServiceManager({ user }) {
     name: '',
     description: '',
     category: '',
-    duration: 60,
+    duration: '',
     price: ''
   })
+  const [errors, setErrors] = useState({})
 
   useEffect(() => {
     fetchMyServices()
@@ -30,20 +31,73 @@ function ServiceManager({ user }) {
     }
   }
 
+  const validateForm = () => {
+    const newErrors = {}
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'Service name is required'
+    }
+    
+    if (!formData.category) {
+      newErrors.category = 'Category is required'
+    }
+    
+    if (!formData.duration || formData.duration < 15) {
+      newErrors.duration = 'Duration must be at least 15 minutes'
+    }
+    
+    if (!formData.price || formData.price < 0) {
+      newErrors.price = 'Price must be a positive number'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+
     try {
-      if (editingService) {
-        await api.put(`/services/${editingService.id}`, formData)
-      } else {
-        await api.post('/services', formData)
+      const submitData = {
+        ...formData,
+        duration: parseInt(formData.duration),
+        price: parseFloat(formData.price)
       }
+
+      if (editingService) {
+        await api.put(`/services/${editingService.id}`, submitData)
+      } else {
+        await api.post('/services', submitData)
+      }
+      
       setShowForm(false)
       setEditingService(null)
-      setFormData({ name: '', description: '', category: '', duration: 60, price: '' })
+      setFormData({ name: '', description: '', category: '', duration: '', price: '' })
+      setErrors({})
       fetchMyServices()
     } catch (error) {
       console.error('Error saving service:', error)
+      setErrors({ submit: 'Failed to save service. Please try again.' })
+    }
+  }
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
     }
   }
 
@@ -53,9 +107,10 @@ function ServiceManager({ user }) {
       name: service.name,
       description: service.description || '',
       category: service.category,
-      duration: service.duration,
-      price: service.price
+      duration: service.duration.toString(),
+      price: service.price ? service.price.toString() : ''
     })
+    setErrors({})
     setShowForm(true)
   }
 
@@ -68,6 +123,13 @@ function ServiceManager({ user }) {
         console.error('Error deleting service:', error)
       }
     }
+  }
+
+  const resetForm = () => {
+    setShowForm(false)
+    setEditingService(null)
+    setFormData({ name: '', description: '', category: '', duration: '', price: '' })
+    setErrors({})
   }
 
   return (
@@ -86,69 +148,93 @@ function ServiceManager({ user }) {
         {showForm && (
           <div className="service-form card">
             <h3>{editingService ? 'Edit Service' : 'Create New Service'}</h3>
+            
+            {errors.submit && (
+              <div className="error-message">{errors.submit}</div>
+            )}
+            
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label>Service Name:</label>
+                <label>Service Name *</label>
                 <input
                   type="text"
+                  name="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  required
+                  onChange={handleInputChange}
+                  placeholder="e.g., Haircut, Massage, Consultation"
                 />
+                {errors.name && <span className="field-error">{errors.name}</span>}
               </div>
 
               <div className="form-group">
-                <label>Description:</label>
+                <label>Description</label>
                 <textarea
+                  name="description"
                   value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  onChange={handleInputChange}
                   rows="3"
+                  placeholder="Describe your service in detail..."
                 />
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Category:</label>
+                  <label>Category *</label>
                   <select
+                    name="category"
                     value={formData.category}
-                    onChange={(e) => setFormData({...formData, category: e.target.value})}
-                    required
+                    onChange={handleInputChange}
                   >
                     <option value="">Select Category</option>
-                    <option value="Beauty">Beauty</option>
-                    <option value="Health">Health</option>
-                    <option value="Fitness">Fitness</option>
-                    <option value="Professional">Professional</option>
+                    <option value="Beauty">Beauty & Personal Care</option>
+                    <option value="Health">Health & Wellness</option>
+                    <option value="Fitness">Fitness & Training</option>
+                    <option value="Professional">Professional Services</option>
+                    <option value="Automotive">Automotive</option>
+                    <option value="Home Services">Home Services</option>
+                    <option value="Education">Education & Tutoring</option>
                     <option value="Other">Other</option>
                   </select>
+                  {errors.category && <span className="field-error">{errors.category}</span>}
                 </div>
 
                 <div className="form-group">
-                  <label>Duration (minutes):</label>
+                  <label>Duration (minutes) *</label>
                   <input
                     type="number"
+                    name="duration"
                     value={formData.duration}
-                    onChange={(e) => setFormData({...formData, duration: parseInt(e.target.value)})}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 60"
                     min="15"
-                    step="15"
-                    required
+                    step="5"
                   />
+                  {errors.duration && <span className="field-error">{errors.duration}</span>}
+                  <small className="field-hint">Minimum 15 minutes</small>
                 </div>
 
                 <div className="form-group">
-                  <label>Price ($):</label>
+                  <label>Price (KES) *</label>
                   <input
                     type="number"
-                    step="0.01"
+                    name="price"
                     value={formData.price}
-                    onChange={(e) => setFormData({...formData, price: e.target.value})}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 1500"
+                    min="0"
+                    step="50"
                   />
+                  {errors.price && <span className="field-error">{errors.price}</span>}
+                  <small className="field-hint">Enter 0 for free service</small>
                 </div>
               </div>
 
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary">
                   {editingService ? 'Update Service' : 'Create Service'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={resetForm}>
+                  Cancel
                 </button>
               </div>
             </form>
@@ -163,8 +249,8 @@ function ServiceManager({ user }) {
                 <p className="service-category">{service.category}</p>
                 <p className="service-description">{service.description}</p>
                 <div className="service-meta">
-                  <span>Duration: {service.duration} min</span>
-                  <span>Price: ${service.price || 'Free'}</span>
+                  <span>Duration: {service.duration} minutes</span>
+                  <span>Price: {service.price ? `KES ${service.price}` : 'Free'}</span>
                 </div>
               </div>
               <div className="service-actions">
