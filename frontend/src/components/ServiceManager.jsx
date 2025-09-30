@@ -14,10 +14,12 @@ function ServiceManager({ user }) {
     price: ''
   })
   const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
 
+  // Fetch services immediately on component mount and when user changes
   useEffect(() => {
     fetchMyServices()
-  }, [])
+  }, [user.id])
 
   const fetchMyServices = async () => {
     try {
@@ -61,6 +63,8 @@ function ServiceManager({ user }) {
       return
     }
 
+    setSaving(true)
+
     try {
       const submitData = {
         ...formData,
@@ -74,14 +78,20 @@ function ServiceManager({ user }) {
         await api.post('/services', submitData)
       }
       
+      // Refresh services immediately after successful save
+      await fetchMyServices()
+      
+      // Reset form
       setShowForm(false)
       setEditingService(null)
       setFormData({ name: '', description: '', category: '', duration: '', price: '' })
       setErrors({})
-      fetchMyServices()
+      
     } catch (error) {
       console.error('Error saving service:', error)
       setErrors({ submit: 'Failed to save service. Please try again.' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -118,9 +128,11 @@ function ServiceManager({ user }) {
     if (window.confirm('Are you sure you want to delete this service?')) {
       try {
         await api.delete(`/services/${serviceId}`)
-        fetchMyServices()
+        // Refresh services immediately after delete
+        await fetchMyServices()
       } catch (error) {
         console.error('Error deleting service:', error)
+        alert('Failed to delete service. Please try again.')
       }
     }
   }
@@ -140,6 +152,7 @@ function ServiceManager({ user }) {
           <button 
             className="btn btn-primary"
             onClick={() => setShowForm(!showForm)}
+            disabled={saving}
           >
             {showForm ? 'Cancel' : 'Add New Service'}
           </button>
@@ -162,6 +175,7 @@ function ServiceManager({ user }) {
                   value={formData.name}
                   onChange={handleInputChange}
                   placeholder="e.g., Haircut, Massage, Consultation"
+                  disabled={saving}
                 />
                 {errors.name && <span className="field-error">{errors.name}</span>}
               </div>
@@ -174,6 +188,7 @@ function ServiceManager({ user }) {
                   onChange={handleInputChange}
                   rows="3"
                   placeholder="Describe your service in detail..."
+                  disabled={saving}
                 />
               </div>
 
@@ -184,6 +199,7 @@ function ServiceManager({ user }) {
                     name="category"
                     value={formData.category}
                     onChange={handleInputChange}
+                    disabled={saving}
                   >
                     <option value="">Select Category</option>
                     <option value="Beauty">Beauty & Personal Care</option>
@@ -208,6 +224,7 @@ function ServiceManager({ user }) {
                     placeholder="e.g., 60"
                     min="15"
                     step="5"
+                    disabled={saving}
                   />
                   {errors.duration && <span className="field-error">{errors.duration}</span>}
                   <small className="field-hint">Minimum 15 minutes</small>
@@ -223,6 +240,7 @@ function ServiceManager({ user }) {
                     placeholder="e.g., 1500"
                     min="0"
                     step="50"
+                    disabled={saving}
                   />
                   {errors.price && <span className="field-error">{errors.price}</span>}
                   <small className="field-hint">Enter 0 for free service</small>
@@ -230,10 +248,19 @@ function ServiceManager({ user }) {
               </div>
 
               <div className="form-actions">
-                <button type="submit" className="btn btn-primary">
-                  {editingService ? 'Update Service' : 'Create Service'}
+                <button 
+                  type="submit" 
+                  className="btn btn-primary"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : (editingService ? 'Update Service' : 'Create Service')}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={resetForm}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={resetForm}
+                  disabled={saving}
+                >
                   Cancel
                 </button>
               </div>
@@ -257,12 +284,14 @@ function ServiceManager({ user }) {
                 <button 
                   className="btn btn-secondary"
                   onClick={() => handleEdit(service)}
+                  disabled={saving}
                 >
                   Edit
                 </button>
                 <button 
                   className="btn btn-danger"
                   onClick={() => handleDelete(service.id)}
+                  disabled={saving}
                 >
                   Delete
                 </button>
