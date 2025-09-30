@@ -25,30 +25,40 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     try {
       setLoading(true)
       setError('')
-      // Use a simpler endpoint that just returns the provider's appointments
-      const response = await api.get(`/appointments?provider_id=${service.provider_id}`)
-      const providerAppointments = response.data.appointments || []
-      setAvailableSlots(providerAppointments)
-      generateTimeSlots(providerAppointments)
+      
+      // Use the fixed available slots endpoint
+      const response = await api.get(`/appointments/available/${service.id}?date=${selectedDate}`)
+      const bookedSlots = response.data.booked_slots || []
+      
+      setAvailableSlots(bookedSlots)
+      generateTimeSlots(bookedSlots)
     } catch (error) {
       console.error('Error fetching available slots:', error)
-      setError('Failed to load available time slots. Please try again.')
-      setAvailableSlots([])
-      generateTimeSlots([])
+      // Fallback: get all provider appointments and calculate availability
+      try {
+        const providerResponse = await api.get(`/appointments/provider/${service.provider_id}`)
+        const providerAppointments = providerResponse.data.appointments || []
+        setAvailableSlots(providerAppointments)
+        generateTimeSlots(providerAppointments)
+      } catch (fallbackError) {
+        console.error('Fallback error:', fallbackError)
+        setAvailableSlots([])
+        generateTimeSlots([])
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  const generateTimeSlots = (appointments) => {
+  const generateTimeSlots = (bookedSlots) => {
     const slots = []
     const startHour = 8 // 8 AM
     const endHour = 18 // 6 PM
     
-    // Filter appointments for the selected date
-    const dayAppointments = appointments.filter(apt => {
-      const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0]
-      return aptDate === selectedDate && apt.status === 'scheduled'
+    // Filter booked slots for the selected date
+    const dayBookedSlots = bookedSlots.filter(slot => {
+      const slotDate = new Date(slot.start).toISOString().split('T')[0]
+      return slotDate === selectedDate
     })
 
     for (let hour = startHour; hour < endHour; hour++) {
@@ -57,22 +67,30 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         const slotDateTime = `${selectedDate}T${timeString}:00`
         
         // Check if slot conflicts with existing appointments
-        const isBooked = dayAppointments.some(apt => {
-          const aptStart = new Date(apt.appointment_date)
-          const aptEnd = new Date(aptStart.getTime() + apt.duration * 60000)
+        const isBooked = dayBookedSlots.some(bookedSlot => {
+          const bookedStart = new Date(bookedSlot.start)
+          const bookedEnd = new Date(bookedSlot.end)
           const slotStart = new Date(slotDateTime)
           const slotEnd = new Date(slotStart.getTime() + service.duration * 60000)
           
-          return slotStart < aptEnd && slotEnd > aptStart
+          return slotStart < bookedEnd && slotEnd > bookedStart
         })
 
         slots.push({
           time: timeString,
-          available: !isBooked
+          available: !isBooked,
+          displayTime: formatTimeDisplay(timeString)
         })
       }
     }
     setTimeSlots(slots)
+  }
+
+  const formatTimeDisplay = (timeString) => {
+    const [hours, minutes] = timeString.split(':').map(Number)
+    const period = hours >= 12 ? 'PM' : 'AM'
+    const displayHours = hours % 12 || 12
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
   }
 
   const handleSubmit = async (e) => {
@@ -80,6 +98,14 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     
     if (!selectedDate || !selectedTime) {
       setError('Please select both date and time')
+      return
+    }
+
+    // Validate selected date is not in the past
+    const selectedDateTime = new Date(`${selectedDate}T${selectedTime}`)
+    const now = new Date()
+    if (selectedDateTime <= now) {
+      setError('Please select a future date and time')
       return
     }
 
@@ -92,7 +118,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       const response = await api.post('/appointments', {
         service_id: service.id,
         appointment_date: appointmentDateTime,
-        notes: notes
+        notes: notes.trim()
       })
       
       onBookingSuccess()
@@ -103,8 +129,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       setError(errorMessage)
       
       // If it's a conflict error, refresh available slots
-      if (errorMessage.includes('conflict') || errorMessage.includes('not available')) {
-        fetchAvailableSlots()
+      if (errorMessage.includes('conflict') || errorMessage.includes('not available') || errorMessage.includes('Time slot')) {
+        await fetchAvailableSlots()
+        setSelectedTime('') // Clear selected time as it's no longer available
       }
     } finally {
       setBooking(false)
@@ -133,44 +160,82 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     })
   }
 
+  const handleDateChange = (e) => {
+    setSelectedDate(e.target.value)
+    setSelectedTime('') // Reset time when date changes
+    setError('') // Clear any previous errors
+  }
+
+  const handleTimeSelect = (time) => {
+    setSelectedTime(time)
+    setError('') // Clear any previous errors
+  }
+
+  const availableTimeSlots = timeSlots.filter(slot => slot.available)
+  const hasAvailableSlots = availableTimeSlots.length > 0
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Book {service.name}</h3>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <button className="close-btn" onClick={onClose} disabled={booking}>
+            ×
+          </button>
         </div>
 
         <div className="service-info">
-          <p><strong>Provider:</strong> {service.provider_name}</p>
-          <p><strong>Duration:</strong> {service.duration} minutes</p>
-          <p><strong>Price:</strong> KES {service.price}</p>
-          {service.business_name && <p><strong>Business:</strong> {service.business_name}</p>}
+          <div className="service-detail">
+            <span className="detail-label">Provider:</span>
+            <span className="detail-value">{service.provider_name}</span>
+          </div>
+          <div className="service-detail">
+            <span className="detail-label">Duration:</span>
+            <span className="detail-value">{service.duration} minutes</span>
+          </div>
+          <div className="service-detail">
+            <span className="detail-label">Price:</span>
+            <span className="detail-value">KES {service.price}</span>
+          </div>
+          {service.business_name && (
+            <div className="service-detail">
+              <span className="detail-label">Business:</span>
+              <span className="detail-value">{service.business_name}</span>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="booking-form">
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <div className="error-message">
+              <span className="error-icon">⚠️</span>
+              {error}
+            </div>
+          )}
 
           <div className="form-group">
-            <label>Select Date *</label>
+            <label htmlFor="appointment-date">Select Date *</label>
             <input
+              id="appointment-date"
               type="date"
               value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value)
-                setSelectedTime('')
-              }}
+              onChange={handleDateChange}
               min={getMinDate()}
               max={getMaxDate()}
               required
+              disabled={booking}
             />
-            <small className="field-hint">Select a date between tomorrow and 30 days from now</small>
+            <small className="field-hint">
+              Select a date between {getMinDate()} and {getMaxDate()}
+            </small>
           </div>
 
           {selectedDate && (
             <div className="form-group">
               <label>Select Time *</label>
-              <p className="selected-date-info">Available times for {formatDisplayDate(selectedDate)}</p>
+              <div className="selected-date-info">
+                Available times for <strong>{formatDisplayDate(selectedDate)}</strong>
+              </div>
               
               {loading ? (
                 <div className="time-slots-loading">
@@ -178,37 +243,79 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   Loading available times...
                 </div>
               ) : (
-                <div className="time-slots-grid">
-                  {timeSlots.map(slot => (
-                    <button
-                      key={slot.time}
-                      type="button"
-                      className={`time-slot ${selectedTime === slot.time ? 'selected' : ''} ${!slot.available ? 'disabled' : ''}`}
-                      onClick={() => slot.available && setSelectedTime(slot.time)}
-                      disabled={!slot.available}
-                    >
-                      {slot.time}
-                    </button>
-                  ))}
-                </div>
-              )}
-              
-              {timeSlots.length > 0 && !timeSlots.some(slot => slot.available) && (
-                <div className="no-slots">
-                  No available time slots for {formatDisplayDate(selectedDate)}. Please select another date.
-                </div>
+                <>
+                  <div className="time-slots-grid">
+                    {timeSlots.map(slot => (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        className={`time-slot ${selectedTime === slot.time ? 'selected' : ''} ${!slot.available ? 'disabled' : ''}`}
+                        onClick={() => slot.available && handleTimeSelect(slot.time)}
+                        disabled={!slot.available || booking}
+                        title={slot.available ? `Book at ${slot.displayTime}` : 'Time slot not available'}
+                      >
+                        <span className="time-text">{slot.displayTime}</span>
+                        {!slot.available && <span className="slot-status">⛔</span>}
+                        {slot.available && selectedTime === slot.time && <span className="slot-status">✅</span>}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {!hasAvailableSlots && !loading && (
+                    <div className="no-slots-message">
+                      <p>No available time slots for {formatDisplayDate(selectedDate)}.</p>
+                      <p>Please select another date or contact the provider directly.</p>
+                    </div>
+                  )}
+                  
+                  {hasAvailableSlots && (
+                    <div className="slots-summary">
+                      <small>
+                        {availableTimeSlots.length} of {timeSlots.length} time slots available
+                      </small>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
 
           <div className="form-group">
-            <label>Additional Notes (Optional)</label>
+            <label htmlFor="appointment-notes">Additional Notes (Optional)</label>
             <textarea
+              id="appointment-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requirements or notes for the provider..."
+              placeholder="Any special requirements, questions, or notes for the provider..."
               rows="3"
+              disabled={booking}
+              maxLength="500"
             />
+            <small className="field-hint">
+              {notes.length}/500 characters
+            </small>
+          </div>
+
+          <div className="booking-summary">
+            <h4>Appointment Summary</h4>
+            <div className="summary-details">
+              <div className="summary-item">
+                <span>Service:</span>
+                <span>{service.name}</span>
+              </div>
+              <div className="summary-item">
+                <span>Date:</span>
+                <span>{selectedDate ? formatDisplayDate(selectedDate) : 'Not selected'}</span>
+              </div>
+              <div className="summary-item">
+                <span>Time:</span>
+                <span>{selectedTime ? formatTimeDisplay(selectedTime) : 'Not selected'}</span>
+              </div>
+              <div className="summary-item total">
+                <span>Total:</span>
+                <span>KES {service.price}</span>
+              </div>
+            </div>
           </div>
 
           <div className="form-actions">
@@ -223,7 +330,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={booking || !selectedDate || !selectedTime}
+              disabled={booking || !selectedDate || !selectedTime || !hasAvailableSlots}
             >
               {booking ? (
                 <>
@@ -231,7 +338,10 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   Booking...
                 </>
               ) : (
-                'Confirm Booking'
+                <>
+                  <span className="btn-icon">📅</span>
+                  Confirm Booking
+                </>
               )}
             </button>
           </div>
