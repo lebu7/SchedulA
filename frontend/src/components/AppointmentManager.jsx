@@ -6,6 +6,7 @@ function AppointmentManager({ user }) {
   const [appointments, setAppointments] = useState({ pending: [], past: [] })
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(null)
+  const [cancelling, setCancelling] = useState(null)
 
   // Fetch appointments immediately on component mount
   useEffect(() => {
@@ -52,6 +53,8 @@ function AppointmentManager({ user }) {
   const handleStatusUpdate = async (appointmentId, newStatus) => {
     setUpdating(appointmentId)
     try {
+      // Simulate network delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500))
       await api.put(`/appointments/${appointmentId}`, {
         status: newStatus
       })
@@ -67,8 +70,10 @@ function AppointmentManager({ user }) {
 
   const handleCancelAppointment = async (appointmentId) => {
     if (window.confirm('Are you sure you want to cancel this appointment?')) {
-      setUpdating(appointmentId)
+      setCancelling(appointmentId)
       try {
+        // Simulate network delay for better UX
+        await new Promise(resolve => setTimeout(resolve, 500))
         await api.put(`/appointments/${appointmentId}`, {
           status: 'cancelled'
         })
@@ -78,13 +83,29 @@ function AppointmentManager({ user }) {
         console.error('Error cancelling appointment:', error)
         alert('Failed to cancel appointment')
       } finally {
-        setUpdating(null)
+        setCancelling(null)
       }
     }
   }
 
+  const handleReschedule = async (appointmentId) => {
+    // Placeholder for reschedule functionality
+    alert('Reschedule functionality coming soon!')
+  }
+
+  const handleRebook = async (serviceId) => {
+    // Placeholder for rebook functionality
+    alert('Rebook functionality coming soon!')
+  }
+
   if (loading) {
-    return <div className="loading">Loading appointments...</div>
+    return (
+      <div className="appointment-manager">
+        <div className="container">
+          <div className="loading">Loading appointments...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -106,21 +127,30 @@ function AppointmentManager({ user }) {
                         <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
                         <p><strong>Duration:</strong> {apt.duration} minutes</p>
                         <p><strong>Price:</strong> KES {apt.price}</p>
+                        {apt.notes && <p><strong>Your Notes:</strong> {apt.notes}</p>}
                         {getStatusBadge(apt.status)}
                       </div>
                       <div className="appointment-actions">
                         <button 
                           className="btn btn-secondary"
-                          disabled={updating === apt.id}
+                          onClick={() => handleReschedule(apt.id)}
+                          disabled={updating === apt.id || cancelling === apt.id}
                         >
                           Reschedule
                         </button>
                         <button 
                           className="btn btn-danger"
                           onClick={() => handleCancelAppointment(apt.id)}
-                          disabled={updating === apt.id}
+                          disabled={updating === apt.id || cancelling === apt.id}
                         >
-                          {updating === apt.id ? 'Cancelling...' : 'Cancel'}
+                          {cancelling === apt.id ? (
+                            <>
+                              <span className="spinner"></span>
+                              Cancelling...
+                            </>
+                          ) : (
+                            'Cancel'
+                          )}
                         </button>
                       </div>
                     </div>
@@ -129,6 +159,12 @@ function AppointmentManager({ user }) {
               ) : (
                 <div className="no-appointments">
                   <p>No upcoming appointments scheduled.</p>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => window.location.href = '/dashboard?tab=services'}
+                  >
+                    Browse Services
+                  </button>
                 </div>
               )}
             </div>
@@ -143,11 +179,18 @@ function AppointmentManager({ user }) {
                         <h4>{apt.service_name}</h4>
                         <p><strong>With:</strong> {apt.provider_name}</p>
                         <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                        <p><strong>Duration:</strong> {apt.duration} minutes</p>
+                        <p><strong>Price:</strong> KES {apt.price}</p>
                         {getStatusBadge(apt.status)}
-                        {apt.notes && <p><strong>Notes:</strong> {apt.notes}</p>}
+                        {apt.notes && <p><strong>Your Notes:</strong> {apt.notes}</p>}
                       </div>
                       <div className="appointment-actions">
-                        <button className="btn btn-primary">Rebook</button>
+                        <button 
+                          className="btn btn-primary"
+                          onClick={() => handleRebook(apt.service_id)}
+                        >
+                          Rebook
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -177,18 +220,32 @@ function AppointmentManager({ user }) {
                       {apt.notes && <p><strong>Client Notes:</strong> {apt.notes}</p>}
                     </div>
                     <div className="appointment-actions">
-                      <select 
-                        value={apt.status}
-                        onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
+                      <div className="status-control">
+                        <select 
+                          value={apt.status}
+                          onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
+                          disabled={updating === apt.id}
+                          className="status-select"
+                        >
+                          <option value="scheduled">Scheduled</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                          <option value="no-show">No Show</option>
+                        </select>
+                        {updating === apt.id && (
+                          <div className="updating-indicator">
+                            <span className="spinner small"></span>
+                            <span>Updating...</span>
+                          </div>
+                        )}
+                      </div>
+                      <button 
+                        className="btn btn-secondary"
+                        onClick={() => handleReschedule(apt.id)}
                         disabled={updating === apt.id}
-                        className="status-select"
                       >
-                        <option value="scheduled">Scheduled</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="no-show">No Show</option>
-                      </select>
-                      {updating === apt.id && <span className="updating-text">Updating...</span>}
+                        Reschedule
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -196,8 +253,34 @@ function AppointmentManager({ user }) {
             ) : (
               <div className="no-appointments">
                 <p>No appointments scheduled yet.</p>
+                <p className="hint">When clients book your services, they will appear here.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Quick Stats for Providers */}
+        {user.user_type === 'provider' && appointments.appointments?.length > 0 && (
+          <div className="appointment-stats card">
+            <h4>Quick Stats</h4>
+            <div className="stats-grid">
+              <div className="stat-item">
+                <span className="stat-number">{appointments.appointments.filter(a => a.status === 'scheduled').length}</span>
+                <span className="stat-label">Scheduled</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-number">{appointments.appointments.filter(a => a.status === 'completed').length}</span>
+                <span className="stat-label">Completed</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-number">{appointments.appointments.filter(a => a.status === 'cancelled').length}</span>
+                <span className="stat-label">Cancelled</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-number">{appointments.appointments.filter(a => a.status === 'no-show').length}</span>
+                <span className="stat-label">No Shows</span>
+              </div>
+            </div>
           </div>
         )}
       </div>
