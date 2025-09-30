@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import api from '../services/auth'
+import BookingModal from './BookingModal'
 import './ServiceList.css'
 
 function ServiceList({ user }) {
@@ -8,6 +9,9 @@ function ServiceList({ user }) {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [showBookingModal, setShowBookingModal] = useState(false)
+  const [selectedService, setSelectedService] = useState(null)
+  const [bookingSuccess, setBookingSuccess] = useState(false)
 
   // Fetch all services on component mount
   useEffect(() => {
@@ -88,6 +92,22 @@ function ServiceList({ user }) {
     setSelectedCategory('')
   }
 
+  const handleBookClick = (service) => {
+    setSelectedService(service)
+    setShowBookingModal(true)
+  }
+
+  const handleBookingSuccess = () => {
+    setBookingSuccess(true)
+    // Show success message for a few seconds
+    setTimeout(() => setBookingSuccess(false), 3000)
+  }
+
+  const handleCloseModal = () => {
+    setShowBookingModal(false)
+    setSelectedService(null)
+  }
+
   return (
     <div className="service-list">
       <div className="container">
@@ -128,6 +148,13 @@ function ServiceList({ user }) {
           </div>
         </div>
 
+        {/* Success Message */}
+        {bookingSuccess && (
+          <div className="success-message">
+            ✅ Appointment booked successfully! Check your appointments page.
+          </div>
+        )}
+
         {/* Search info */}
         {(searchTerm || selectedCategory) && (
           <div className="search-info">
@@ -158,7 +185,10 @@ function ServiceList({ user }) {
                     {service.business_name && <span> - {service.business_name}</span>}
                   </div>
                   {user?.user_type === 'client' && (
-                    <button className="btn btn-primary book-btn">
+                    <button 
+                      className="btn btn-primary book-btn"
+                      onClick={() => handleBookClick(service)}
+                    >
                       Book Appointment
                     </button>
                   )}
@@ -177,6 +207,16 @@ function ServiceList({ user }) {
               </div>
             )}
           </>
+        )}
+
+        {/* Booking Modal */}
+        {showBookingModal && selectedService && (
+          <BookingModal
+            service={selectedService}
+            user={user}
+            onClose={handleCloseModal}
+            onBookingSuccess={handleBookingSuccess}
+          />
         )}
       </div>
     </div>
