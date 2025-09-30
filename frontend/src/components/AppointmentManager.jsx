@@ -61,7 +61,7 @@ function AppointmentManager({ user }) {
                         <p>With: {apt.provider_name}</p>
                         <p>When: {formatDate(apt.appointment_date)}</p>
                         <p>Duration: {apt.duration} minutes</p>
-                        <p>Price: ${apt.price}</p>
+                        <p>Price: KES {apt.price}</p>
                         {getStatusBadge(apt.status)}
                       </div>
                       <div className="appointment-actions">
