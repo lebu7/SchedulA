@@ -58,6 +58,29 @@ router.get('/', authenticateToken, (req, res) => {
   });
 });
 
+// Get appointments by provider ID (for availability checking)
+router.get('/provider/:providerId', (req, res) => {
+  const providerId = req.params.providerId;
+  
+  db.all(
+    `SELECT a.*, s.name as service_name, s.duration,
+            u.name as client_name, u.phone as client_phone
+     FROM appointments a
+     JOIN services s ON a.service_id = s.id
+     JOIN users u ON a.client_id = u.id
+     WHERE a.provider_id = ? AND a.status = 'scheduled'
+     ORDER BY a.appointment_date ASC`,
+    [providerId],
+    (err, appointments) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json({ appointments });
+    }
+  );
+});
+
 // Create new appointment (client only)
 router.post('/',
   authenticateToken,
@@ -76,34 +99,58 @@ router.post('/',
       const { service_id, appointment_date, notes } = req.body;
       const client_id = req.user.userId;
 
+      // Validate appointment date is in the future
+      const appointmentDate = new Date(appointment_date);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0); // Set to start of today
+
+      if (appointmentDate <= now) {
+        return res.status(400).json({ error: 'Appointment date must be in the future' });
+      }
+
       // First get service details to calculate end time and get provider_id
       db.get(
         'SELECT * FROM services WHERE id = ?',
         [service_id],
         (err, service) => {
           if (err) {
+            console.error('Database error:', err);
             return res.status(500).json({ error: 'Database error' });
           }
           if (!service) {
             return res.status(404).json({ error: 'Service not found' });
           }
 
-          // Check for scheduling conflicts
-          const appointmentEnd = new Date(new Date(appointment_date).getTime() + service.duration * 60000);
+          // Calculate appointment end time
+          const appointmentEnd = new Date(appointmentDate.getTime() + service.duration * 60000);
 
+          // Check for scheduling conflicts
           db.get(
             `SELECT id FROM appointments 
              WHERE provider_id = ? 
-             AND appointment_date < ? 
-             AND datetime(appointment_date, '+' || duration || ' minutes') > ? 
-             AND status = 'scheduled'`,
-            [service.provider_id, appointmentEnd.toISOString(), appointment_date],
+             AND status = 'scheduled'
+             AND (
+               (appointment_date BETWEEN ? AND ?) OR
+               (datetime(appointment_date, '+' || duration || ' minutes') BETWEEN ? AND ?) OR
+               (? BETWEEN appointment_date AND datetime(appointment_date, '+' || duration || ' minutes')) OR
+               (? BETWEEN appointment_date AND datetime(appointment_date, '+' || duration || ' minutes'))
+             )`,
+            [
+              service.provider_id,
+              appointment_date,
+              appointmentEnd.toISOString(),
+              appointment_date,
+              appointmentEnd.toISOString(),
+              appointment_date,
+              appointmentEnd.toISOString()
+            ],
             (err, conflict) => {
               if (err) {
-                return res.status(500).json({ error: 'Database error during conflict check' });
+                console.error('Database error during conflict check:', err);
+                return res.status(500).json({ error: 'Failed to check appointment availability' });
               }
               if (conflict) {
-                return res.status(409).json({ error: 'Time slot not available' });
+                return res.status(409).json({ error: 'This time slot is not available. Please choose a different time.' });
               }
 
               // Create appointment
@@ -113,7 +160,7 @@ router.post('/',
                 [client_id, service.provider_id, service_id, appointment_date, notes],
                 function(err) {
                   if (err) {
-                    console.error('Database error:', err);
+                    console.error('Database error creating appointment:', err);
                     return res.status(500).json({ error: 'Failed to create appointment' });
                   }
 
@@ -128,7 +175,8 @@ router.post('/',
                     [this.lastID],
                     (err, appointment) => {
                       if (err) {
-                        return res.status(500).json({ error: 'Failed to fetch created appointment' });
+                        console.error('Database error fetching created appointment:', err);
+                        return res.status(500).json({ error: 'Appointment created but failed to fetch details' });
                       }
                       res.status(201).json({
                         message: 'Appointment booked successfully',
@@ -143,6 +191,7 @@ router.post('/',
         }
       );
     } catch (error) {
+      console.error('Server error:', error);
       res.status(500).json({ error: 'Server error' });
     }
   }
@@ -166,6 +215,7 @@ router.put('/:id', authenticateToken, (req, res) => {
 
     db.get(accessQuery, [appointmentId, userId], (err, appointment) => {
       if (err) {
+        console.error('Database error:', err);
         return res.status(500).json({ error: 'Database error' });
       }
       if (!appointment) {
@@ -181,6 +231,12 @@ router.put('/:id', authenticateToken, (req, res) => {
         params.push(status);
       }
       if (appointment_date !== undefined) {
+        // Validate new appointment date if provided
+        const newAppointmentDate = new Date(appointment_date);
+        const now = new Date();
+        if (newAppointmentDate <= now) {
+          return res.status(400).json({ error: 'Appointment date must be in the future' });
+        }
         updates.push('appointment_date = ?');
         params.push(appointment_date);
       }
@@ -212,6 +268,7 @@ router.put('/:id', authenticateToken, (req, res) => {
       });
     });
   } catch (error) {
+    console.error('Server error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -245,11 +302,17 @@ router.delete('/:id', authenticateToken, (req, res) => {
 
 // Get available time slots for a service
 router.get('/available/:serviceId', (req, res) => {
-  const serviceId = req.params.id;
+  const serviceId = req.params.serviceId; // Fixed: was req.params.id
   const { date } = req.query; // YYYY-MM-DD format
 
   if (!date) {
     return res.status(400).json({ error: 'Date parameter required' });
+  }
+
+  // Validate date format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(date)) {
+    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
   }
 
   // Get service details and provider's appointments for the date
@@ -261,6 +324,7 @@ router.get('/available/:serviceId', (req, res) => {
     [serviceId],
     (err, service) => {
       if (err) {
+        console.error('Database error:', err);
         return res.status(500).json({ error: 'Database error' });
       }
       if (!service) {
@@ -279,20 +343,26 @@ router.get('/available/:serviceId', (req, res) => {
         [service.provider_id, startDate, endDate],
         (err, appointments) => {
           if (err) {
+            console.error('Database error:', err);
             return res.status(500).json({ error: 'Failed to fetch appointments' });
           }
 
-          // For now, return booked slots
-          // In a real implementation, you'd generate available slots based on business hours
           const bookedSlots = appointments.map(apt => ({
             start: apt.appointment_date,
-            end: new Date(new Date(apt.appointment_date).getTime() + apt.duration * 60000).toISOString()
+            end: new Date(new Date(apt.appointment_date).getTime() + apt.duration * 60000).toISOString(),
+            duration: apt.duration
           }));
 
           res.json({
-            service,
+            service: {
+              id: service.id,
+              name: service.name,
+              duration: service.duration,
+              price: service.price,
+              provider_name: service.business_name || 'Provider'
+            },
             booked_slots: bookedSlots,
-            date
+            date: date
           });
         }
       );
@@ -300,4 +370,46 @@ router.get('/available/:serviceId', (req, res) => {
   );
 });
 
-export default router;
+// Get latest appointment for user
+router.get('/latest', authenticateToken, (req, res) => {
+  const userId = req.user.userId;
+  const userType = req.user.user_type;
+
+  let query = '';
+  let params = [userId];
+
+  if (userType === 'client') {
+    query = `
+      SELECT a.*, s.name as service_name, s.duration, s.price,
+             u.name as provider_name, u.business_name
+      FROM appointments a
+      JOIN services s ON a.service_id = s.id
+      JOIN users u ON a.provider_id = u.id
+      WHERE a.client_id = ? AND a.client_deleted = 0
+      ORDER BY a.appointment_date DESC
+      LIMIT 1
+    `;
+  } else {
+    query = `
+      SELECT a.*, s.name as service_name, s.duration, s.price,
+             u.name as client_name, u.phone as client_phone
+      FROM appointments a
+      JOIN services s ON a.service_id = s.id
+      JOIN users u ON a.client_id = u.id
+      WHERE a.provider_id = ? AND a.provider_deleted = 0
+      ORDER BY a.appointment_date DESC
+      LIMIT 1
+    `;
+  }
+
+  db.get(query, params, (err, appointment) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Failed to fetch latest appointment' });
+    }
+
+    res.json({ appointment });
+  });
+});
+
+export default router; 
