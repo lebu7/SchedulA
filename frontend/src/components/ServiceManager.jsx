@@ -15,6 +15,7 @@ function ServiceManager({ user }) {
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
 
   // Fetch services immediately on component mount and when user changes
   useEffect(() => {
@@ -72,6 +73,9 @@ function ServiceManager({ user }) {
         price: parseFloat(formData.price)
       }
 
+      // Simulate network delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       if (editingService) {
         await api.put(`/services/${editingService.id}`, submitData)
       } else {
@@ -126,13 +130,18 @@ function ServiceManager({ user }) {
 
   const handleDelete = async (serviceId) => {
     if (window.confirm('Are you sure you want to delete this service?')) {
+      setDeletingId(serviceId)
       try {
+        // Simulate network delay for better UX
+        await new Promise(resolve => setTimeout(resolve, 500))
         await api.delete(`/services/${serviceId}`)
         // Refresh services immediately after delete
         await fetchMyServices()
       } catch (error) {
         console.error('Error deleting service:', error)
         alert('Failed to delete service. Please try again.')
+      } finally {
+        setDeletingId(null)
       }
     }
   }
@@ -253,7 +262,14 @@ function ServiceManager({ user }) {
                   className="btn btn-primary"
                   disabled={saving}
                 >
-                  {saving ? 'Saving...' : (editingService ? 'Update Service' : 'Create Service')}
+                  {saving ? (
+                    <>
+                      <span className="spinner"></span>
+                      Saving...
+                    </>
+                  ) : (
+                    editingService ? 'Update Service' : 'Create Service'
+                  )}
                 </button>
                 <button 
                   type="button" 
@@ -284,16 +300,23 @@ function ServiceManager({ user }) {
                 <button 
                   className="btn btn-secondary"
                   onClick={() => handleEdit(service)}
-                  disabled={saving}
+                  disabled={saving || deletingId === service.id}
                 >
                   Edit
                 </button>
                 <button 
                   className="btn btn-danger"
                   onClick={() => handleDelete(service.id)}
-                  disabled={saving}
+                  disabled={saving || deletingId === service.id}
                 >
-                  Delete
+                  {deletingId === service.id ? (
+                    <>
+                      <span className="spinner"></span>
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
                 </button>
               </div>
             </div>
