@@ -34,16 +34,35 @@ function ServiceList({ user }) {
   const filterServices = () => {
     let filtered = allServices
 
-    // Filter by search term
+    // Filter by search term - only match whole words or word beginnings
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim()
-      filtered = filtered.filter(service =>
-        service.name.toLowerCase().includes(term) ||
-        service.description?.toLowerCase().includes(term) ||
-        service.category.toLowerCase().includes(term) ||
-        service.provider_name?.toLowerCase().includes(term) ||
-        service.business_name?.toLowerCase().includes(term)
-      )
+      
+      filtered = filtered.filter(service => {
+        const searchFields = [
+          service.name,
+          service.description,
+          service.category,
+          service.provider_name,
+          service.business_name
+        ].filter(Boolean) // Remove null/undefined fields
+
+        // Check if any field contains the search term as whole word or word beginning
+        return searchFields.some(field => {
+          if (!field) return false
+          
+          const fieldLower = field.toLowerCase()
+          
+          // Split field into words and check for matches
+          const words = fieldLower.split(/\s+/)
+          
+          return words.some(word => 
+            word === term || // Exact word match
+            word.startsWith(term) || // Word starts with term
+            term.split(/\s+/).some(t => word.startsWith(t)) // Multiple word search
+          )
+        })
+      })
     }
 
     // Filter by category
