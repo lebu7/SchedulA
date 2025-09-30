@@ -10,52 +10,69 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [loading, setLoading] = useState(false)
   const [booking, setBooking] = useState(false)
   const [error, setError] = useState('')
+  const [timeSlots, setTimeSlots] = useState([])
 
   useEffect(() => {
     if (selectedDate) {
       fetchAvailableSlots()
+    } else {
+      setTimeSlots([])
+      setSelectedTime('')
     }
   }, [selectedDate])
 
   const fetchAvailableSlots = async () => {
     try {
       setLoading(true)
-      const response = await api.get(`/appointments/available/${service.id}?date=${selectedDate}`)
-      setAvailableSlots(response.data.booked_slots || [])
+      setError('')
+      // Use a simpler endpoint that just returns the provider's appointments
+      const response = await api.get(`/appointments?provider_id=${service.provider_id}`)
+      const providerAppointments = response.data.appointments || []
+      setAvailableSlots(providerAppointments)
+      generateTimeSlots(providerAppointments)
     } catch (error) {
       console.error('Error fetching available slots:', error)
+      setError('Failed to load available time slots. Please try again.')
       setAvailableSlots([])
+      generateTimeSlots([])
     } finally {
       setLoading(false)
     }
   }
 
-  const generateTimeSlots = () => {
+  const generateTimeSlots = (appointments) => {
     const slots = []
     const startHour = 8 // 8 AM
     const endHour = 18 // 6 PM
     
+    // Filter appointments for the selected date
+    const dayAppointments = appointments.filter(apt => {
+      const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0]
+      return aptDate === selectedDate && apt.status === 'scheduled'
+    })
+
     for (let hour = startHour; hour < endHour; hour++) {
       for (let minute = 0; minute < 60; minute += 30) { // 30-minute intervals
         const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
-        const slotDateTime = `${selectedDate}T${timeString}`
+        const slotDateTime = `${selectedDate}T${timeString}:00`
         
-        // Check if slot is booked
-        const isBooked = availableSlots.some(slot => {
-          const slotStart = new Date(slot.start)
-          const slotEnd = new Date(slot.end)
-          const proposedStart = new Date(slotDateTime)
-          const proposedEnd = new Date(proposedStart.getTime() + service.duration * 60000)
+        // Check if slot conflicts with existing appointments
+        const isBooked = dayAppointments.some(apt => {
+          const aptStart = new Date(apt.appointment_date)
+          const aptEnd = new Date(aptStart.getTime() + apt.duration * 60000)
+          const slotStart = new Date(slotDateTime)
+          const slotEnd = new Date(slotStart.getTime() + service.duration * 60000)
           
-          return proposedStart < slotEnd && proposedEnd > slotStart
+          return slotStart < aptEnd && slotEnd > aptStart
         })
 
-        if (!isBooked) {
-          slots.push(timeString)
-        }
+        slots.push({
+          time: timeString,
+          available: !isBooked
+        })
       }
     }
-    return slots
+    setTimeSlots(slots)
   }
 
   const handleSubmit = async (e) => {
@@ -66,13 +83,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       return
     }
 
-    const appointmentDateTime = `${selectedDate}T${selectedTime}`
+    const appointmentDateTime = `${selectedDate}T${selectedTime}:00`
     
     setBooking(true)
     setError('')
 
     try {
-      await api.post('/appointments', {
+      const response = await api.post('/appointments', {
         service_id: service.id,
         appointment_date: appointmentDateTime,
         notes: notes
@@ -82,7 +99,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       onClose()
     } catch (error) {
       console.error('Error booking appointment:', error)
-      setError(error.response?.data?.error || 'Failed to book appointment. Please try again.')
+      const errorMessage = error.response?.data?.error || 'Failed to book appointment. Please try again.'
+      setError(errorMessage)
+      
+      // If it's a conflict error, refresh available slots
+      if (errorMessage.includes('conflict') || errorMessage.includes('not available')) {
+        fetchAvailableSlots()
+      }
     } finally {
       setBooking(false)
     }
@@ -100,7 +123,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return maxDate.toISOString().split('T')[0]
   }
 
-  const timeSlots = selectedDate ? generateTimeSlots() : []
+  const formatDisplayDate = (dateString) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-KE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
 
   return (
     <div className="modal-overlay">
@@ -114,6 +145,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           <p><strong>Provider:</strong> {service.provider_name}</p>
           <p><strong>Duration:</strong> {service.duration} minutes</p>
           <p><strong>Price:</strong> KES {service.price}</p>
+          {service.business_name && <p><strong>Business:</strong> {service.business_name}</p>}
         </div>
 
         <form onSubmit={handleSubmit} className="booking-form">
@@ -124,36 +156,50 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                setSelectedDate(e.target.value)
+                setSelectedTime('')
+              }}
               min={getMinDate()}
               max={getMaxDate()}
               required
             />
+            <small className="field-hint">Select a date between tomorrow and 30 days from now</small>
           </div>
 
-          <div className="form-group">
-            <label>Select Time *</label>
-            {loading ? (
-              <div className="loading">Loading available times...</div>
-            ) : selectedDate && timeSlots.length > 0 ? (
-              <select
-                value={selectedTime}
-                onChange={(e) => setSelectedTime(e.target.value)}
-                required
-              >
-                <option value="">Choose a time</option>
-                {timeSlots.map(time => (
-                  <option key={time} value={time}>
-                    {time}
-                  </option>
-                ))}
-              </select>
-            ) : selectedDate ? (
-              <div className="no-slots">No available time slots for this date</div>
-            ) : (
-              <div className="select-date">Please select a date first</div>
-            )}
-          </div>
+          {selectedDate && (
+            <div className="form-group">
+              <label>Select Time *</label>
+              <p className="selected-date-info">Available times for {formatDisplayDate(selectedDate)}</p>
+              
+              {loading ? (
+                <div className="time-slots-loading">
+                  <span className="spinner"></span>
+                  Loading available times...
+                </div>
+              ) : (
+                <div className="time-slots-grid">
+                  {timeSlots.map(slot => (
+                    <button
+                      key={slot.time}
+                      type="button"
+                      className={`time-slot ${selectedTime === slot.time ? 'selected' : ''} ${!slot.available ? 'disabled' : ''}`}
+                      onClick={() => slot.available && setSelectedTime(slot.time)}
+                      disabled={!slot.available}
+                    >
+                      {slot.time}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {timeSlots.length > 0 && !timeSlots.some(slot => slot.available) && (
+                <div className="no-slots">
+                  No available time slots for {formatDisplayDate(selectedDate)}. Please select another date.
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="form-group">
             <label>Additional Notes (Optional)</label>
