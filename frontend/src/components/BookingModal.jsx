@@ -10,6 +10,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [booking, setBooking] = useState(false)
   const [error, setError] = useState('')
   const [timeSlots, setTimeSlots] = useState([])
+  const [bookedSlots, setBookedSlots] = useState([])
 
   useEffect(() => {
     if (selectedDate) {
@@ -17,6 +18,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     } else {
       setTimeSlots([])
       setSelectedTime('')
+      setBookedSlots([])
     }
   }, [selectedDate])
 
@@ -29,7 +31,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       let providerAppointments = []
       
       try {
-        // Try to get appointments for this specific provider
         const response = await api.get('/appointments')
         if (response.data && response.data.appointments) {
           providerAppointments = Array.isArray(response.data.appointments) 
@@ -40,7 +41,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         }
       } catch (apiError) {
         console.log('Appointments API failed:', apiError)
-        // If we can't get appointments, assume no conflicts
         providerAppointments = []
       }
       
@@ -59,34 +59,50 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     const startHour = 8 // 8 AM
     const endHour = 18 // 6 PM
     
-    // Filter appointments for the selected date
-    const dayAppointments = providerAppointments.filter(apt => {
-      try {
-        const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0]
-        return aptDate === selectedDate
-      } catch (error) {
-        return false
-      }
-    })
+    // Filter appointments for the selected date and get booked time ranges
+    const dayBookedRanges = providerAppointments
+      .filter(apt => {
+        try {
+          const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0]
+          return aptDate === selectedDate
+        } catch (error) {
+          return false
+        }
+      })
+      .map(apt => {
+        try {
+          const aptStart = new Date(apt.appointment_date)
+          const aptDuration = apt.duration || 60 // Default to 60 minutes if not provided
+          const aptEnd = new Date(aptStart.getTime() + aptDuration * 60000)
+          return {
+            start: aptStart,
+            end: aptEnd,
+            duration: aptDuration
+          }
+        } catch (error) {
+          return null
+        }
+      })
+      .filter(Boolean)
 
+    setBookedSlots(dayBookedRanges)
+
+    // Generate all possible time slots (every 30 minutes)
     for (let hour = startHour; hour < endHour; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) { // 30-minute intervals
+      for (let minute = 0; minute < 60; minute += 30) {
         const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
         const slotDateTime = `${selectedDate}T${timeString}:00`
         
-        // Check if slot conflicts with existing appointments
-        const isBooked = dayAppointments.some(apt => {
+        // Check if this time slot conflicts with any booked appointments
+        // considering the service duration
+        const isBooked = dayBookedRanges.some(booked => {
           try {
-            const aptStart = new Date(apt.appointment_date)
-            const aptDuration = apt.duration || 60 // Default to 60 minutes if not provided
-            const aptEnd = new Date(aptStart.getTime() + aptDuration * 60000)
             const slotStart = new Date(slotDateTime)
             const slotEnd = new Date(slotStart.getTime() + service.duration * 60000)
             
-            // Check for overlap
-            return slotStart < aptEnd && slotEnd > aptStart
+            // Check for overlap: if the new appointment overlaps with any booked appointment
+            return slotStart < booked.end && slotEnd > booked.start
           } catch (error) {
-            console.error('Error checking appointment conflict:', error)
             return false
           }
         })
@@ -105,7 +121,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     const [hours, minutes] = timeString.split(':').map(Number)
     const period = hours >= 12 ? 'PM' : 'AM'
     const displayHours = hours % 12 || 12
-    return `${displayHours}:${minutes.toString().padStart(2, '0')}`
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
   }
 
   const handleSubmit = async (e) => {
@@ -181,8 +197,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError('')
   }
 
-  const handleTimeSelect = (time) => {
-    setSelectedTime(time)
+  const handleTimeChange = (e) => {
+    setSelectedTime(e.target.value)
     setError('')
   }
 
@@ -222,75 +238,81 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="appointment-date">Select Date *</label>
-            <input
-              id="appointment-date"
-              type="date"
-              value={selectedDate}
-              onChange={handleDateChange}
-              min={getMinDate()}
-              max={getMaxDate()}
-              required
-              disabled={booking}
-              className="date-input"
-            />
-            <small className="field-hint">
-              Available from {getMinDate()} to {getMaxDate()}
-            </small>
+          <div className="datetime-picker-container">
+            {/* Date Picker */}
+            <div className="picker-group">
+              <label htmlFor="appointment-date">Select Date *</label>
+              <input
+                id="appointment-date"
+                type="date"
+                value={selectedDate}
+                onChange={handleDateChange}
+                min={getMinDate()}
+                max={getMaxDate()}
+                required
+                disabled={booking}
+                className="date-input"
+              />
+              <small className="field-hint">
+                Available from {getMinDate()} to {getMaxDate()}
+              </small>
+            </div>
+
+            {/* Time Picker */}
+            <div className="picker-group">
+              <label htmlFor="appointment-time">Select Time *</label>
+              <select
+                id="appointment-time"
+                value={selectedTime}
+                onChange={handleTimeChange}
+                required
+                disabled={booking || !selectedDate || loading}
+                className="time-select"
+              >
+                <option value="">Choose a time</option>
+                {loading ? (
+                  <option disabled>Loading available times...</option>
+                ) : hasAvailableSlots ? (
+                  availableTimeSlots.map(slot => (
+                    <option key={slot.time} value={slot.time}>
+                      {slot.displayTime}
+                    </option>
+                  ))
+                ) : selectedDate ? (
+                  <option disabled>No available times</option>
+                ) : null}
+              </select>
+              <small className="field-hint">
+                {selectedDate && !loading && (
+                  hasAvailableSlots 
+                    ? `${availableTimeSlots.length} time slots available`
+                    : 'No available time slots'
+                )}
+              </small>
+            </div>
           </div>
 
-          {selectedDate && (
-            <div className="form-group">
-              <label>Select Time *</label>
-              <div className="selected-date-info">
-                {formatDisplayDate(selectedDate)}
-              </div>
-              
-              {loading ? (
-                <div className="time-slots-loading">
-                  <span className="spinner"></span>
-                  Checking availability...
+          {selectedDate && selectedTime && (
+            <div className="appointment-preview">
+              <h4>Appointment Details</h4>
+              <div className="preview-details">
+                <div className="preview-item">
+                  <span className="preview-label">Date:</span>
+                  <span className="preview-value">{formatDisplayDate(selectedDate)}</span>
                 </div>
-              ) : (
-                <>
-                  <div className="time-slots-container">
-                    {timeSlots.length > 0 ? (
-                      <div className="time-slots-grid">
-                        {timeSlots.map(slot => (
-                          <button
-                            key={slot.time}
-                            type="button"
-                            className={`time-slot ${selectedTime === slot.time ? 'selected' : ''} ${!slot.available ? 'disabled' : ''}`}
-                            onClick={() => slot.available && handleTimeSelect(slot.time)}
-                            disabled={!slot.available || booking}
-                          >
-                            {slot.displayTime}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="no-time-slots">
-                        No time slots available
-                      </div>
-                    )}
-                  </div>
-                  
-                  {!hasAvailableSlots && !loading && timeSlots.length > 0 && (
-                    <div className="no-slots-message">
-                      All time slots are booked for this date
-                    </div>
-                  )}
-                  
-                  {hasAvailableSlots && (
-                    <div className="slots-summary">
-                      <small>
-                        {availableTimeSlots.length} slots available
-                      </small>
-                    </div>
-                  )}
-                </>
-              )}
+                <div className="preview-item">
+                  <span className="preview-label">Time:</span>
+                  <span className="preview-value">{formatTimeDisplay(selectedTime)}</span>
+                </div>
+                <div className="preview-item">
+                  <span className="preview-label">Duration:</span>
+                  <span className="preview-value">{service.duration} minutes</span>
+                </div>
+                <div className="preview-item total">
+                  <span className="preview-label">Total:</span>
+                  <span className="preview-value">KES {service.price}</span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -300,7 +322,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
               id="appointment-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requirements or notes..."
+              placeholder="Any special requirements or notes for the provider..."
               rows="2"
               disabled={booking}
               maxLength="200"
