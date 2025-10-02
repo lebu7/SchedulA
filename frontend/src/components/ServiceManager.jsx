@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import api from '../service/auth' // adapt path if your api module is elsewhere
+import api from '../services/auth' // adapt path if your api module is elsewhere
 import './ServiceManager.css'
 
 function ServiceManager({ user }) {
