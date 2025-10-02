@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import api from '../service/auth' // keep your existing api import path
+import api from '../services/auth' // keep your existing api import path
 import './BookingModal.css'
 
 function BookingModal({ service, user, onClose, onBookingSuccess }) {
