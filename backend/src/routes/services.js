@@ -51,7 +51,10 @@ router.post('/',
     body('name').notEmpty().trim(),
     body('category').notEmpty().trim(),
     body('duration').isInt({ min: 1 }),
-    body('price').optional().isFloat({ min: 0 })
+    body('price').optional().isFloat({ min: 0 }),
+    body('opening_time').optional().matches(/^\d{2}:\d{2}$/),
+    body('closing_time').optional().matches(/^\d{2}:\d{2}$/),
+    body('slot_interval').optional().isInt({ min: 5 })
   ],
   (req, res) => {
     try {
@@ -60,13 +63,13 @@ router.post('/',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { name, description, category, duration, price } = req.body;
+      const { name, description, category, duration, price, opening_time = '08:00', closing_time = '18:00', slot_interval = 30 } = req.body;
       const provider_id = req.user.userId;
 
       db.run(
-        `INSERT INTO services (provider_id, name, description, category, duration, price) 
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [provider_id, name, description, category, duration, price],
+        `INSERT INTO services (provider_id, name, description, category, duration, price, opening_time, closing_time, slot_interval) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [provider_id, name, description, category, duration, price, opening_time, closing_time, slot_interval],
         function(err) {
           if (err) {
             console.error('Database error:', err);
@@ -106,7 +109,11 @@ router.put('/:id',
     body('name').optional().notEmpty().trim(),
     body('category').optional().notEmpty().trim(),
     body('duration').optional().isInt({ min: 1 }),
-    body('price').optional().isFloat({ min: 0 })
+    body('price').optional().isFloat({ min: 0 }),
+    body('opening_time').optional().matches(/^\d{2}:\d{2}$/),
+    body('closing_time').optional().matches(/^\d{2}:\d{2}$/),
+    body('slot_interval').optional().isInt({ min: 5 }),
+    body('is_closed').optional().isInt({ min: 0, max: 1 })
   ],
   (req, res) => {
     try {
@@ -116,7 +123,7 @@ router.put('/:id',
       }
 
       const serviceId = req.params.id;
-      const { name, description, category, duration, price } = req.body;
+      const { name, description, category, duration, price, opening_time, closing_time, slot_interval, is_closed } = req.body;
       const provider_id = req.user.userId;
 
       // First verify the service belongs to the provider
@@ -154,6 +161,22 @@ router.put('/:id',
           if (price !== undefined) {
             updates.push('price = ?');
             params.push(price);
+          }
+          if (opening_time !== undefined) {
+            updates.push('opening_time = ?');
+            params.push(opening_time);
+          }
+          if (closing_time !== undefined) {
+            updates.push('closing_time = ?');
+            params.push(closing_time);
+          }
+          if (slot_interval !== undefined) {
+            updates.push('slot_interval = ?');
+            params.push(slot_interval);
+          }
+          if (is_closed !== undefined) {
+            updates.push('is_closed = ?');
+            params.push(is_closed);
           }
 
           if (updates.length === 0) {
@@ -240,6 +263,36 @@ router.get('/providers/:id', (req, res) => {
           });
         }
       );
+    }
+  );
+});
+
+/**
+ * Toggle closure (provider only)
+ * PATCH /services/:id/closure
+ * Body: { is_closed: 0|1 }
+ */
+router.patch('/:id/closure', authenticateToken, requireRole('provider'), (req, res) => {
+  const serviceId = req.params.id;
+  const provider_id = req.user.userId;
+  const { is_closed } = req.body;
+
+  if (is_closed === undefined) {
+    return res.status(400).json({ error: 'is_closed is required (0 or 1)' });
+  }
+
+  db.run(
+    'UPDATE services SET is_closed = ? WHERE id = ? AND provider_id = ?',
+    [is_closed ? 1 : 0, serviceId, provider_id],
+    function(err) {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Failed to update closure status' });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Service not found or access denied' });
+      }
+      res.json({ message: 'Closure status updated', is_closed: is_closed ? 1 : 0 });
     }
   );
 });
