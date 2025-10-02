@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import api from '../services/auth' // adapt path if your api module is elsewhere
+import api from '../services/auth'
 import './ServiceManager.css'
 
 function ServiceManager({ user }) {
@@ -11,17 +11,14 @@ function ServiceManager({ user }) {
     description: '',
     category: '',
     duration: '',
-    price: '',
-    opening_time: '08:00',
-    closing_time: '18:00',
-    slot_interval: 30
+    price: ''
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const [businessClosed, setBusinessClosed] = useState(false)
 
-  // Fetch services immediately on component mount and when user changes
   useEffect(() => {
     fetchMyServices()
   }, [user.id])
@@ -29,10 +26,12 @@ function ServiceManager({ user }) {
   const fetchMyServices = async () => {
     try {
       const response = await api.get('/services')
-      const myServices = (response.data.services || []).filter(
+      const myServices = response.data.services.filter(
         service => service.provider_id === user.id
       )
       setServices(myServices)
+      // If all services are closed, mark business closed
+      setBusinessClosed(myServices.length > 0 && myServices.every(s => s.is_closed))
     } catch (error) {
       console.error('Error fetching services:', error)
     }
@@ -40,22 +39,12 @@ function ServiceManager({ user }) {
 
   const validateForm = () => {
     const newErrors = {}
-    
-    if (!formData.name.trim()) {
-      newErrors.name = 'Service name is required'
-    }
-    
-    if (!formData.category) {
-      newErrors.category = 'Category is required'
-    }
-    
-    if (!formData.duration || formData.duration < 15) {
+    if (!formData.name.trim()) newErrors.name = 'Service name is required'
+    if (!formData.category) newErrors.category = 'Category is required'
+    if (!formData.duration || formData.duration < 15)
       newErrors.duration = 'Duration must be at least 15 minutes'
-    }
-    
-    if (!formData.price || formData.price < 0) {
+    if (!formData.price || formData.price < 0)
       newErrors.price = 'Price must be a positive number'
-    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -63,22 +52,16 @@ function ServiceManager({ user }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    if (!validateForm()) {
-      return
-    }
-
+    if (!validateForm()) return
     setSaving(true)
 
     try {
       const submitData = {
         ...formData,
         duration: parseInt(formData.duration),
-        price: parseFloat(formData.price),
-        slot_interval: parseInt(formData.slot_interval)
+        price: parseFloat(formData.price)
       }
 
-      // Simulate network delay for better UX
       await new Promise(resolve => setTimeout(resolve, 500))
 
       if (editingService) {
@@ -87,15 +70,11 @@ function ServiceManager({ user }) {
         await api.post('/services', submitData)
       }
       
-      // Refresh services immediately after successful save
       await fetchMyServices()
-      
-      // Reset form
       setShowForm(false)
       setEditingService(null)
-      setFormData({ name: '', description: '', category: '', duration: '', price: '', opening_time: '08:00', closing_time: '18:00', slot_interval: 30 })
+      setFormData({ name: '', description: '', category: '', duration: '', price: '' })
       setErrors({})
-      
     } catch (error) {
       console.error('Error saving service:', error)
       setErrors({ submit: 'Failed to save service. Please try again.' })
@@ -106,17 +85,9 @@ function ServiceManager({ user }) {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
-    
-    // Clear error when user starts typing
+    setFormData(prev => ({ ...prev, [name]: value }))
     if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }))
+      setErrors(prev => ({ ...prev, [name]: '' }))
     }
   }
 
@@ -127,10 +98,7 @@ function ServiceManager({ user }) {
       description: service.description || '',
       category: service.category,
       duration: service.duration.toString(),
-      price: service.price ? service.price.toString() : '',
-      opening_time: service.opening_time || '08:00',
-      closing_time: service.closing_time || '18:00',
-      slot_interval: service.slot_interval || 30
+      price: service.price ? service.price.toString() : ''
     })
     setErrors({})
     setShowForm(true)
@@ -140,10 +108,8 @@ function ServiceManager({ user }) {
     if (window.confirm('Are you sure you want to delete this service?')) {
       setDeletingId(serviceId)
       try {
-        // Simulate network delay for better UX
         await new Promise(resolve => setTimeout(resolve, 500))
         await api.delete(`/services/${serviceId}`)
-        // Refresh services immediately after delete
         await fetchMyServices()
       } catch (error) {
         console.error('Error deleting service:', error)
@@ -154,27 +120,36 @@ function ServiceManager({ user }) {
     }
   }
 
-  const resetForm = () => {
-    setShowForm(false)
-    setEditingService(null)
-    setFormData({ name: '', description: '', category: '', duration: '', price: '', opening_time: '08:00', closing_time: '18:00', slot_interval: 30 })
-    setErrors({})
-  }
-
-  // Toggle closure (close early / reopen)
-  const toggleClosure = async (serviceId, currentState) => {
-    // currentState: 0 or 1
-    setTogglingId(serviceId)
+  const handleToggleService = async (service) => {
+    setTogglingId(service.id)
     try {
-      await api.patch(`/services/${serviceId}/closure`, { is_closed: currentState ? 0 : 1 })
-      // refresh
+      await api.put(`/services/${service.id}`, { is_closed: !service.is_closed })
       await fetchMyServices()
-    } catch (err) {
-      console.error('Error toggling closure:', err)
-      alert('Failed to update closure status. Try again.')
+    } catch (error) {
+      console.error('Error toggling service:', error)
+      alert('Failed to update service status')
     } finally {
       setTogglingId(null)
     }
+  }
+
+  const handleToggleBusiness = async () => {
+    try {
+      setBusinessClosed(!businessClosed)
+      for (const service of services) {
+        await api.put(`/services/${service.id}`, { is_closed: !businessClosed })
+      }
+      await fetchMyServices()
+    } catch (error) {
+      console.error('Error toggling business:', error)
+    }
+  }
+
+  const resetForm = () => {
+    setShowForm(false)
+    setEditingService(null)
+    setFormData({ name: '', description: '', category: '', duration: '', price: '' })
+    setErrors({})
   }
 
   return (
@@ -182,22 +157,29 @@ function ServiceManager({ user }) {
       <div className="container">
         <div className="manager-header">
           <h2>Manage Your Services</h2>
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowForm(!showForm)}
-            disabled={saving}
-          >
-            {showForm ? 'Cancel' : 'Add New Service'}
-          </button>
+          <div className="header-actions">
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowForm(!showForm)}
+              disabled={saving}
+            >
+              {showForm ? 'Cancel' : 'Add New Service'}
+            </button>
+            {services.length > 0 && (
+              <button 
+                className="btn btn-secondary"
+                onClick={handleToggleBusiness}
+              >
+                {businessClosed ? 'Open Business' : 'Close Business'}
+              </button>
+            )}
+          </div>
         </div>
 
         {showForm && (
           <div className="service-form card">
             <h3>{editingService ? 'Edit Service' : 'Create New Service'}</h3>
-            
-            {errors.submit && (
-              <div className="error-message">{errors.submit}</div>
-            )}
+            {errors.submit && <div className="error-message">{errors.submit}</div>}
             
             <form onSubmit={handleSubmit}>
               <div className="form-group">
@@ -280,47 +262,8 @@ function ServiceManager({ user }) {
                 </div>
               </div>
 
-              <div className="form-row" style={{ marginTop: 12 }}>
-                <div className="form-group">
-                  <label>Opening Time (HH:MM)</label>
-                  <input
-                    type="time"
-                    name="opening_time"
-                    value={formData.opening_time}
-                    onChange={handleInputChange}
-                    disabled={saving}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Closing Time (HH:MM)</label>
-                  <input
-                    type="time"
-                    name="closing_time"
-                    value={formData.closing_time}
-                    onChange={handleInputChange}
-                    disabled={saving}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Slot Interval (minutes)</label>
-                  <input
-                    type="number"
-                    name="slot_interval"
-                    value={formData.slot_interval}
-                    onChange={handleInputChange}
-                    min="5"
-                    step="5"
-                    disabled={saving}
-                  />
-                </div>
-              </div>
-
               <div className="form-actions">
-                <button 
-                  type="submit" 
-                  className="btn btn-primary"
-                  disabled={saving}
-                >
+                <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? (
                     <>
                       <span className="spinner"></span>
@@ -330,12 +273,7 @@ function ServiceManager({ user }) {
                     editingService ? 'Update Service' : 'Create Service'
                   )}
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={resetForm}
-                  disabled={saving}
-                >
+                <button type="button" className="btn btn-secondary" onClick={resetForm} disabled={saving}>
                   Cancel
                 </button>
               </div>
@@ -345,15 +283,14 @@ function ServiceManager({ user }) {
 
         <div className="services-list">
           {services.map(service => (
-            <div key={service.id} className={`service-item card ${service.is_closed ? 'service-closed' : ''}`}>
+            <div key={service.id} className={`service-item card ${service.is_closed ? 'closed' : ''}`}>
               <div className="service-info">
-                <h4>{service.name}</h4>
+                <h4>{service.name} {service.is_closed && <span className="closed-badge">(Closed)</span>}</h4>
                 <p className="service-category">{service.category}</p>
                 <p className="service-description">{service.description}</p>
                 <div className="service-meta">
                   <span>Duration: {service.duration} minutes</span>
                   <span>Price: {service.price ? `KES ${service.price}` : 'Free'}</span>
-                  <span>Hours: {service.opening_time || '08:00'} - {service.closing_time || '18:00'}</span>
                 </div>
               </div>
               <div className="service-actions">
@@ -378,21 +315,16 @@ function ServiceManager({ user }) {
                     'Delete'
                   )}
                 </button>
-
-                <button
-                  className={`btn ${service.is_closed ? 'btn-secondary' : 'btn-danger'}`}
-                  onClick={() => toggleClosure(service.id, service.is_closed)}
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => handleToggleService(service)}
                   disabled={togglingId === service.id}
-                  title={service.is_closed ? 'Reopen service' : 'Close service early'}
                 >
-                  {togglingId === service.id ? (
-                    <>
-                      <span className="spinner"></span>
-                      Updating...
-                    </>
-                  ) : (
-                    service.is_closed ? 'Reopen Service' : 'Close Service'
-                  )}
+                  {togglingId === service.id
+                    ? 'Updating...'
+                    : service.is_closed
+                      ? 'Open Service'
+                      : 'Close Service'}
                 </button>
               </div>
             </div>
