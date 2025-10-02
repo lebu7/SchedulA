@@ -42,7 +42,7 @@ function initializeDatabase() {
     else console.log('✅ Users table ready');
   });
 
-  // Services table
+  // Services table - include opening_time, closing_time, slot_interval, is_closed
   db.run(`CREATE TABLE IF NOT EXISTS services (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     provider_id INTEGER NOT NULL,
@@ -51,6 +51,10 @@ function initializeDatabase() {
     category TEXT NOT NULL,
     duration INTEGER NOT NULL,
     price DECIMAL(10,2),
+    opening_time TEXT DEFAULT '08:00', -- HH:MM (24h)
+    closing_time TEXT DEFAULT '18:00', -- HH:MM (24h)
+    slot_interval INTEGER DEFAULT 30, -- minutes
+    is_closed INTEGER DEFAULT 0, -- provider-level closure toggle for this service
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (provider_id) REFERENCES users (id)
   )`, (err) => {
@@ -78,5 +82,31 @@ function initializeDatabase() {
     else console.log('✅ Appointments table ready');
   });
 
+  // Attempt to add missing columns (safe on upgrades)
+  tryAddColumn('services', 'opening_time', "TEXT DEFAULT '08:00'");
+  tryAddColumn('services', 'closing_time', "TEXT DEFAULT '18:00'");
+  tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
+  tryAddColumn('services', 'is_closed', "INTEGER DEFAULT 0");
+
   console.log('🎯 Database initialization completed');
+}
+
+function tryAddColumn(table, column, definition) {
+  // Check whether column exists
+  db.get(`PRAGMA table_info(${table})`, (err) => {
+    // We'll attempt to run ALTER; if it fails because column exists, ignore
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`, (alterErr) => {
+      if (alterErr) {
+        // Commonly "duplicate column name" -> ignore quietly
+        if (/duplicate column name/i.test(alterErr.message) || /already exists/i.test(alterErr.message)) {
+          // ok
+        } else {
+          // If other error, log it for debugging
+          console.log(`ℹ️ Column "${column}" may already exist or couldn't be added: ${alterErr.message}`);
+        }
+      } else {
+        console.log(`✅ Added column ${column} to ${table}`);
+      }
+    });
+  });
 }

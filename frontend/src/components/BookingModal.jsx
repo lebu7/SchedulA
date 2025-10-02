@@ -357,9 +357,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             </button>
           </div>
         </form>
+
       </div>
     </div>
   )
 }
+
 
 export default BookingModal
