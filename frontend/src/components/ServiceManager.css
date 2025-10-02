@@ -165,3 +165,18 @@
   background-color: #f8f9fa;
   cursor: not-allowed;
 }
+.service-item.closed {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.closed-badge {
+  color: #dc3545;
+  font-size: 0.9em;
+  margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
