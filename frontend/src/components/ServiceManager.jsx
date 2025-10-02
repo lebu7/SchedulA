@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import api from '../services/auth'
+import api from '../service/auth' // adapt path if your api module is elsewhere
 import './ServiceManager.css'
 
 function ServiceManager({ user }) {
@@ -11,11 +11,15 @@ function ServiceManager({ user }) {
     description: '',
     category: '',
     duration: '',
-    price: ''
+    price: '',
+    opening_time: '08:00',
+    closing_time: '18:00',
+    slot_interval: 30
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [togglingId, setTogglingId] = useState(null)
 
   // Fetch services immediately on component mount and when user changes
   useEffect(() => {
@@ -25,7 +29,7 @@ function ServiceManager({ user }) {
   const fetchMyServices = async () => {
     try {
       const response = await api.get('/services')
-      const myServices = response.data.services.filter(
+      const myServices = (response.data.services || []).filter(
         service => service.provider_id === user.id
       )
       setServices(myServices)
@@ -70,7 +74,8 @@ function ServiceManager({ user }) {
       const submitData = {
         ...formData,
         duration: parseInt(formData.duration),
-        price: parseFloat(formData.price)
+        price: parseFloat(formData.price),
+        slot_interval: parseInt(formData.slot_interval)
       }
 
       // Simulate network delay for better UX
@@ -88,7 +93,7 @@ function ServiceManager({ user }) {
       // Reset form
       setShowForm(false)
       setEditingService(null)
-      setFormData({ name: '', description: '', category: '', duration: '', price: '' })
+      setFormData({ name: '', description: '', category: '', duration: '', price: '', opening_time: '08:00', closing_time: '18:00', slot_interval: 30 })
       setErrors({})
       
     } catch (error) {
@@ -122,7 +127,10 @@ function ServiceManager({ user }) {
       description: service.description || '',
       category: service.category,
       duration: service.duration.toString(),
-      price: service.price ? service.price.toString() : ''
+      price: service.price ? service.price.toString() : '',
+      opening_time: service.opening_time || '08:00',
+      closing_time: service.closing_time || '18:00',
+      slot_interval: service.slot_interval || 30
     })
     setErrors({})
     setShowForm(true)
@@ -149,8 +157,24 @@ function ServiceManager({ user }) {
   const resetForm = () => {
     setShowForm(false)
     setEditingService(null)
-    setFormData({ name: '', description: '', category: '', duration: '', price: '' })
+    setFormData({ name: '', description: '', category: '', duration: '', price: '', opening_time: '08:00', closing_time: '18:00', slot_interval: 30 })
     setErrors({})
+  }
+
+  // Toggle closure (close early / reopen)
+  const toggleClosure = async (serviceId, currentState) => {
+    // currentState: 0 or 1
+    setTogglingId(serviceId)
+    try {
+      await api.patch(`/services/${serviceId}/closure`, { is_closed: currentState ? 0 : 1 })
+      // refresh
+      await fetchMyServices()
+    } catch (err) {
+      console.error('Error toggling closure:', err)
+      alert('Failed to update closure status. Try again.')
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   return (
@@ -256,6 +280,41 @@ function ServiceManager({ user }) {
                 </div>
               </div>
 
+              <div className="form-row" style={{ marginTop: 12 }}>
+                <div className="form-group">
+                  <label>Opening Time (HH:MM)</label>
+                  <input
+                    type="time"
+                    name="opening_time"
+                    value={formData.opening_time}
+                    onChange={handleInputChange}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Closing Time (HH:MM)</label>
+                  <input
+                    type="time"
+                    name="closing_time"
+                    value={formData.closing_time}
+                    onChange={handleInputChange}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Slot Interval (minutes)</label>
+                  <input
+                    type="number"
+                    name="slot_interval"
+                    value={formData.slot_interval}
+                    onChange={handleInputChange}
+                    min="5"
+                    step="5"
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+
               <div className="form-actions">
                 <button 
                   type="submit" 
@@ -286,7 +345,7 @@ function ServiceManager({ user }) {
 
         <div className="services-list">
           {services.map(service => (
-            <div key={service.id} className="service-item card">
+            <div key={service.id} className={`service-item card ${service.is_closed ? 'service-closed' : ''}`}>
               <div className="service-info">
                 <h4>{service.name}</h4>
                 <p className="service-category">{service.category}</p>
@@ -294,6 +353,7 @@ function ServiceManager({ user }) {
                 <div className="service-meta">
                   <span>Duration: {service.duration} minutes</span>
                   <span>Price: {service.price ? `KES ${service.price}` : 'Free'}</span>
+                  <span>Hours: {service.opening_time || '08:00'} - {service.closing_time || '18:00'}</span>
                 </div>
               </div>
               <div className="service-actions">
@@ -316,6 +376,22 @@ function ServiceManager({ user }) {
                     </>
                   ) : (
                     'Delete'
+                  )}
+                </button>
+
+                <button
+                  className={`btn ${service.is_closed ? 'btn-secondary' : 'btn-danger'}`}
+                  onClick={() => toggleClosure(service.id, service.is_closed)}
+                  disabled={togglingId === service.id}
+                  title={service.is_closed ? 'Reopen service' : 'Close service early'}
+                >
+                  {togglingId === service.id ? (
+                    <>
+                      <span className="spinner"></span>
+                      Updating...
+                    </>
+                  ) : (
+                    service.is_closed ? 'Reopen Service' : 'Close Service'
                   )}
                 </button>
               </div>
