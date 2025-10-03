@@ -5,6 +5,10 @@ import { authenticateToken, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Helper: Format JS Date -> SQLite datetime string
+const formatForSQLite = (date) =>
+  date.toISOString().replace('T', ' ').substring(0, 19);
+
 // Get all services with search/filter
 router.get('/', (req, res) => {
   const { search, category, provider } = req.query;
@@ -76,7 +80,6 @@ router.post('/',
             return res.status(500).json({ error: 'Failed to create service' });
           }
 
-          // Return the created service
           db.get(
             `SELECT s.*, u.name as provider_name, u.business_name 
              FROM services s 
@@ -126,7 +129,6 @@ router.put('/:id',
       const { name, description, category, duration, price, opening_time, closing_time, slot_interval, is_closed } = req.body;
       const provider_id = req.user.userId;
 
-      // First verify the service belongs to the provider
       db.get(
         'SELECT * FROM services WHERE id = ? AND provider_id = ?',
         [serviceId, provider_id],
@@ -138,46 +140,18 @@ router.put('/:id',
             return res.status(404).json({ error: 'Service not found or access denied' });
           }
 
-          // Build dynamic update query
           const updates = [];
           const params = [];
 
-          if (name !== undefined) {
-            updates.push('name = ?');
-            params.push(name);
-          }
-          if (description !== undefined) {
-            updates.push('description = ?');
-            params.push(description);
-          }
-          if (category !== undefined) {
-            updates.push('category = ?');
-            params.push(category);
-          }
-          if (duration !== undefined) {
-            updates.push('duration = ?');
-            params.push(duration);
-          }
-          if (price !== undefined) {
-            updates.push('price = ?');
-            params.push(price);
-          }
-          if (opening_time !== undefined) {
-            updates.push('opening_time = ?');
-            params.push(opening_time);
-          }
-          if (closing_time !== undefined) {
-            updates.push('closing_time = ?');
-            params.push(closing_time);
-          }
-          if (slot_interval !== undefined) {
-            updates.push('slot_interval = ?');
-            params.push(slot_interval);
-          }
-          if (is_closed !== undefined) {
-            updates.push('is_closed = ?');
-            params.push(is_closed);
-          }
+          if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+          if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+          if (category !== undefined) { updates.push('category = ?'); params.push(category); }
+          if (duration !== undefined) { updates.push('duration = ?'); params.push(duration); }
+          if (price !== undefined) { updates.push('price = ?'); params.push(price); }
+          if (opening_time !== undefined) { updates.push('opening_time = ?'); params.push(opening_time); }
+          if (closing_time !== undefined) { updates.push('closing_time = ?'); params.push(closing_time); }
+          if (slot_interval !== undefined) { updates.push('slot_interval = ?'); params.push(slot_interval); }
+          if (is_closed !== undefined) { updates.push('is_closed = ?'); params.push(is_closed); }
 
           if (updates.length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
@@ -236,7 +210,6 @@ router.delete('/:id', authenticateToken, requireRole('provider'), (req, res) => 
 router.get('/providers/:id', (req, res) => {
   const providerId = req.params.id;
 
-  // Get provider info
   db.get(
     'SELECT id, name, email, phone, business_name, created_at FROM users WHERE id = ? AND user_type = "provider"',
     [providerId],
@@ -248,7 +221,6 @@ router.get('/providers/:id', (req, res) => {
         return res.status(404).json({ error: 'Provider not found' });
       }
 
-      // Get provider's services
       db.all(
         'SELECT * FROM services WHERE provider_id = ? ORDER BY created_at DESC',
         [providerId],
@@ -257,21 +229,14 @@ router.get('/providers/:id', (req, res) => {
             return res.status(500).json({ error: 'Failed to fetch services' });
           }
 
-          res.json({
-            provider,
-            services
-          });
+          res.json({ provider, services });
         }
       );
     }
   );
 });
 
-/**
- * Toggle closure (provider only)
- * PATCH /services/:id/closure
- * Body: { is_closed: 0|1 }
- */
+// Toggle closure (provider only)
 router.patch('/:id/closure', authenticateToken, requireRole('provider'), (req, res) => {
   const serviceId = req.params.id;
   const provider_id = req.user.userId;

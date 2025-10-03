@@ -41,24 +41,26 @@ router.get('/', authenticateToken, (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch appointments' });
     }
 
-    // Separate into pending and past appointments for clients
     if (userType === 'client') {
       const now = new Date().toISOString();
       const pending = appointments.filter(apt => 
+        apt.status === 'pending' && apt.appointment_date > now
+      );
+      const scheduled = appointments.filter(apt =>
         apt.status === 'scheduled' && apt.appointment_date > now
       );
-      const past = appointments.filter(apt => 
-        apt.status !== 'scheduled' || apt.appointment_date <= now
+      const past = appointments.filter(apt =>
+        apt.status === 'completed' || apt.appointment_date <= now || apt.status === 'cancelled'
       );
 
-      res.json({ appointments: { pending, past } });
+      res.json({ appointments: { pending, scheduled, past } });
     } else {
       res.json({ appointments });
     }
   });
 });
 
-// Get appointments by provider ID (for availability checking)
+// Get appointments by provider ID
 router.get('/provider/:providerId', (req, res) => {
   const providerId = req.params.providerId;
   
@@ -68,7 +70,7 @@ router.get('/provider/:providerId', (req, res) => {
      FROM appointments a
      JOIN services s ON a.service_id = s.id
      JOIN users u ON a.client_id = u.id
-     WHERE a.provider_id = ? AND a.status = 'scheduled'
+     WHERE a.provider_id = ?
      ORDER BY a.appointment_date ASC`,
     [providerId],
     (err, appointments) => {
@@ -81,7 +83,7 @@ router.get('/provider/:providerId', (req, res) => {
   );
 });
 
-// Create new appointment (client only)
+// Create new appointment (client only) -> default status = "pending"
 router.post('/',
   authenticateToken,
   [
@@ -99,15 +101,12 @@ router.post('/',
       const { service_id, appointment_date, notes } = req.body;
       const client_id = req.user.userId;
 
-      // Validate appointment date is in the future
       const appointmentDate = new Date(appointment_date);
       const now = new Date();
-      
       if (appointmentDate <= now) {
         return res.status(400).json({ error: 'Appointment date must be in the future' });
       }
 
-      // First get service details to calculate end time and get provider_id
       db.get(
         'SELECT * FROM services WHERE id = ?',
         [service_id],
@@ -120,75 +119,35 @@ router.post('/',
             return res.status(404).json({ error: 'Service not found' });
           }
 
-          // Calculate appointment end time
-          const appointmentEnd = new Date(appointmentDate.getTime() + service.duration * 60000);
-
-          // Check for scheduling conflicts - FIXED VERSION
-          db.get(
-            `SELECT a.id 
-             FROM appointments a
-             JOIN services s ON a.service_id = s.id
-             WHERE a.provider_id = ? 
-             AND a.status = 'scheduled'
-             AND (
-               (a.appointment_date BETWEEN ? AND datetime(?, '-1 second')) OR
-               (datetime(a.appointment_date, '+' || s.duration || ' minutes') BETWEEN ? AND datetime(?, '-1 second')) OR
-               (? BETWEEN a.appointment_date AND datetime(a.appointment_date, '+' || s.duration || ' minutes')) OR
-               (? BETWEEN a.appointment_date AND datetime(a.appointment_date, '+' || s.duration || ' minutes'))
-             )`,
-            [
-              service.provider_id,
-              appointment_date, appointmentEnd.toISOString(),
-              appointment_date, appointmentEnd.toISOString(),
-              appointment_date,
-              appointmentEnd.toISOString()
-            ],
-            (err, conflict) => {
+          // Directly insert with status = 'pending'
+          db.run(
+            `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status) 
+             VALUES (?, ?, ?, ?, ?, 'pending')`,
+            [client_id, service.provider_id, service_id, appointment_date, notes || ''],
+            function(err) {
               if (err) {
-                console.error('Database error during conflict check:', err);
-                return res.status(500).json({ error: 'Failed to check appointment availability' });
-              }
-              
-              if (conflict) {
-                return res.status(409).json({ 
-                  error: 'This time slot conflicts with an existing appointment. Please choose a different time.' 
-                });
+                console.error('Database error creating appointment:', err);
+                return res.status(500).json({ error: 'Failed to create appointment' });
               }
 
-              // Create appointment
-              db.run(
-                `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [client_id, service.provider_id, service_id, appointment_date, notes || ''],
-                function(err) {
+              db.get(
+                `SELECT a.*, s.name as service_name, s.duration, s.price,
+                        u.name as provider_name, u.business_name
+                 FROM appointments a
+                 JOIN services s ON a.service_id = s.id
+                 JOIN users u ON a.provider_id = u.id
+                 WHERE a.id = ?`,
+                [this.lastID],
+                (err, appointment) => {
                   if (err) {
-                    console.error('Database error creating appointment:', err);
-                    return res.status(500).json({ error: 'Failed to create appointment' });
+                    console.error('Database error fetching created appointment:', err);
+                    return res.status(500).json({ error: 'Appointment created but failed to fetch details' });
                   }
 
-                  // Return the created appointment with details
-                  db.get(
-                    `SELECT a.*, s.name as service_name, s.duration, s.price,
-                            u.name as provider_name, u.business_name
-                     FROM appointments a
-                     JOIN services s ON a.service_id = s.id
-                     JOIN users u ON a.provider_id = u.id
-                     WHERE a.id = ?`,
-                    [this.lastID],
-                    (err, appointment) => {
-                      if (err) {
-                        console.error('Database error fetching created appointment:', err);
-                        return res.status(500).json({ 
-                          error: 'Appointment created but failed to fetch details' 
-                        });
-                      }
-                      
-                      res.status(201).json({
-                        message: 'Appointment booked successfully',
-                        appointment
-                      });
-                    }
-                  );
+                  res.status(201).json({
+                    message: 'Appointment requested successfully (pending provider confirmation)',
+                    appointment
+                  });
                 }
               );
             }
@@ -202,7 +161,7 @@ router.post('/',
   }
 );
 
-// Update appointment
+// Update appointment (used by provider to confirm/reject/reschedule)
 router.put('/:id', authenticateToken, (req, res) => {
   try {
     const appointmentId = req.params.id;
@@ -210,7 +169,6 @@ router.put('/:id', authenticateToken, (req, res) => {
     const userType = req.user.user_type;
     const { status, appointment_date, notes } = req.body;
 
-    // First verify the user has access to this appointment
     let accessQuery = '';
     if (userType === 'client') {
       accessQuery = 'SELECT * FROM appointments WHERE id = ? AND client_id = ?';
@@ -227,7 +185,6 @@ router.put('/:id', authenticateToken, (req, res) => {
         return res.status(404).json({ error: 'Appointment not found or access denied' });
       }
 
-      // Build dynamic update query
       const updates = [];
       const params = [];
 
@@ -236,7 +193,6 @@ router.put('/:id', authenticateToken, (req, res) => {
         params.push(status);
       }
       if (appointment_date !== undefined) {
-        // Validate new appointment date if provided
         const newAppointmentDate = new Date(appointment_date);
         const now = new Date();
         if (newAppointmentDate <= now) {
@@ -276,168 +232,6 @@ router.put('/:id', authenticateToken, (req, res) => {
     console.error('Server error:', error);
     res.status(500).json({ error: 'Server error' });
   }
-});
-
-// Soft delete appointment
-router.delete('/:id', authenticateToken, (req, res) => {
-  const appointmentId = req.params.id;
-  const userId = req.user.userId;
-  const userType = req.user.user_type;
-
-  let query = '';
-  if (userType === 'client') {
-    query = 'UPDATE appointments SET client_deleted = 1 WHERE id = ? AND client_id = ?';
-  } else {
-    query = 'UPDATE appointments SET provider_deleted = 1 WHERE id = ? AND provider_id = ?';
-  }
-
-  db.run(query, [appointmentId, userId], function(err) {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ error: 'Failed to delete appointment' });
-    }
-
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Appointment not found or access denied' });
-    }
-
-    res.json({ message: 'Appointment deleted successfully' });
-  });
-});
-
-// Get available time slots for a service
-router.get('/available/:serviceId', (req, res) => {
-  const serviceId = req.params.serviceId;
-  const { date } = req.query;
-
-  if (!date) {
-    return res.status(400).json({ error: 'Date parameter required' });
-  }
-
-  // Validate date format
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(date)) {
-    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
-  }
-
-  try {
-    // Get service details
-    db.get(
-      `SELECT s.*, u.name as provider_name, u.business_name 
-       FROM services s 
-       JOIN users u ON s.provider_id = u.id 
-       WHERE s.id = ?`,
-      [serviceId],
-      (err, service) => {
-        if (err) {
-          console.error('Database error:', err);
-          return res.status(500).json({ error: 'Database error' });
-        }
-        if (!service) {
-          return res.status(404).json({ error: 'Service not found' });
-        }
-
-        const startDate = `${date} 00:00:00`;
-        const endDate = `${date} 23:59:59`;
-
-        // Get provider's appointments for the date
-        db.all(
-          `SELECT a.appointment_date, s.duration 
-           FROM appointments a
-           JOIN services s ON a.service_id = s.id
-           WHERE a.provider_id = ? 
-           AND a.appointment_date BETWEEN ? AND ? 
-           AND a.status = 'scheduled'
-           ORDER BY a.appointment_date ASC`,
-          [service.provider_id, startDate, endDate],
-          (err, appointments) => {
-            if (err) {
-              console.error('Database error:', err);
-              return res.status(500).json({ error: 'Failed to fetch appointments' });
-            }
-
-            const bookedSlots = appointments.map(apt => ({
-              start: apt.appointment_date,
-              end: new Date(new Date(apt.appointment_date).getTime() + apt.duration * 60000).toISOString(),
-              duration: apt.duration
-            }));
-
-            res.json({
-              service: {
-                id: service.id,
-                name: service.name,
-                duration: service.duration,
-                price: service.price,
-                provider_name: service.provider_name,
-                business_name: service.business_name
-              },
-              booked_slots: bookedSlots,
-              date: date
-            });
-          }
-        );
-      }
-    );
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Get latest appointment for user
-router.get('/latest', authenticateToken, (req, res) => {
-  const userId = req.user.userId;
-  const userType = req.user.user_type;
-
-  let query = '';
-  let params = [userId];
-
-  if (userType === 'client') {
-    query = `
-      SELECT a.*, s.name as service_name, s.duration, s.price,
-             u.name as provider_name, u.business_name
-      FROM appointments a
-      JOIN services s ON a.service_id = s.id
-      JOIN users u ON a.provider_id = u.id
-      WHERE a.client_id = ? AND a.client_deleted = 0
-      ORDER BY a.appointment_date DESC
-      LIMIT 1
-    `;
-  } else {
-    query = `
-      SELECT a.*, s.name as service_name, s.duration, s.price,
-             u.name as client_name, u.phone as client_phone
-      FROM appointments a
-      JOIN services s ON a.service_id = s.id
-      JOIN users u ON a.client_id = u.id
-      WHERE a.provider_id = ? AND a.provider_deleted = 0
-      ORDER BY a.appointment_date DESC
-      LIMIT 1
-    `;
-  }
-
-  db.get(query, params, (err, appointment) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ error: 'Failed to fetch latest appointment' });
-    }
-
-    res.json({ appointment });
-  });
-});
-
-// Health check endpoint for appointments
-router.get('/health', (req, res) => {
-  db.get('SELECT COUNT(*) as count FROM appointments', (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database connection failed' });
-    }
-    res.json({ 
-      status: 'OK', 
-      message: 'Appointments API is working',
-      total_appointments: row.count
-    });
-  });
 });
 
 export default router;
