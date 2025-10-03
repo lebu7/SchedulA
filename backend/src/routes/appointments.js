@@ -41,8 +41,9 @@ router.get('/', authenticateToken, (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch appointments' });
     }
 
+    const now = new Date().toISOString();
+
     if (userType === 'client') {
-      const now = new Date().toISOString();
       const pending = appointments.filter(apt => 
         apt.status === 'pending' && apt.appointment_date > now
       );
@@ -50,17 +51,33 @@ router.get('/', authenticateToken, (req, res) => {
         apt.status === 'scheduled' && apt.appointment_date > now
       );
       const past = appointments.filter(apt =>
-        apt.status === 'completed' || apt.appointment_date <= now || apt.status === 'cancelled'
+        apt.status === 'completed' ||
+        apt.status === 'cancelled' ||
+        apt.appointment_date <= now
       );
 
       res.json({ appointments: { pending, scheduled, past } });
     } else {
-      res.json({ appointments });
+      // Provider view
+      const pending = appointments.filter(apt => 
+        apt.status === 'pending' && apt.appointment_date > now
+      );
+      const upcoming = appointments.filter(apt =>
+        apt.status === 'scheduled' && apt.appointment_date > now
+      );
+      const past = appointments.filter(apt =>
+        apt.status === 'completed' ||
+        apt.status === 'cancelled' ||
+        apt.status === 'no-show' ||
+        apt.appointment_date <= now
+      );
+
+      res.json({ appointments: { pending, upcoming, past } });
     }
   });
 });
 
-// Get appointments by provider ID
+// Get appointments by provider ID (public route, used for client availability checks)
 router.get('/provider/:providerId', (req, res) => {
   const providerId = req.params.providerId;
   
@@ -119,7 +136,7 @@ router.post('/',
             return res.status(404).json({ error: 'Service not found' });
           }
 
-          // Directly insert with status = 'pending'
+          // Insert with status = 'pending'
           db.run(
             `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status) 
              VALUES (?, ?, ?, ?, ?, 'pending')`,
@@ -161,7 +178,7 @@ router.post('/',
   }
 );
 
-// Update appointment (used by provider to confirm/reject/reschedule)
+// Update appointment (used by provider to confirm/reject/reschedule, client to cancel/update notes)
 router.put('/:id', authenticateToken, (req, res) => {
   try {
     const appointmentId = req.params.id;

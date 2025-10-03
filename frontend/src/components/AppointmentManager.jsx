@@ -3,7 +3,7 @@ import api from '../services/auth'
 import './AppointmentManager.css'
 
 function AppointmentManager({ user }) {
-  const [appointments, setAppointments] = useState({ pending: [], past: [], appointments: [] })
+  const [appointments, setAppointments] = useState({ pending: [], scheduled: [], upcoming: [], past: [] })
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(null)
   const [cancelling, setCancelling] = useState(null)
@@ -101,7 +101,7 @@ function AppointmentManager({ user }) {
 
         {user.user_type === 'client' ? (
           <>
-            {/* Pending Requests */}
+            {/* Pending */}
             <div className="appointment-section">
               <h3>Pending Requests ({appointments.pending?.length || 0})</h3>
               {appointments.pending?.length > 0 ? (
@@ -134,6 +134,27 @@ function AppointmentManager({ user }) {
               )}
             </div>
 
+            {/* Scheduled */}
+            <div className="appointment-section">
+              <h3>Upcoming Appointments ({appointments.scheduled?.length || 0})</h3>
+              {appointments.scheduled?.length > 0 ? (
+                <div className="appointments-list">
+                  {appointments.scheduled.map(apt => (
+                    <div key={apt.id} className="appointment-card card">
+                      <div className="appointment-info">
+                        <h4>{apt.service_name}</h4>
+                        <p><strong>With:</strong> {apt.provider_name}</p>
+                        <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                        {getStatusBadge(apt.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-appointments">No upcoming appointments.</div>
+              )}
+            </div>
+
             {/* Past */}
             <div className="appointment-section">
               <h3>Past Appointments ({appointments.past?.length || 0})</h3>
@@ -157,13 +178,13 @@ function AppointmentManager({ user }) {
           </>
         ) : (
           <>
-            {/* Provider View */}
+            {/* Provider Pending */}
             <div className="appointment-section">
-              <h3>Client Requests ({appointments.appointments?.length || 0})</h3>
-              {appointments.appointments?.length > 0 ? (
+              <h3>Pending Requests ({appointments.pending?.length || 0})</h3>
+              {appointments.pending?.length > 0 ? (
                 <div className="appointments-list">
-                  {appointments.appointments.map(apt => (
-                    <div key={apt.id} className={`appointment-card card ${apt.status === 'pending' ? 'highlight-pending' : ''}`}>
+                  {appointments.pending.map(apt => (
+                    <div key={apt.id} className="appointment-card card highlight-pending">
                       <div className="appointment-info">
                         <h4>{apt.service_name}</h4>
                         <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
@@ -172,49 +193,90 @@ function AppointmentManager({ user }) {
                         {apt.notes && <p><strong>Notes:</strong> {apt.notes}</p>}
                       </div>
                       <div className="appointment-actions">
-                        {apt.status === 'pending' ? (
-                          <>
-                            <button
-                              className="btn btn-primary"
-                              onClick={() => handleStatusUpdate(apt.id, 'scheduled')}
-                              disabled={updating === apt.id}
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              className="btn btn-danger"
-                              onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
-                              disabled={updating === apt.id}
-                            >
-                              Reject
-                            </button>
-                            <button
-                              className="btn btn-secondary"
-                              onClick={() => handleReschedule(apt.id)}
-                              disabled={updating === apt.id}
-                            >
-                              Reschedule
-                            </button>
-                          </>
-                        ) : (
-                          <select
-                            value={apt.status}
-                            onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
-                            disabled={updating === apt.id}
-                            className="status-select"
-                          >
-                            <option value="scheduled">Scheduled</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                            <option value="no-show">No Show</option>
-                          </select>
-                        )}
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleStatusUpdate(apt.id, 'scheduled')}
+                          disabled={updating === apt.id}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
+                          disabled={updating === apt.id}
+                        >
+                          Reject
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleReschedule(apt.id)}
+                          disabled={updating === apt.id}
+                        >
+                          Reschedule
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="no-appointments">No client bookings yet.</div>
+                <div className="no-appointments">No pending requests.</div>
+              )}
+            </div>
+
+            {/* Provider Upcoming */}
+            <div className="appointment-section">
+              <h3>Upcoming Appointments ({appointments.upcoming?.length || 0})</h3>
+              {appointments.upcoming?.length > 0 ? (
+                <div className="appointments-list">
+                  {appointments.upcoming.map(apt => (
+                    <div key={apt.id} className="appointment-card card">
+                      <div className="appointment-info">
+                        <h4>{apt.service_name}</h4>
+                        <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                        <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                        <p><strong>Duration:</strong> {apt.duration} minutes</p>
+                        <p><strong>Price:</strong> KES {apt.price}</p>
+                        {getStatusBadge(apt.status)}
+                      </div>
+                      <div className="appointment-actions">
+                        <select
+                          value={apt.status}
+                          onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
+                          disabled={updating === apt.id}
+                          className="status-select"
+                        >
+                          <option value="scheduled">Scheduled</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                          <option value="no-show">No Show</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-appointments">No upcoming appointments.</div>
+              )}
+            </div>
+
+            {/* Provider Past */}
+            <div className="appointment-section">
+              <h3>Past Appointments ({appointments.past?.length || 0})</h3>
+              {appointments.past?.length > 0 ? (
+                <div className="appointments-list">
+                  {appointments.past.map(apt => (
+                    <div key={apt.id} className="appointment-card card">
+                      <div className="appointment-info">
+                        <h4>{apt.service_name}</h4>
+                        <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                        <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                        {getStatusBadge(apt.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-appointments">No past appointments.</div>
               )}
             </div>
           </>
