@@ -110,42 +110,24 @@ function AppointmentManager({ user }) {
         {list.map((apt) => (
           <div
             key={apt.id}
-            className={`appointment-card card ${
-              apt.status === 'pending' ? 'highlight-pending' : ''
-            }`}
+            className={`appointment-card card ${apt.status === 'pending' ? 'highlight-pending' : ''}`}
           >
             <div className="appointment-info">
               <h4>{apt.service_name}</h4>
               {user.user_type === 'client' ? (
                 <>
-                  <p>
-                    <strong>With:</strong> {apt.provider_name}
-                  </p>
-                  <p>
-                    <strong>When:</strong> {formatDate(apt.appointment_date)}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {apt.duration} minutes
-                  </p>
-                  <p>
-                    <strong>Price:</strong> KES {apt.price}
-                  </p>
+                  <p><strong>With:</strong> {apt.provider_name}</p>
+                  <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                  <p><strong>Duration:</strong> {apt.duration} minutes</p>
+                  <p><strong>Price:</strong> KES {apt.price}</p>
                   {getStatusBadge(apt.status)}
                 </>
               ) : (
                 <>
-                  <p>
-                    <strong>Client:</strong> {apt.client_name} ({apt.client_phone})
-                  </p>
-                  <p>
-                    <strong>When:</strong> {formatDate(apt.appointment_date)}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {apt.duration} minutes
-                  </p>
-                  <p>
-                    <strong>Price:</strong> KES {apt.price}
-                  </p>
+                  <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                  <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                  <p><strong>Duration:</strong> {apt.duration} minutes</p>
+                  <p><strong>Price:</strong> KES {apt.price}</p>
                   {getStatusBadge(apt.status)}
                 </>
               )}
@@ -156,7 +138,7 @@ function AppointmentManager({ user }) {
                 <>
                   {apt.status === 'pending' && (
                     <button
-                      className="btn btn-danger"
+                      className="btn btn-danger small-btn"
                       onClick={() => handleCancelAppointment(apt.id)}
                       disabled={cancelling === apt.id}
                     >
@@ -164,21 +146,34 @@ function AppointmentManager({ user }) {
                     </button>
                   )}
 
-                  {['completed', 'cancelled', 'no-show'].includes(apt.status) && (
+                  {/* Rebook only for cancelled or no-show */}
+                  {['cancelled', 'no-show'].includes(apt.status) && (
                     <>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => handleRebook(apt)}
-                      >
-                        Rebook
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        Delete
-                      </button>
+                      <div className="action-row">
+                        <button
+                          className="btn btn-primary small-btn"
+                          onClick={() => handleRebook(apt)}
+                        >
+                          Rebook
+                        </button>
+                        <button
+                          className="btn btn-danger small-btn"
+                          onClick={() => handleDeleteAppointment(apt.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </>
+                  )}
+
+                  {/* Completed only shows delete */}
+                  {apt.status === 'completed' && (
+                    <button
+                      className="btn btn-danger small-btn"
+                      onClick={() => handleDeleteAppointment(apt.id)}
+                    >
+                      Delete
+                    </button>
                   )}
                 </>
               ) : (
@@ -186,13 +181,13 @@ function AppointmentManager({ user }) {
                   {apt.status === 'pending' ? (
                     <>
                       <button
-                        className="btn btn-primary"
+                        className="btn btn-primary small-btn"
                         onClick={() => handleStatusUpdate(apt.id, 'scheduled')}
                       >
                         Confirm
                       </button>
                       <button
-                        className="btn btn-danger"
+                        className="btn btn-danger small-btn"
                         onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
                       >
                         Reject
@@ -202,7 +197,7 @@ function AppointmentManager({ user }) {
                     <>
                       <p className="hint">Status locked</p>
                       <button
-                        className="btn btn-danger"
+                        className="btn btn-danger small-btn"
                         onClick={() => handleDeleteAppointment(apt.id)}
                       >
                         Delete
@@ -211,9 +206,7 @@ function AppointmentManager({ user }) {
                   ) : (
                     <select
                       value={apt.status}
-                      onChange={(e) =>
-                        handleStatusUpdate(apt.id, e.target.value)
-                      }
+                      onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
                       disabled={updating === apt.id}
                       className="status-select"
                     >
@@ -258,8 +251,7 @@ function AppointmentManager({ user }) {
               className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)} (
-              {appointments[tab]?.length || 0})
+              {tab.charAt(0).toUpperCase() + tab.slice(1)} ({appointments[tab]?.length || 0})
             </button>
           ))}
         </div>
