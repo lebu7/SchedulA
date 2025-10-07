@@ -22,10 +22,6 @@
   transition: all 0.25s ease;
 }
 
-.tab-btn:hover {
-  background: #e2e8f0;
-}
-
 .tab-btn.active {
   background: #007bff;
   color: white;
@@ -57,7 +53,6 @@
   transform: translateY(-3px);
 }
 
-/* Info Section */
 .appointment-info h4 {
   margin-bottom: 10px;
   color: #2c3e50;
@@ -70,6 +65,7 @@
   font-size: 14px;
 }
 
+/* Buttons & Actions */
 .appointment-actions {
   display: flex;
   flex-direction: column;
@@ -80,10 +76,13 @@
 .action-row {
   display: flex;
   gap: 8px;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
-/* Buttons */
+.right-aligned {
+  justify-content: flex-end;
+}
+
 .small-btn {
   font-size: 13px;
   padding: 8px 14px;
@@ -118,6 +117,12 @@
   text-transform: uppercase;
 }
 
+.status-badge.blue { background-color: #dbeafe; color: #1e40af; }
+.status-badge.green { background-color: #d1fae5; color: #065f46; }
+.status-badge.red { background-color: #fee2e2; color: #b91c1c; }
+.status-badge.orange { background-color: #ffedd5; color: #c2410c; }
+.status-badge.gray { background-color: #f1f5f9; color: #334155; }
+
 /* Empty State */
 .no-appointments {
   text-align: center;
@@ -128,34 +133,19 @@
   grid-column: span 3;
 }
 
-/* Responsive Design */
+/* Responsive */
 @media (max-width: 1024px) {
-  .appointments-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .appointments-list { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 768px) {
-  .appointments-list {
-    grid-template-columns: 1fr;
-  }
-  .appointment-card {
-    padding: 20px;
-  }
-  .action-row {
-    justify-content: space-between;
-  }
+  .appointments-list { grid-template-columns: 1fr; }
+  .appointment-card { padding: 20px; }
+  .action-row { justify-content: flex-end; }
 }
 
 @media (max-width: 480px) {
-  .appointment-card {
-    padding: 18px;
-  }
-  .small-btn {
-    width: 100%;
-  }
-  .action-row {
-    flex-direction: column;
-    gap: 10px;
-  }
+  .appointment-card { padding: 18px; }
+  .small-btn { width: 100%; }
+  .action-row { flex-direction: column; align-items: stretch; }
 }

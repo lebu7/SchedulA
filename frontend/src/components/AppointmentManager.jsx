@@ -12,9 +12,7 @@ function AppointmentManager({ user }) {
   const [showBooking, setShowBooking] = useState(false)
   const [rebookService, setRebookService] = useState(null)
 
-  useEffect(() => {
-    fetchAppointments()
-  }, [])
+  useEffect(() => { fetchAppointments() }, [])
 
   const fetchAppointments = async () => {
     try {
@@ -146,34 +144,34 @@ function AppointmentManager({ user }) {
                     </button>
                   )}
 
-                  {/* Rebook only for cancelled or no-show */}
+                  {/* Cancelled & No-show: Rebook + Delete */}
                   {['cancelled', 'no-show'].includes(apt.status) && (
-                    <>
-                      <div className="action-row">
-                        <button
-                          className="btn btn-primary small-btn"
-                          onClick={() => handleRebook(apt)}
-                        >
-                          Rebook
-                        </button>
-                        <button
-                          className="btn btn-danger small-btn"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
+                    <div className="action-row right-aligned">
+                      <button
+                        className="btn btn-primary small-btn"
+                        onClick={() => handleRebook(apt)}
+                      >
+                        Rebook
+                      </button>
+                      <button
+                        className="btn btn-danger small-btn"
+                        onClick={() => handleDeleteAppointment(apt.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   )}
 
-                  {/* Completed only shows delete */}
+                  {/* Completed: only Delete, same placement */}
                   {apt.status === 'completed' && (
-                    <button
-                      className="btn btn-danger small-btn"
-                      onClick={() => handleDeleteAppointment(apt.id)}
-                    >
-                      Delete
-                    </button>
+                    <div className="action-row right-aligned">
+                      <button
+                        className="btn btn-danger small-btn"
+                        onClick={() => handleDeleteAppointment(apt.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   )}
                 </>
               ) : (
@@ -196,12 +194,14 @@ function AppointmentManager({ user }) {
                   ) : ['completed', 'cancelled', 'no-show'].includes(apt.status) ? (
                     <>
                       <p className="hint">Status locked</p>
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        Delete
-                      </button>
+                      <div className="action-row right-aligned">
+                        <button
+                          className="btn btn-danger small-btn"
+                          onClick={() => handleDeleteAppointment(apt.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <select
