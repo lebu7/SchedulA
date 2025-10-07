@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import api from '../services/auth' // keep your existing api import path
+import api from '../services/auth'
 import './BookingModal.css'
 
 function BookingModal({ service, user, onClose, onBookingSuccess }) {
@@ -10,12 +10,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [error, setError] = useState('')
   const [serviceMeta, setServiceMeta] = useState(service || {})
 
+  // ✅ Automatically load or refresh the selected service
   useEffect(() => {
-    if (service) {
-      setServiceMeta(service)
-    }
+    if (service) setServiceMeta(service)
   }, [service])
 
+  // ✅ Format displayed time
   const formatTimeDisplay = (timeStr) => {
     const [h, m] = timeStr.split(':').map(Number)
     const period = h >= 12 ? 'PM' : 'AM'
@@ -23,6 +23,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return `${displayHours}:${m.toString().padStart(2, '0')} ${period}`
   }
 
+  // ✅ Handle booking submission
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!selectedDate || !selectedTime) {
@@ -46,8 +47,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         notes: notes.trim()
       }
       await api.post('/appointments', payload)
-      onBookingSuccess && onBookingSuccess()
-      onClose && onClose()
+      if (onBookingSuccess) onBookingSuccess()
+      if (onClose) onClose()
     } catch (err) {
       console.error('Booking error:', err)
       const serverMsg = err.response?.data?.error || 'Failed to book appointment.'
@@ -57,6 +58,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     }
   }
 
+  // ✅ Limit date range (tomorrow to +30 days)
   const getMinDate = () => {
     const today = new Date()
     today.setDate(today.getDate() + 1)
@@ -80,16 +82,26 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError('')
   }
 
+  // ✅ Prefill default notes for rebook
+  useEffect(() => {
+    if (service && service.rebook) {
+      setNotes(`Rebooking for ${service.name}`)
+    }
+  }, [service])
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Book {serviceMeta.name}</h3>
+          <h3>
+            {serviceMeta.rebook ? 'Rebook' : 'Book'} {serviceMeta.name}
+          </h3>
           <button className="close-btn" onClick={onClose} disabled={booking}>
             ×
           </button>
         </div>
 
+        {/* ✅ Service info summary */}
         <div className="service-info">
           <div className="service-detail">
             <span className="detail-label">Provider:</span>
@@ -111,11 +123,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           </div>
         </div>
 
+        {/* ✅ Booking form */}
         <form onSubmit={handleSubmit} className="booking-form">
           {error && (
             <div className="error-message">
-              <span className="error-icon">⚠️</span>
-              {error}
+              <span className="error-icon">⚠️</span> {error}
             </div>
           )}
 
@@ -149,20 +161,24 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 className="time-select"
               >
                 <option value="">Choose a time</option>
-                {selectedDate && Array.from({ length: 24 * 2 }).map((_, i) => {
-                  const h = Math.floor(i / 2)
-                  const m = (i % 2) * 30
-                  const value = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-                  return (
-                    <option key={value} value={value}>
-                      {formatTimeDisplay(value)}
-                    </option>
-                  )
-                })}
+                {selectedDate &&
+                  Array.from({ length: 24 * 2 }).map((_, i) => {
+                    const h = Math.floor(i / 2)
+                    const m = (i % 2) * 30
+                    const value = `${h.toString().padStart(2, '0')}:${m
+                      .toString()
+                      .padStart(2, '0')}`
+                    return (
+                      <option key={value} value={value}>
+                        {formatTimeDisplay(value)}
+                      </option>
+                    )
+                  })}
               </select>
             </div>
           </div>
 
+          {/* ✅ Appointment preview */}
           {selectedDate && selectedTime && (
             <div className="appointment-preview">
               <h4>Appointment Request</h4>
@@ -197,6 +213,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             </div>
           )}
 
+          {/* ✅ Notes */}
           <div className="form-group">
             <label htmlFor="appointment-notes">Additional Notes (Optional)</label>
             <textarea
@@ -211,6 +228,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <small className="field-hint">{notes.length}/200 characters</small>
           </div>
 
+          {/* ✅ Action buttons */}
           <div className="form-actions">
             <button
               type="button"
@@ -227,11 +245,10 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             >
               {booking ? (
                 <>
-                  <span className="spinner"></span>
-                  Sending request...
+                  <span className="spinner"></span> Sending request...
                 </>
               ) : (
-                'Send Request'
+                serviceMeta.rebook ? 'Confirm Rebook' : 'Send Request'
               )}
             </button>
           </div>
