@@ -4,7 +4,12 @@ import BookingModal from './BookingModal'
 import './AppointmentManager.css'
 
 function AppointmentManager({ user }) {
-  const [appointments, setAppointments] = useState({ pending: [], scheduled: [], upcoming: [], past: [] })
+  const [appointments, setAppointments] = useState({
+    pending: [],
+    scheduled: [],
+    upcoming: [],
+    past: []
+  })
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(null)
   const [cancelling, setCancelling] = useState(null)
@@ -12,7 +17,9 @@ function AppointmentManager({ user }) {
   const [showBooking, setShowBooking] = useState(false)
   const [rebookService, setRebookService] = useState(null)
 
-  useEffect(() => { fetchAppointments() }, [])
+  useEffect(() => {
+    fetchAppointments()
+  }, [])
 
   const fetchAppointments = async () => {
     try {
@@ -38,6 +45,7 @@ function AppointmentManager({ user }) {
     }
   }
 
+  // ✅ Updated handleRebook
   const handleRebook = (apt) => {
     setRebookService({
       id: apt.service_id,
@@ -47,7 +55,8 @@ function AppointmentManager({ user }) {
       price: apt.price,
       opening_time: apt.opening_time || '08:00',
       closing_time: apt.closing_time || '18:00',
-      rebook: true
+      rebook: true,
+      old_appointment_id: apt.id // ✅ now matches BookingModal
     })
     setShowBooking(true)
   }
@@ -68,7 +77,8 @@ function AppointmentManager({ user }) {
       scheduled: 'blue',
       completed: 'green',
       cancelled: 'red',
-      'no-show': 'orange'
+      'no-show': 'orange',
+      rebooked: 'purple'
     }
     return (
       <span className={`status-badge ${statusColors[status] || 'gray'}`}>
@@ -99,6 +109,21 @@ function AppointmentManager({ user }) {
     }
   }
 
+  // ✅ Updated handleRebookSuccess to mark old appointment as "rebooked"
+  const handleRebookSuccess = async () => {
+    if (rebookService?.old_appointment_id) {
+      try {
+        await api.put(`/appointments/${rebookService.old_appointment_id}`, {
+          status: 'rebooked'
+        })
+      } catch (error) {
+        console.error('Failed to mark old appointment as rebooked:', error)
+      }
+    }
+    await fetchAppointments()
+    setShowBooking(false)
+  }
+
   const renderAppointmentsList = (list, type) => {
     if (!list || list.length === 0)
       return <div className="no-appointments">No {type} appointments.</div>
@@ -108,24 +133,42 @@ function AppointmentManager({ user }) {
         {list.map((apt) => (
           <div
             key={apt.id}
-            className={`appointment-card card ${apt.status === 'pending' ? 'highlight-pending' : ''}`}
+            className={`appointment-card card ${
+              apt.status === 'pending' ? 'highlight-pending' : ''
+            }`}
           >
             <div className="appointment-info">
               <h4>{apt.service_name}</h4>
               {user.user_type === 'client' ? (
                 <>
-                  <p><strong>With:</strong> {apt.provider_name}</p>
-                  <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
-                  <p><strong>Duration:</strong> {apt.duration} minutes</p>
-                  <p><strong>Price:</strong> KES {apt.price}</p>
+                  <p>
+                    <strong>With:</strong> {apt.provider_name}
+                  </p>
+                  <p>
+                    <strong>When:</strong> {formatDate(apt.appointment_date)}
+                  </p>
+                  <p>
+                    <strong>Duration:</strong> {apt.duration} minutes
+                  </p>
+                  <p>
+                    <strong>Price:</strong> KES {apt.price}
+                  </p>
                   {getStatusBadge(apt.status)}
                 </>
               ) : (
                 <>
-                  <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
-                  <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
-                  <p><strong>Duration:</strong> {apt.duration} minutes</p>
-                  <p><strong>Price:</strong> KES {apt.price}</p>
+                  <p>
+                    <strong>Client:</strong> {apt.client_name} ({apt.client_phone})
+                  </p>
+                  <p>
+                    <strong>When:</strong> {formatDate(apt.appointment_date)}
+                  </p>
+                  <p>
+                    <strong>Duration:</strong> {apt.duration} minutes
+                  </p>
+                  <p>
+                    <strong>Price:</strong> KES {apt.price}
+                  </p>
                   {getStatusBadge(apt.status)}
                 </>
               )}
@@ -136,7 +179,7 @@ function AppointmentManager({ user }) {
                 <>
                   {apt.status === 'pending' && (
                     <button
-                      className="btn btn-danger small-btn"
+                      className="btn btn-danger"
                       onClick={() => handleCancelAppointment(apt.id)}
                       disabled={cancelling === apt.id}
                     >
@@ -144,17 +187,17 @@ function AppointmentManager({ user }) {
                     </button>
                   )}
 
-                  {/* Cancelled & No-show: Rebook + Delete */}
+                  {/* ✅ Rebook + Delete aligned on right */}
                   {['cancelled', 'no-show'].includes(apt.status) && (
-                    <div className="action-row right-aligned">
+                    <div className="action-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                       <button
-                        className="btn btn-primary small-btn"
+                        className="btn btn-primary"
                         onClick={() => handleRebook(apt)}
                       >
                         Rebook
                       </button>
                       <button
-                        className="btn btn-danger small-btn"
+                        className="btn btn-danger"
                         onClick={() => handleDeleteAppointment(apt.id)}
                       >
                         Delete
@@ -162,11 +205,11 @@ function AppointmentManager({ user }) {
                     </div>
                   )}
 
-                  {/* Completed: only Delete, same placement */}
-                  {apt.status === 'completed' && (
-                    <div className="action-row right-aligned">
+                  {/* ✅ Delete only for completed or rebooked */}
+                  {['completed', 'rebooked'].includes(apt.status) && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button
-                        className="btn btn-danger small-btn"
+                        className="btn btn-danger"
                         onClick={() => handleDeleteAppointment(apt.id)}
                       >
                         Delete
@@ -179,34 +222,36 @@ function AppointmentManager({ user }) {
                   {apt.status === 'pending' ? (
                     <>
                       <button
-                        className="btn btn-primary small-btn"
+                        className="btn btn-primary"
                         onClick={() => handleStatusUpdate(apt.id, 'scheduled')}
                       >
                         Confirm
                       </button>
                       <button
-                        className="btn btn-danger small-btn"
+                        className="btn btn-danger"
                         onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
                       >
                         Reject
                       </button>
                     </>
-                  ) : ['completed', 'cancelled', 'no-show'].includes(apt.status) ? (
+                  ) : ['completed', 'cancelled', 'no-show', 'rebooked'].includes(
+                      apt.status
+                    ) ? (
                     <>
                       <p className="hint">Status locked</p>
-                      <div className="action-row right-aligned">
-                        <button
-                          className="btn btn-danger small-btn"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => handleDeleteAppointment(apt.id)}
+                      >
+                        Delete
+                      </button>
                     </>
                   ) : (
                     <select
                       value={apt.status}
-                      onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
+                      onChange={(e) =>
+                        handleStatusUpdate(apt.id, e.target.value)
+                      }
                       disabled={updating === apt.id}
                       className="status-select"
                     >
@@ -251,7 +296,8 @@ function AppointmentManager({ user }) {
               className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)} ({appointments[tab]?.length || 0})
+              {tab.charAt(0).toUpperCase() + tab.slice(1)} (
+              {appointments[tab]?.length || 0})
             </button>
           ))}
         </div>
@@ -265,10 +311,7 @@ function AppointmentManager({ user }) {
             service={rebookService}
             user={user}
             onClose={() => setShowBooking(false)}
-            onBookingSuccess={() => {
-              fetchAppointments()
-              setShowBooking(false)
-            }}
+            onBookingSuccess={handleRebookSuccess}
           />
         )}
       </div>

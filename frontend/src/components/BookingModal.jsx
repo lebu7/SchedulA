@@ -15,6 +15,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     if (service) setServiceMeta(service)
   }, [service])
 
+  // ✅ Prefill notes when rebooking
+  useEffect(() => {
+    if (service && service.rebook) {
+      setNotes(`Rebooking for ${service.name}`)
+    }
+  }, [service])
+
   // ✅ Format displayed time
   const formatTimeDisplay = (timeStr) => {
     const [h, m] = timeStr.split(':').map(Number)
@@ -23,7 +30,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return `${displayHours}:${m.toString().padStart(2, '0')} ${period}`
   }
 
-  // ✅ Handle booking submission
+  // ✅ Submit booking (includes rebook_from if present)
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!selectedDate || !selectedTime) {
@@ -40,13 +47,21 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
 
     setBooking(true)
     setError('')
+
     try {
       const payload = {
         service_id: serviceMeta.id,
         appointment_date: appointmentDateTime.toISOString(),
-        notes: notes.trim()
+        notes: notes.trim(),
       }
+
+      // ✅ Include the old appointment ID if this is a rebook
+      if (serviceMeta.rebook && serviceMeta.old_appointment_id) {
+        payload.rebook_from = serviceMeta.old_appointment_id
+      }
+
       await api.post('/appointments', payload)
+
       if (onBookingSuccess) onBookingSuccess()
       if (onClose) onClose()
     } catch (err) {
@@ -82,13 +97,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError('')
   }
 
-  // ✅ Prefill default notes for rebook
-  useEffect(() => {
-    if (service && service.rebook) {
-      setNotes(`Rebooking for ${service.name}`)
-    }
-  }, [service])
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -101,7 +109,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           </button>
         </div>
 
-        {/* ✅ Service info summary */}
+        {/* ✅ Service info */}
         <div className="service-info">
           <div className="service-detail">
             <span className="detail-label">Provider:</span>
@@ -178,7 +186,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             </div>
           </div>
 
-          {/* ✅ Appointment preview */}
+          {/* ✅ Appointment Preview */}
           {selectedDate && selectedTime && (
             <div className="appointment-preview">
               <h4>Appointment Request</h4>
@@ -228,7 +236,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <small className="field-hint">{notes.length}/200 characters</small>
           </div>
 
-          {/* ✅ Action buttons */}
+          {/* ✅ Actions */}
           <div className="form-actions">
             <button
               type="button"
