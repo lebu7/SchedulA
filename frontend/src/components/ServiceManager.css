@@ -1,0 +1,182 @@
+.manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.service-form {
+  margin-bottom: 30px;
+  border: 2px solid #f8f9fa;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 15px;
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.service-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 25px;
+  border: 1px solid #e9ecef;
+}
+
+.service-info h4 {
+  margin-bottom: 12px;
+  color: #2c3e50;
+  font-size: 1.2em;
+}
+
+.service-meta {
+  display: flex;
+  gap: 25px;
+  margin-top: 15px;
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.service-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+.no-services {
+  text-align: center;
+  padding: 60px 40px;
+  border: 2px dashed #dee2e6;
+}
+
+.no-services p {
+  margin-bottom: 25px;
+  color: #666;
+  font-size: 16px;
+}
+
+/* Form validation styles */
+.field-error {
+  color: #dc3545;
+  font-size: 14px;
+  margin-top: 5px;
+  display: block;
+}
+
+.field-hint {
+  color: #6c757d;
+  font-size: 12px;
+  margin-top: 5px;
+  display: block;
+}
+
+.form-group input:invalid,
+.form-group select:invalid {
+  border-color: #dc3545;
+}
+
+.form-group input:valid,
+.form-group select:valid {
+  border-color: #28a745;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .service-item {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .service-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .manager-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: flex-start;
+  }
+}
+/* spinner styles */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 1s ease-in-out infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Update button styles for loading states */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary:disabled {
+  background-color: #007bff;
+}
+
+.btn-danger:disabled {
+  background-color: #dc3545;
+}
+
+/* Improve form disabled states */
+.form-group input:disabled,
+.form-group select:disabled,
+.form-group textarea:disabled {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+}
+.service-item.closed {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.closed-badge {
+  color: #dc3545;
+  font-size: 0.9em;
+  margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
