@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import api from '../services/auth'
 import './AppointmentManager.css'
 
-function AppointmentManager({ user }) {
+function AppointmentManager({ user, onRebook }) {
   const [appointments, setAppointments] = useState({ pending: [], scheduled: [], upcoming: [], past: [] })
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(null)
@@ -23,17 +23,21 @@ function AppointmentManager({ user }) {
     }
   }
 
-  const handleDeleteAppointment = async (appointmentId) => {
+  const handleDeleteAppointment = async (id) => {
     if (window.confirm('Remove this appointment from your dashboard?')) {
       try {
-        await api.delete(`/appointments/${appointmentId}`)
+        await api.delete(`/appointments/${id}`)
         await fetchAppointments()
-        alert('Appointment deleted from your dashboard.')
-      } catch (error) {
-        console.error('Error deleting appointment:', error)
+        alert('Appointment deleted.')
+      } catch {
         alert('Failed to delete appointment.')
       }
     }
+  }
+
+  const handleRebook = (serviceId) => {
+    if (onRebook) onRebook(serviceId)
+    else alert('Rebooking feature will open the booking form soon!')
   }
 
   const formatDate = (dateString) => new Date(dateString).toLocaleString('en-KE', {
@@ -54,9 +58,9 @@ function AppointmentManager({ user }) {
     try {
       await api.put(`/appointments/${id}`, { status })
       await fetchAppointments()
-    } catch {
-      alert('Failed to update status.')
-    } finally { setUpdating(null) }
+    } finally {
+      setUpdating(null)
+    }
   }
 
   const handleCancelAppointment = async (id) => {
@@ -86,7 +90,6 @@ function AppointmentManager({ user }) {
                   <p><strong>Duration:</strong> {apt.duration} minutes</p>
                   <p><strong>Price:</strong> KES {apt.price}</p>
                   {getStatusBadge(apt.status)}
-                  {apt.notes && <p><strong>Your Notes:</strong> {apt.notes}</p>}
                 </>
               ) : (
                 <>
@@ -95,7 +98,6 @@ function AppointmentManager({ user }) {
                   <p><strong>Duration:</strong> {apt.duration} minutes</p>
                   <p><strong>Price:</strong> KES {apt.price}</p>
                   {getStatusBadge(apt.status)}
-                  {apt.notes && <p><strong>Notes:</strong> {apt.notes}</p>}
                 </>
               )}
             </div>
@@ -104,16 +106,20 @@ function AppointmentManager({ user }) {
               {user.user_type === 'client' ? (
                 <>
                   {apt.status === 'pending' && (
-                    <button className="btn btn-danger"
-                      onClick={() => handleCancelAppointment(apt.id)}
+                    <button className="btn btn-danger" onClick={() => handleCancelAppointment(apt.id)}
                       disabled={cancelling === apt.id}>
                       {cancelling === apt.id ? 'Cancelling...' : 'Cancel'}
                     </button>
                   )}
-                  {type === 'past' && (
-                    <button className="btn btn-danger" onClick={() => handleDeleteAppointment(apt.id)}>
-                      Delete
-                    </button>
+                  {['completed', 'cancelled', 'no-show'].includes(apt.status) && (
+                    <>
+                      <button className="btn btn-primary" onClick={() => handleRebook(apt.service_id)}>
+                        Rebook
+                      </button>
+                      <button className="btn btn-danger" onClick={() => handleDeleteAppointment(apt.id)}>
+                        Delete
+                      </button>
+                    </>
                   )}
                 </>
               ) : (
@@ -155,9 +161,7 @@ function AppointmentManager({ user }) {
   if (loading)
     return <div className="appointment-manager"><div className="container"><div className="loading">Loading appointments...</div></div></div>
 
-  const tabs = user.user_type === 'client'
-    ? ['pending', 'scheduled', 'past']
-    : ['pending', 'upcoming', 'past']
+  const tabs = user.user_type === 'client' ? ['pending', 'scheduled', 'past'] : ['pending', 'upcoming', 'past']
 
   return (
     <div className="appointment-manager">
