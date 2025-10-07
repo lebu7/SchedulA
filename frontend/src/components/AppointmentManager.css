@@ -163,3 +163,75 @@
   border-radius: 8px;
   padding: 5px 10px;
 }
+/* Provider Status Buttons */
+.status-action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-status {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border: none;
+}
+
+.btn-status.confirm {
+  background-color: #16a34a;
+  color: white;
+}
+
+.btn-status.confirm:hover {
+  background-color: #15803d;
+  transform: scale(1.03);
+}
+
+.btn-status.reject {
+  background-color: #dc2626;
+  color: white;
+}
+
+.btn-status.reject:hover {
+  background-color: #b91c1c;
+  transform: scale(1.03);
+}
+
+/* Compact dropdown style */
+.status-dropdown-container {
+  margin-top: 8px;
+}
+
+.status-select {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #f9fafb;
+  transition: 0.3s;
+}
+
+.status-select:hover {
+  border-color: #93c5fd;
+}
+
+.status-select:focus {
+  border-color: #007bff;
+  outline: none;
+}
+
+/* Keep existing layout responsive */
+@media (max-width: 768px) {
+  .status-action-row {
+    flex-direction: column;
+  }
+  .btn-status {
+    width: 100%;
+  }
+}

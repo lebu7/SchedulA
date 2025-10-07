@@ -45,7 +45,6 @@ function AppointmentManager({ user }) {
     }
   }
 
-  // ✅ Updated handleRebook
   const handleRebook = (apt) => {
     setRebookService({
       id: apt.service_id,
@@ -56,7 +55,7 @@ function AppointmentManager({ user }) {
       opening_time: apt.opening_time || '08:00',
       closing_time: apt.closing_time || '18:00',
       rebook: true,
-      old_appointment_id: apt.id // ✅ now matches BookingModal
+      old_appointment_id: apt.id
     })
     setShowBooking(true)
   }
@@ -109,7 +108,6 @@ function AppointmentManager({ user }) {
     }
   }
 
-  // ✅ Updated handleRebookSuccess to mark old appointment as "rebooked"
   const handleRebookSuccess = async () => {
     if (rebookService?.old_appointment_id) {
       try {
@@ -133,42 +131,24 @@ function AppointmentManager({ user }) {
         {list.map((apt) => (
           <div
             key={apt.id}
-            className={`appointment-card card ${
-              apt.status === 'pending' ? 'highlight-pending' : ''
-            }`}
+            className={`appointment-card ${apt.status === 'pending' ? 'highlight-pending' : ''}`}
           >
             <div className="appointment-info">
               <h4>{apt.service_name}</h4>
               {user.user_type === 'client' ? (
                 <>
-                  <p>
-                    <strong>With:</strong> {apt.provider_name}
-                  </p>
-                  <p>
-                    <strong>When:</strong> {formatDate(apt.appointment_date)}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {apt.duration} minutes
-                  </p>
-                  <p>
-                    <strong>Price:</strong> KES {apt.price}
-                  </p>
+                  <p><strong>With:</strong> {apt.provider_name}</p>
+                  <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                  <p><strong>Duration:</strong> {apt.duration} minutes</p>
+                  <p><strong>Price:</strong> KES {apt.price}</p>
                   {getStatusBadge(apt.status)}
                 </>
               ) : (
                 <>
-                  <p>
-                    <strong>Client:</strong> {apt.client_name} ({apt.client_phone})
-                  </p>
-                  <p>
-                    <strong>When:</strong> {formatDate(apt.appointment_date)}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {apt.duration} minutes
-                  </p>
-                  <p>
-                    <strong>Price:</strong> KES {apt.price}
-                  </p>
+                  <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                  <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                  <p><strong>Duration:</strong> {apt.duration} minutes</p>
+                  <p><strong>Price:</strong> KES {apt.price}</p>
                   {getStatusBadge(apt.status)}
                 </>
               )}
@@ -179,7 +159,7 @@ function AppointmentManager({ user }) {
                 <>
                   {apt.status === 'pending' && (
                     <button
-                      className="btn btn-danger"
+                      className="btn btn-danger small-btn"
                       onClick={() => handleCancelAppointment(apt.id)}
                       disabled={cancelling === apt.id}
                     >
@@ -187,31 +167,20 @@ function AppointmentManager({ user }) {
                     </button>
                   )}
 
-                  {/* ✅ Rebook + Delete aligned on right */}
                   {['cancelled', 'no-show'].includes(apt.status) && (
-                    <div className="action-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => handleRebook(apt)}
-                      >
+                    <div className="action-row">
+                      <button className="btn btn-primary small-btn" onClick={() => handleRebook(apt)}>
                         Rebook
                       </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
+                      <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>
                         Delete
                       </button>
                     </div>
                   )}
 
-                  {/* ✅ Delete only for completed or rebooked */}
                   {['completed', 'rebooked'].includes(apt.status) && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
+                    <div className="action-row">
+                      <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>
                         Delete
                       </button>
                     </div>
@@ -219,47 +188,45 @@ function AppointmentManager({ user }) {
                 </>
               ) : (
                 <>
+                  {/* ✅ Improved Pending UI for Provider */}
                   {apt.status === 'pending' ? (
-                    <>
+                    <div className="status-action-row">
                       <button
-                        className="btn btn-primary"
+                        className="btn-status confirm"
                         onClick={() => handleStatusUpdate(apt.id, 'scheduled')}
+                        disabled={updating === apt.id}
                       >
-                        Confirm
+                        {updating === apt.id ? 'Updating...' : 'Confirm'}
                       </button>
                       <button
-                        className="btn btn-danger"
+                        className="btn-status reject"
                         onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
+                        disabled={updating === apt.id}
                       >
                         Reject
                       </button>
-                    </>
-                  ) : ['completed', 'cancelled', 'no-show', 'rebooked'].includes(
-                      apt.status
-                    ) ? (
+                    </div>
+                  ) : ['completed', 'cancelled', 'no-show', 'rebooked'].includes(apt.status) ? (
                     <>
                       <p className="hint">Status locked</p>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
+                      <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>
                         Delete
                       </button>
                     </>
                   ) : (
-                    <select
-                      value={apt.status}
-                      onChange={(e) =>
-                        handleStatusUpdate(apt.id, e.target.value)
-                      }
-                      disabled={updating === apt.id}
-                      className="status-select"
-                    >
-                      <option value="scheduled">Scheduled</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="no-show">No Show</option>
-                    </select>
+                    <div className="status-dropdown-container">
+                      <select
+                        value={apt.status}
+                        onChange={(e) => handleStatusUpdate(apt.id, e.target.value)}
+                        disabled={updating === apt.id}
+                        className="status-select"
+                      >
+                        <option value="scheduled">Scheduled</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="no-show">No Show</option>
+                      </select>
+                    </div>
                   )}
                 </>
               )}
