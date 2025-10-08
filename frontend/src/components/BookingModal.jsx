@@ -9,8 +9,10 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [booking, setBooking] = useState(false)
   const [error, setError] = useState('')
   const [serviceMeta, setServiceMeta] = useState(service || {})
+  const [availability, setAvailability] = useState(null)
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
 
-  // ✅ Automatically load or refresh the selected service
+  // ✅ Load service info
   useEffect(() => {
     if (service) setServiceMeta(service)
   }, [service])
@@ -22,7 +24,26 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     }
   }, [service])
 
-  // ✅ Format displayed time
+  // ✅ Fetch provider availability for selected date
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      if (!serviceMeta || !selectedDate || !serviceMeta.provider_id) return
+      setLoadingAvailability(true)
+      try {
+        const res = await api.get(
+          `/appointments/providers/${serviceMeta.provider_id}/availability?date=${selectedDate}`
+        )
+        setAvailability(res.data)
+      } catch (err) {
+        console.error('Error fetching availability:', err)
+        setAvailability(null)
+      } finally {
+        setLoadingAvailability(false)
+      }
+    }
+    fetchAvailability()
+  }, [selectedDate, serviceMeta])
+
   const formatTimeDisplay = (timeStr) => {
     const [h, m] = timeStr.split(':').map(Number)
     const period = h >= 12 ? 'PM' : 'AM'
@@ -30,11 +51,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return `${displayHours}:${m.toString().padStart(2, '0')} ${period}`
   }
 
-  // ✅ Submit booking (includes rebook_from if present)
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!selectedDate || !selectedTime) {
       setError('Please select both date and time')
+      return
+    }
+
+    if (availability?.is_closed) {
+      setError('Provider is closed on this date.')
       return
     }
 
@@ -55,25 +80,22 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         notes: notes.trim(),
       }
 
-      // ✅ Include the old appointment ID if this is a rebook
       if (serviceMeta.rebook && serviceMeta.old_appointment_id) {
         payload.rebook_from = serviceMeta.old_appointment_id
       }
 
       await api.post('/appointments', payload)
-
       if (onBookingSuccess) onBookingSuccess()
       if (onClose) onClose()
     } catch (err) {
       console.error('Booking error:', err)
-      const serverMsg = err.response?.data?.error || 'Failed to book appointment.'
-      setError(serverMsg)
+      const msg = err.response?.data?.error || 'Failed to book appointment.'
+      setError(msg)
     } finally {
       setBooking(false)
     }
   }
 
-  // ✅ Limit date range (tomorrow to +30 days)
   const getMinDate = () => {
     const today = new Date()
     today.setDate(today.getDate() + 1)
@@ -97,6 +119,32 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError('')
   }
 
+  // ✅ Generate times within business hours
+  const generateTimeSlots = () => {
+    const open = availability?.opening_time || serviceMeta.opening_time || '08:00'
+    const close = availability?.closing_time || serviceMeta.closing_time || '18:00'
+    const [openH, openM] = open.split(':').map(Number)
+    const [closeH, closeM] = close.split(':').map(Number)
+
+    const slots = []
+    let h = openH
+    let m = openM
+
+    while (h < closeH || (h === closeH && m <= closeM)) {
+      const value = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+      slots.push(value)
+      m += 30
+      if (m >= 60) {
+        m = 0
+        h++
+      }
+    }
+    return slots
+  }
+
+  const isClosed = availability?.is_closed
+  const closedReason = availability?.closed_reason
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -109,7 +157,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           </button>
         </div>
 
-        {/* ✅ Service info */}
         <div className="service-info">
           <div className="service-detail">
             <span className="detail-label">Provider:</span>
@@ -123,15 +170,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <span className="detail-label">Price:</span>
             <span className="detail-value">KES {serviceMeta.price}</span>
           </div>
-          <div className="service-detail">
-            <span className="detail-label">Business hours:</span>
-            <span className="detail-value">
-              {serviceMeta.opening_time || '08:00'} - {serviceMeta.closing_time || '18:00'}
-            </span>
-          </div>
         </div>
 
-        {/* ✅ Booking form */}
         <form onSubmit={handleSubmit} className="booking-form">
           {error && (
             <div className="error-message">
@@ -141,55 +181,53 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
 
           <div className="datetime-picker-container">
             <div className="picker-group">
-              <label htmlFor="appointment-date">Select Date *</label>
+              <label>Select Date *</label>
               <input
-                id="appointment-date"
                 type="date"
                 value={selectedDate}
                 onChange={handleDateChange}
                 min={getMinDate()}
                 max={getMaxDate()}
-                required
                 disabled={booking}
-                className="date-input"
               />
-              <small className="field-hint">
-                Available from {getMinDate()} to {getMaxDate()}
-              </small>
+              {loadingAvailability && <small>Checking provider availability...</small>}
+              {isClosed && (
+                <small className="warning-text">
+                  🚫 Provider is closed on this day{closedReason ? `: ${closedReason}` : ''}.
+                </small>
+              )}
             </div>
 
             <div className="picker-group">
-              <label htmlFor="appointment-time">Select Time *</label>
+              <label>Select Time *</label>
               <select
-                id="appointment-time"
                 value={selectedTime}
                 onChange={handleTimeChange}
-                required
-                disabled={booking || !selectedDate}
-                className="time-select"
+                disabled={
+                  booking || !selectedDate || loadingAvailability || isClosed
+                }
               >
-                <option value="">Choose a time</option>
-                {selectedDate &&
-                  Array.from({ length: 24 * 2 }).map((_, i) => {
-                    const h = Math.floor(i / 2)
-                    const m = (i % 2) * 30
-                    const value = `${h.toString().padStart(2, '0')}:${m
-                      .toString()
-                      .padStart(2, '0')}`
-                    return (
-                      <option key={value} value={value}>
-                        {formatTimeDisplay(value)}
-                      </option>
-                    )
-                  })}
+                <option value="">
+                  {isClosed ? 'Provider closed' : 'Choose a time'}
+                </option>
+                {!isClosed &&
+                  generateTimeSlots().map((time) => (
+                    <option key={time} value={time}>
+                      {formatTimeDisplay(time)}
+                    </option>
+                  ))}
               </select>
+              {availability && !isClosed && (
+                <small>
+                  Business hours: {availability.opening_time} - {availability.closing_time}
+                </small>
+              )}
             </div>
           </div>
 
-          {/* ✅ Appointment Preview */}
-          {selectedDate && selectedTime && (
+          {selectedDate && selectedTime && !isClosed && (
             <div className="appointment-preview">
-              <h4>Appointment Request</h4>
+              <h4>Appointment Summary</h4>
               <div className="preview-details">
                 <div className="preview-item">
                   <span className="preview-label">Date:</span>
@@ -206,50 +244,41 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   <span className="preview-label">Time:</span>
                   <span className="preview-value">{formatTimeDisplay(selectedTime)}</span>
                 </div>
-                <div className="preview-item">
-                  <span className="preview-label">Duration:</span>
-                  <span className="preview-value">{serviceMeta.duration} minutes</span>
-                </div>
                 <div className="preview-item total">
                   <span className="preview-label">Total:</span>
                   <span className="preview-value">KES {serviceMeta.price}</span>
                 </div>
               </div>
-              <small style={{ color: '#555' }}>
-                This request will be <strong>pending</strong> until your provider confirms.
-              </small>
             </div>
           )}
 
-          {/* ✅ Notes */}
           <div className="form-group">
-            <label htmlFor="appointment-notes">Additional Notes (Optional)</label>
+            <label>Additional Notes (Optional)</label>
             <textarea
-              id="appointment-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requirements for the provider..."
               rows="2"
               disabled={booking}
               maxLength="200"
+              placeholder="Any special requirements..."
             />
             <small className="field-hint">{notes.length}/200 characters</small>
           </div>
 
-          {/* ✅ Actions */}
           <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-              disabled={booking}
-            >
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={booking || !selectedDate || !selectedTime}
+              disabled={
+                booking ||
+                !selectedDate ||
+                !selectedTime ||
+                isClosed ||
+                loadingAvailability
+              }
             >
               {booking ? (
                 <>
