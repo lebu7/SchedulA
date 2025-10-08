@@ -30,7 +30,6 @@ function ServiceManager({ user }) {
         service => service.provider_id === user.id
       )
       setServices(myServices)
-      // If all services are closed, mark business closed
       setBusinessClosed(myServices.length > 0 && myServices.every(s => s.is_closed))
     } catch (error) {
       console.error('Error fetching services:', error)
@@ -69,7 +68,7 @@ function ServiceManager({ user }) {
       } else {
         await api.post('/services', submitData)
       }
-      
+
       await fetchMyServices()
       setShowForm(false)
       setEditingService(null)
@@ -123,7 +122,9 @@ function ServiceManager({ user }) {
   const handleToggleService = async (service) => {
     setTogglingId(service.id)
     try {
-      await api.put(`/services/${service.id}`, { is_closed: !service.is_closed })
+      await api.patch(`/services/${service.id}/closure`, {
+        is_closed: service.is_closed ? 0 : 1
+      })
       await fetchMyServices()
     } catch (error) {
       console.error('Error toggling service:', error)
@@ -135,13 +136,16 @@ function ServiceManager({ user }) {
 
   const handleToggleBusiness = async () => {
     try {
-      setBusinessClosed(!businessClosed)
-      for (const service of services) {
-        await api.put(`/services/${service.id}`, { is_closed: !businessClosed })
-      }
+      const newStatus = !businessClosed
+      setBusinessClosed(newStatus)
+      await api.patch(`/services/provider/${user.id}/closure`, {
+        is_closed: newStatus ? 1 : 0
+      })
       await fetchMyServices()
     } catch (error) {
       console.error('Error toggling business:', error)
+      alert('Failed to update business status.')
+      setBusinessClosed(!businessClosed)
     }
   }
 
@@ -180,7 +184,7 @@ function ServiceManager({ user }) {
           <div className="service-form card">
             <h3>{editingService ? 'Edit Service' : 'Create New Service'}</h3>
             {errors.submit && <div className="error-message">{errors.submit}</div>}
-            
+
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Service Name *</label>
