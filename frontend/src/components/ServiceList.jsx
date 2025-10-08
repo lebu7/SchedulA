@@ -23,27 +23,46 @@ function ServiceList({ user }) {
 
   const fetchAllServices = async () => {
     try {
-      const res = await api.get('/services')
-      setAllServices(res.data.services || [])
-    } catch (err) {
-      console.error('Error fetching services:', err)
+      setLoading(true)
+      const response = await api.get('/services')
+      setAllServices(response.data.services || [])
+    } catch (error) {
+      console.error('Error fetching services:', error)
     } finally {
       setLoading(false)
     }
   }
 
   const filterServices = () => {
-    let list = allServices
-    if (searchTerm)
-      list = list.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    if (selectedCategory)
-      list = list.filter(s => s.category === selectedCategory)
-    setFilteredServices(list)
+    let filtered = allServices
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim()
+      filtered = filtered.filter(service => {
+        const fields = [
+          service.name,
+          service.description,
+          service.category,
+          service.provider_name,
+          service.business_name
+        ].filter(Boolean)
+        return fields.some(field => {
+          const words = field.toLowerCase().split(/\s+/)
+          return words.some(word =>
+            word === term || word.startsWith(term)
+          )
+        })
+      })
+    }
+
+    if (selectedCategory) {
+      filtered = filtered.filter(service => service.category === selectedCategory)
+    }
+
+    setFilteredServices(filtered)
   }
 
-  const handleBookClick = service => {
+  const handleBookClick = (service) => {
+    if (service.is_closed) return
     setSelectedService(service)
     setShowBookingModal(true)
   }
@@ -61,48 +80,89 @@ function ServiceList({ user }) {
   return (
     <div className="service-list">
       <div className="container">
-        <h2>Available Services</h2>
+        <div className="service-header">
+          <h2>Available Services</h2>
+
+          <div className="search-filters">
+            <div className="search-group">
+              <input
+                type="text"
+                placeholder="Search services, providers, categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {(searchTerm || selectedCategory) && (
+                <button className="btn btn-secondary" onClick={() => { setSearchTerm(''); setSelectedCategory('') }}>
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+              <option value="">All Categories</option>
+              <option value="Beauty">Beauty & Personal Care</option>
+              <option value="Health">Health & Wellness</option>
+              <option value="Fitness">Fitness & Training</option>
+              <option value="Professional">Professional Services</option>
+              <option value="Automotive">Automotive</option>
+              <option value="Home Services">Home Services</option>
+              <option value="Education">Education & Tutoring</option>
+            </select>
+          </div>
+        </div>
+
+        {bookingSuccess && (
+          <div className="success-message">
+            ✅ Appointment booked successfully! Check your appointments page.
+          </div>
+        )}
 
         {loading ? (
-          <p>Loading...</p>
+          <div className="loading">Loading services...</div>
         ) : (
-          <div className="services-grid">
-            {filteredServices.map(service => (
-              <div
-                key={service.id}
-                className={`service-card ${
-                  service.is_closed ? 'closed-client' : ''
-                }`}
-              >
-                <h3>
-                  {service.name}{' '}
-                  {service.is_closed && (
-                    <span className="closed-badge">(Closed)</span>
-                  )}
-                </h3>
-                <p className="service-category">{service.category}</p>
-                <p className="service-description">{service.description}</p>
-                <div className="service-details">
-                  <span>⏱️ {service.duration} mins</span>
-                  <span>💰 KES {service.price}</span>
-                </div>
-                <div className="service-provider">
-                  <strong>{service.provider_name}</strong>{' '}
-                  {service.business_name && <span>– {service.business_name}</span>}
-                </div>
+          <>
+            <div className="services-grid">
+              {filteredServices.map(service => (
+                <div
+                  key={service.id}
+                  className={`service-card ${service.is_closed ? 'closed-service' : ''}`}
+                  onClick={() => handleBookClick(service)}
+                >
+                  <h3>{service.name}</h3>
+                  <p className="service-category">{service.category}</p>
+                  <p className="service-description">{service.description}</p>
+                  <div className="service-details">
+                    <span>⏱️ {service.duration} minutes</span>
+                    <span>💰 KES {service.price}</span>
+                  </div>
+                  <div className="service-provider">
+                    <strong>{service.provider_name}</strong>
+                    {service.business_name && <span> - {service.business_name}</span>}
+                  </div>
 
-                {user?.user_type === 'client' && (
-                  <button
-                    className="btn btn-primary book-btn"
-                    disabled={service.is_closed}
-                    onClick={() => handleBookClick(service)}
-                  >
-                    {service.is_closed ? 'Unavailable' : 'Book Appointment'}
+                  {user?.user_type === 'client' && (
+                    <button
+                      className="btn btn-primary book-btn"
+                      disabled={service.is_closed}
+                    >
+                      {service.is_closed ? 'Closed' : 'Book Appointment'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {filteredServices.length === 0 && !loading && (
+              <div className="no-services">
+                <p>No services found. Try adjusting your search filters.</p>
+                {(searchTerm || selectedCategory) && (
+                  <button className="btn btn-primary" onClick={() => { setSearchTerm(''); setSelectedCategory('') }}>
+                    Show All Services
                   </button>
                 )}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
 
         {showBookingModal && selectedService && (
