@@ -79,11 +79,13 @@
   padding: 25px;
 }
 
-.form-row {
+/* ✅ Force date & time side by side */
+.form-row,
+.datetime-picker-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 25px;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 20px !important;
+  align-items: start;
 }
 
 .form-group {
@@ -103,6 +105,7 @@ input, select, textarea {
   padding: 10px 12px;
   font-size: 14px;
   transition: border-color 0.3s ease;
+  width: 100%;
 }
 
 input:focus, select:focus, textarea:focus {
@@ -211,10 +214,7 @@ input:disabled, select:disabled, textarea:disabled {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 500px) {
   .modal-content {
     max-width: 95%;
   }

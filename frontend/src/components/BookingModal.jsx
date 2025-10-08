@@ -191,7 +191,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 max={getMaxDate()}
                 disabled={booking || isGloballyClosed}
               />
-              {loadingAvailability && <small>Checking provider availability...</small>}
+              {loadingAvailability && <small>Checking availability...</small>}
               {isClosed && (
                 <small className="warning-text">
                   🚫 Provider closed {closedReason ? `: ${closedReason}` : ""}.
