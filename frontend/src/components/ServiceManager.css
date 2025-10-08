@@ -166,8 +166,23 @@
   cursor: not-allowed;
 }
 .service-item.closed {
-  opacity: 0.5;
+  opacity: 0.6;
   pointer-events: none;
+  position: relative;
+}
+
+.service-item.closed .btn-success {
+  pointer-events: auto;
+  opacity: 1;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  font-weight: 600;
+  transition: background-color 0.3s;
+}
+
+.service-item.closed .btn-success:hover {
+  background-color: #218838;
 }
 
 .closed-badge {

@@ -364,9 +364,11 @@ function ServiceManager({ user }) {
                   )}
                 </button>
                 <button
-                  className="btn btn-primary"
+                  className={`btn ${
+                    service.is_closed ? "btn-success" : "btn-primary"
+                  }`}
                   onClick={() => handleToggleService(service)}
-                  disabled={togglingId === service.id || businessClosed}
+                  disabled={togglingId === service.id}
                 >
                   {togglingId === service.id
                     ? "Updating..."
