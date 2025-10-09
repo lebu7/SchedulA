@@ -1,3 +1,6 @@
+/* ===========================
+   HEADER
+=========================== */
 .manager-header {
   display: flex;
   justify-content: space-between;
@@ -10,24 +13,175 @@
   gap: 10px;
 }
 
-.service-form {
-  margin-bottom: 30px;
-  border: 2px solid #f8f9fa;
-}
-
+/* ===========================
+   SERVICE LIST GRID
+=========================== */
 .services-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
+@media (max-width: 992px) {
+  .services-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .services-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===========================
-   FORM STYLING
+   SERVICE ITEM (CARD)
+=========================== */
+.service-item {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.service-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.service-info h4 {
+  margin-bottom: 10px;
+  color: #2c3e50;
+  font-size: 1.2em;
+}
+
+.service-category {
+  color: #888;
+  font-size: 0.95em;
+  margin-bottom: 10px;
+}
+
+.service-description {
+  color: #555;
+  font-size: 0.95em;
+  margin-bottom: 10px;
+}
+
+.service-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 15px;
+}
+
+/* ===========================
+   SERVICE ACTION BUTTONS
+=========================== */
+.service-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 14px;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+.btn-danger:hover:not(:disabled) {
+  background-color: #c82333;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: #545b62;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+}
+.btn-success:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===========================
+   CLOSED SERVICE
+=========================== */
+.service-item.closed {
+  opacity: 0.6;
+  pointer-events: none;
+  position: relative;
+}
+.service-item.closed .btn-success {
+  pointer-events: auto;
+  opacity: 1;
+}
+.closed-badge {
+  color: #dc3545;
+  font-size: 0.9em;
+  margin-left: 8px;
+}
+
+/* ===========================
+   BUSINESS TOGGLE BUTTONS
+=========================== */
+.header-actions .btn-secondary {
+  background-color: #17a2b8;
+  color: white;
+}
+.header-actions .btn-secondary:hover {
+  background-color: #138496;
+}
+
+.header-actions .btn-primary {
+  background-color: #007bff;
+}
+
+/* When business is closed */
+.business-closed .btn-primary {
+  background-color: #6c757d;
+  color: white;
+}
+
+/* ===========================
+   FORM STYLES
 =========================== */
 .form-row {
-  display: grid !important;
-  grid-template-columns: repeat(3, 1fr) !important;
-  gap: 20px !important;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
 }
 
 .form-group {
@@ -58,143 +212,8 @@
   border-color: #007bff;
 }
 
-.form-group input:disabled,
-.form-group select:disabled,
-.form-group textarea:disabled {
-  background-color: #f8f9fa;
-  cursor: not-allowed;
-}
-
-/* Form Validation */
-.field-error {
-  color: #dc3545;
-  font-size: 14px;
-  margin-top: 5px;
-}
-
-.field-hint {
-  color: #6c757d;
-  font-size: 12px;
-  margin-top: 5px;
-}
-
 /* ===========================
-   SERVICE ITEM STYLING
-=========================== */
-.service-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 25px;
-  border: 1px solid #e9ecef;
-}
-
-.service-info h4 {
-  margin-bottom: 12px;
-  color: #2c3e50;
-  font-size: 1.2em;
-}
-
-.service-meta {
-  display: flex;
-  gap: 25px;
-  margin-top: 15px;
-  font-size: 14px;
-  color: #666;
-  font-weight: 500;
-}
-
-.service-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.service-item.closed {
-  opacity: 0.6;
-  pointer-events: none;
-  position: relative;
-}
-
-.service-item.closed .btn-success {
-  pointer-events: auto;
-  opacity: 1;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  font-weight: 600;
-  transition: background-color 0.3s;
-}
-
-.service-item.closed .btn-success:hover {
-  background-color: #218838;
-}
-
-.closed-badge {
-  color: #dc3545;
-  font-size: 0.9em;
-  margin-left: 8px;
-}
-
-/* ===========================
-   EMPTY STATE
-=========================== */
-.no-services {
-  text-align: center;
-  padding: 60px 40px;
-  border: 2px dashed #dee2e6;
-}
-
-.no-services p {
-  margin-bottom: 25px;
-  color: #666;
-  font-size: 16px;
-}
-
-/* ===========================
-   FORM ACTIONS & BUTTONS
-=========================== */
-.form-actions {
-  display: flex;
-  gap: 15px;
-  margin-top: 25px;
-  padding-top: 20px;
-  border-top: 1px solid #eee;
-}
-
-.btn {
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  padding: 10px 20px;
-  transition: all 0.2s ease;
-}
-
-.btn-primary {
-  background-color: #007bff;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background-color: #c82333;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* ===========================
-   MODAL STYLING
+   MODAL
 =========================== */
 .modal-overlay {
   position: fixed;
@@ -235,20 +254,8 @@
   cursor: pointer;
   color: #333;
 }
-
 .close-btn:hover {
   color: #007bff;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ===========================
@@ -264,7 +271,6 @@
   animation: spin 1s ease-in-out infinite;
   margin-right: 8px;
 }
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -275,25 +281,15 @@
    RESPONSIVE DESIGN
 =========================== */
 @media (max-width: 768px) {
-  .service-item {
-    flex-direction: column;
-    gap: 15px;
+  .form-row {
+    grid-template-columns: 1fr;
   }
-
-  .service-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
   .manager-header {
     flex-direction: column;
     gap: 15px;
     align-items: flex-start;
   }
-}
-
-@media (max-width: 480px) {
-  .form-row {
-    grid-template-columns: repeat(3, 1fr) !important;
+  .service-actions {
+    justify-content: flex-start;
   }
 }
