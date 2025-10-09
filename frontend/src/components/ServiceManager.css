@@ -85,18 +85,22 @@
 =========================== */
 .service-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: nowrap;
+  margin-top: auto;
 }
 
 .btn {
+  flex: 1;
+  text-align: center;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
-  padding: 8px 14px;
+  padding: 8px 12px;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .btn-primary {
@@ -144,10 +148,21 @@
   pointer-events: none;
   position: relative;
 }
+
 .service-item.closed .btn-success {
   pointer-events: auto;
   opacity: 1;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  font-weight: 600;
+  transition: background-color 0.3s;
 }
+
+.service-item.closed .btn-success:hover {
+  background-color: #218838;
+}
+
 .closed-badge {
   color: #dc3545;
   font-size: 0.9em;
@@ -158,21 +173,18 @@
    BUSINESS TOGGLE BUTTONS
 =========================== */
 .header-actions .btn-secondary {
-  background-color: #17a2b8;
+  background-color: #28a745;
   color: white;
 }
 .header-actions .btn-secondary:hover {
-  background-color: #138496;
+  background-color: #218838;
 }
 
-.header-actions .btn-primary {
-  background-color: #007bff;
+.header-actions .btn-secondary.close-business {
+  background-color: #dc3545;
 }
-
-/* When business is closed */
-.business-closed .btn-primary {
-  background-color: #6c757d;
-  color: white;
+.header-actions .btn-secondary.close-business:hover {
+  background-color: #c82333;
 }
 
 /* ===========================
@@ -290,6 +302,6 @@
     align-items: flex-start;
   }
   .service-actions {
-    justify-content: flex-start;
+    flex-direction: column;
   }
 }

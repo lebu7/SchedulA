@@ -180,7 +180,9 @@ function ServiceManager({ user }) {
             </button>
             {services.length > 0 && (
               <button
-                className="btn btn-secondary"
+                className={`btn ${
+                  businessClosed ? "btn-success" : "btn-danger"
+                }`}
                 onClick={handleToggleBusiness}
                 disabled={saving}
               >
@@ -365,7 +367,7 @@ function ServiceManager({ user }) {
                 </button>
                 <button
                   className={`btn ${
-                    service.is_closed ? "btn-success" : "btn-primary"
+                    service.is_closed ? "btn-success" : "btn-danger"
                   }`}
                   onClick={() => handleToggleService(service)}
                   disabled={togglingId === service.id}
