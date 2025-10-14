@@ -30,9 +30,8 @@ function ServiceManager({ user }) {
         (service) => service.provider_id === user.id
       );
       setServices(myServices);
-      setBusinessClosed(
-        myServices.length > 0 && myServices.every((s) => s.is_closed)
-      );
+      // Do NOT automatically change businessClosed based on services
+      // BusinessClosed is only toggled manually
     } catch (error) {
       console.error("Error fetching services:", error);
     }
@@ -123,6 +122,12 @@ function ServiceManager({ user }) {
   };
 
   const handleToggleService = async (service) => {
+    // Prevent toggling individual services if business is explicitly closed
+    if (businessClosed) {
+      alert("Please open your business first before managing individual services.");
+      return;
+    }
+
     setTogglingId(service.id);
     try {
       await api.patch(`/services/${service.id}/closure`, {
@@ -140,7 +145,7 @@ function ServiceManager({ user }) {
   const handleToggleBusiness = async () => {
     try {
       const newStatus = !businessClosed;
-      setBusinessClosed(newStatus);
+      setBusinessClosed(newStatus); // Explicitly toggle the business state
       await api.patch(`/services/provider/${user.id}/closure`, {
         is_closed: newStatus ? 1 : 0,
       });
@@ -209,7 +214,7 @@ function ServiceManager({ user }) {
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    placeholder="e.g., Haircut, Massage"
+                    placeholder="e.g., X Spa, X Barbershop"
                     disabled={saving}
                   />
                   {errors.name && (
@@ -239,14 +244,9 @@ function ServiceManager({ user }) {
                       disabled={saving}
                     >
                       <option value="">Select Category</option>
-                      <option value="Beauty">Beauty & Personal Care</option>
-                      <option value="Health">Health & Wellness</option>
-                      <option value="Fitness">Fitness & Training</option>
-                      <option value="Professional">Professional Services</option>
-                      <option value="Automotive">Automotive</option>
-                      <option value="Home Services">Home Services</option>
-                      <option value="Education">Education & Tutoring</option>
-                      <option value="Other">Other</option>
+                      <option value="Salon">Salon</option>
+                      <option value="Spa">Spa</option>
+                      <option value="Barbershop">Barbershop</option>
                     </select>
                     {errors.category && (
                       <span className="field-error">{errors.category}</span>
@@ -367,7 +367,7 @@ function ServiceManager({ user }) {
                 </button>
                 <button
                   className={`btn ${
-                    service.is_closed ? "btn-success" : "btn-danger"
+                    service.is_closed ? "btn-success" : "btn-primary"
                   }`}
                   onClick={() => handleToggleService(service)}
                   disabled={togglingId === service.id}

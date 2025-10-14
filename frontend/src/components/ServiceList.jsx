@@ -98,16 +98,16 @@ function ServiceList({ user }) {
               )}
             </div>
 
-            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
-              <option value="">All Categories</option>
-              <option value="Beauty">Beauty & Personal Care</option>
-              <option value="Health">Health & Wellness</option>
-              <option value="Fitness">Fitness & Training</option>
-              <option value="Professional">Professional Services</option>
-              <option value="Automotive">Automotive</option>
-              <option value="Home Services">Home Services</option>
-              <option value="Education">Education & Tutoring</option>
-            </select>
+<select
+  value={selectedCategory}
+  onChange={(e) => setSelectedCategory(e.target.value)}
+>
+  <option value="">All Categories</option>
+  <option value="Salon">Salon</option>
+  <option value="Spa">Spa</option>
+  <option value="Barbershop">Barbershop</option>
+</select>
+
           </div>
         </div>
 
