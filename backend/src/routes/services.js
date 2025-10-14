@@ -7,12 +7,17 @@ import { authenticateToken, requireRole } from '../middleware/auth.js'
 const router = express.Router()
 
 /* ---------------------------------------------
-   ✅ GET all services
+   ✅ GET all services (now includes provider hours)
 --------------------------------------------- */
 router.get('/', (req, res) => {
   const { search, category, provider } = req.query
   let query = `
-    SELECT s.*, u.name AS provider_name, u.business_name 
+    SELECT 
+      s.*, 
+      u.name AS provider_name, 
+      u.business_name, 
+      u.opening_time AS provider_opening_time, 
+      u.closing_time AS provider_closing_time
     FROM services s 
     JOIN users u ON s.provider_id = u.id 
     WHERE 1=1
@@ -70,7 +75,9 @@ router.post(
       function (err) {
         if (err) return res.status(500).json({ error: 'Failed to create service' })
         db.get(
-          `SELECT s.*, u.name AS provider_name, u.business_name
+          `SELECT s.*, u.name AS provider_name, u.business_name, 
+                  u.opening_time AS provider_opening_time, 
+                  u.closing_time AS provider_closing_time
            FROM services s JOIN users u ON s.provider_id = u.id
            WHERE s.id = ?`,
           [this.lastID],
@@ -115,7 +122,7 @@ router.put('/:id', authenticateToken, requireRole('provider'), (req, res) => {
 })
 
 /* ---------------------------------------------
-   ✅ PATCH toggle single service (no business effect)
+   ✅ PATCH toggle single service
 --------------------------------------------- */
 router.patch('/:id/closure', authenticateToken, requireRole('provider'), (req, res) => {
   const serviceId = req.params.id
@@ -137,7 +144,6 @@ router.patch('/:id/closure', authenticateToken, requireRole('provider'), (req, r
 
 /* ---------------------------------------------
    ✅ PATCH toggle all provider services
-   Close all or reopen previously open ones
 --------------------------------------------- */
 router.patch('/provider/:id/closure', authenticateToken, requireRole('provider'), (req, res) => {
   const providerId = req.params.id
@@ -166,7 +172,7 @@ router.patch('/provider/:id/closure', authenticateToken, requireRole('provider')
       )
     })
   } else {
-    // reopen only services that were previously open
+    // reopen only previously open services
     db.get(`SELECT open_services FROM provider_service_state WHERE provider_id = ?`, [providerId], (err, row) => {
       if (err) return res.status(500).json({ error: 'Failed to restore services' })
       if (!row || !row.open_services) {
