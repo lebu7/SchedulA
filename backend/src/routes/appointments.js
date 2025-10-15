@@ -244,7 +244,7 @@ router.post('/providers/:id/closed-days', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Check provider availability for given day
+   ✅ FIXED: Check provider availability for given day
 --------------------------------------------- */
 router.get('/providers/:id/availability', (req, res) => {
   const providerId = req.params.id;
@@ -252,24 +252,38 @@ router.get('/providers/:id/availability', (req, res) => {
   if (!date)
     return res.status(400).json({ error: 'Date query parameter is required (YYYY-MM-DD)' });
 
-  db.get(
-    `SELECT is_closed, opening_time, closing_time FROM services WHERE provider_id = ? LIMIT 1`,
+  // Fetch all provider services
+  db.all(
+    `SELECT is_closed, opening_time, closing_time FROM services WHERE provider_id = ?`,
     [providerId],
-    (err, service) => {
-      if (err || !service)
-        return res.status(404).json({ error: 'Provider service not found' });
+    (err, services) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!services || services.length === 0)
+        return res.status(404).json({ error: 'Provider has no registered services' });
 
+      // Business is closed only if *all* services are closed
+      const allClosed = services.every((s) => s.is_closed === 1);
+
+      const opening_time = services[0].opening_time || '08:00';
+      const closing_time = services[0].closing_time || '18:00';
+
+      // Check if provider manually closed that date
       db.get(
         `SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?`,
         [providerId, date],
         (err2, closedDay) => {
+          if (err2) return res.status(500).json({ error: 'Database error' });
+
+          const is_closed = allClosed || !!closedDay;
+
           res.json({
             provider_id: providerId,
             date,
-            is_closed: service.is_closed || !!closedDay,
-            closed_reason: closedDay?.reason || null,
-            opening_time: service.opening_time,
-            closing_time: service.closing_time,
+            is_closed,
+            closed_reason:
+              closedDay?.reason || (allClosed ? 'All services are closed' : null),
+            opening_time,
+            closing_time,
           });
         }
       );
@@ -278,7 +292,7 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update appointment (same as before)
+   ✅ Update appointment
 --------------------------------------------- */
 router.put('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -332,7 +346,7 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Soft delete (same as before)
+   ✅ Soft delete appointment
 --------------------------------------------- */
 router.delete('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
