@@ -6,7 +6,7 @@ import { authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 
 /* ---------------------------------------------
-   ✅ Ensure "rebooked" status exists (safety)
+   ✅ Ensure "rebooked" status exists
 --------------------------------------------- */
 db.get(
   `SELECT sql FROM sqlite_master WHERE type='table' AND name='appointments'`,
@@ -106,7 +106,7 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (checks hours + closure)
+   ✅ Create appointment (checks closure & hours)
 --------------------------------------------- */
 router.post(
   '/',
@@ -131,70 +131,77 @@ router.post(
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!service) return res.status(404).json({ error: 'Service not found' });
 
-      // ❌ If provider is globally closed
-      if (service.is_closed) {
-        return res.status(400).json({
-          error: `${service.name}'s provider is currently closed. Please try later.`,
-        });
-      }
+      // ❌ Provider globally closed
+      if (service.is_closed)
+        return res.status(400).json({ error: `${service.name}'s provider is currently closed.` });
 
-      // ✅ Check if provider marked this day as closed
+      // ✅ Check closed days
       const day = appointmentDate.toISOString().split('T')[0];
       db.get(
         'SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?',
         [service.provider_id, day],
         (err2, closedDay) => {
           if (closedDay)
-            return res
-              .status(400)
-              .json({ error: `Provider is closed on ${day}. Please select another date.` });
-
-          // ✅ Check time within business hours
-          const [hour, minute] = appointmentDate.toISOString().split('T')[1].split(':');
-          const currentTime = `${hour}:${minute}`;
-          if (currentTime < service.opening_time || currentTime > service.closing_time) {
             return res.status(400).json({
-              error: `This provider accepts bookings only between ${service.opening_time} and ${service.closing_time}.`,
+              error: `Provider is closed on ${day}. Please select another date.`,
             });
-          }
 
-          // ✅ Proceed to create appointment
-          db.run(
-            `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status)
-             VALUES (?, ?, ?, ?, ?, 'pending')`,
-            [client_id, service.provider_id, service_id, appointment_date, notes || ''],
-            function (err3) {
+          // ✅ Get provider business hours
+          db.get(
+            `SELECT opening_time, closing_time FROM services WHERE provider_id = ? LIMIT 1`,
+            [service.provider_id],
+            (err3, hours) => {
               if (err3)
-                return res.status(500).json({ error: 'Failed to create appointment' });
+                return res.status(500).json({ error: 'Error checking provider hours' });
 
-              const newAppointmentId = this.lastID;
+              const open = hours?.opening_time || '08:00';
+              const close = hours?.closing_time || '18:00';
+              const [hour, minute] = appointmentDate.toISOString().split('T')[1].split(':');
+              const currentTime = `${hour}:${minute}`;
+              if (currentTime < open || currentTime > close)
+                return res.status(400).json({
+                  error: `Bookings are only allowed between ${open} and ${close}.`,
+                });
 
-              if (rebook_from) {
-                db.run(
-                  `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
-                  [rebook_from, client_id],
-                  (e) => e && console.error('Failed to mark old appointment rebooked:', e)
-                );
-              }
+              // ✅ Insert appointment
+              db.run(
+                `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status)
+                 VALUES (?, ?, ?, ?, ?, 'pending')`,
+                [client_id, service.provider_id, service_id, appointment_date, notes || ''],
+                function (err4) {
+                  if (err4)
+                    return res.status(500).json({ error: 'Failed to create appointment' });
 
-              db.get(
-                `SELECT a.*, s.name AS service_name, s.duration, s.price,
-                        u.name AS provider_name, u.business_name
-                 FROM appointments a
-                 JOIN services s ON a.service_id = s.id
-                 JOIN users u ON a.provider_id = u.id
-                 WHERE a.id = ?`,
-                [newAppointmentId],
-                (e, appointment) => {
-                  if (e)
-                    return res
-                      .status(500)
-                      .json({ error: 'Appointment created but fetch failed' });
-                  res.status(201).json({
-                    message:
-                      'Appointment requested successfully (pending provider confirmation)',
-                    appointment,
-                  });
+                  const newId = this.lastID;
+
+                  if (rebook_from) {
+                    db.run(
+                      `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
+                      [rebook_from, client_id],
+                      (e) => e && console.error('Failed to mark rebooked:', e)
+                    );
+                  }
+
+                  db.get(
+                    `SELECT a.*, s.name AS service_name, s.duration, s.price,
+                            u.name AS provider_name, u.business_name
+                     FROM appointments a
+                     JOIN services s ON a.service_id = s.id
+                     JOIN users u ON a.provider_id = u.id
+                     WHERE a.id = ?`,
+                    [newId],
+                    (e, appointment) => {
+                      if (e)
+                        return res
+                          .status(500)
+                          .json({ error: 'Appointment created but fetch failed' });
+                      res.status(201).json({
+                        message:
+                          'Appointment requested successfully (pending provider confirmation)',
+                        appointment,
+                      });
+                    }
+                  );
                 }
               );
             }
@@ -206,7 +213,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Provider can toggle business open/close
+   ✅ Provider can toggle open/closed status
 --------------------------------------------- */
 router.put('/providers/:id/closed', authenticateToken, (req, res) => {
   const providerId = req.params.id;
@@ -222,6 +229,42 @@ router.put('/providers/:id/closed', authenticateToken, (req, res) => {
     }
   );
 });
+
+/* ---------------------------------------------
+   ✅ Provider sets global business hours
+--------------------------------------------- */
+router.put(
+  '/providers/:id/hours',
+  authenticateToken,
+  [
+    body('opening_time').isString().matches(/^([01]\d|2[0-3]):([0-5]\d)$/),
+    body('closing_time').isString().matches(/^([01]\d|2[0-3]):([0-5]\d)$/),
+  ],
+  (req, res) => {
+    const providerId = req.params.id;
+    const { opening_time, closing_time } = req.body;
+
+    if (opening_time >= closing_time)
+      return res
+        .status(400)
+        .json({ error: 'Closing time must be later than opening time.' });
+
+    db.run(
+      `UPDATE services 
+       SET opening_time = ?, closing_time = ?
+       WHERE id = ? AND user_type = 'provider'`,
+      [opening_time, closing_time, providerId],
+      function (err) {
+        if (err) return res.status(500).json({ error: 'Failed to update business hours' });
+        res.json({
+          message: `Business hours updated for provider ${providerId}`,
+          opening_time,
+          closing_time,
+        });
+      }
+    );
+  }
+);
 
 /* ---------------------------------------------
    ✅ Provider adds closed day
@@ -244,7 +287,7 @@ router.post('/providers/:id/closed-days', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ FIXED: Check provider availability for given day
+   ✅ Check provider availability
 --------------------------------------------- */
 router.get('/providers/:id/availability', (req, res) => {
   const providerId = req.params.id;
@@ -252,22 +295,18 @@ router.get('/providers/:id/availability', (req, res) => {
   if (!date)
     return res.status(400).json({ error: 'Date query parameter is required (YYYY-MM-DD)' });
 
-  // Fetch all provider services
   db.all(
     `SELECT is_closed, opening_time, closing_time FROM services WHERE provider_id = ?`,
     [providerId],
     (err, services) => {
       if (err) return res.status(500).json({ error: 'Database error' });
-      if (!services || services.length === 0)
+      if (!services?.length)
         return res.status(404).json({ error: 'Provider has no registered services' });
 
-      // Business is closed only if *all* services are closed
       const allClosed = services.every((s) => s.is_closed === 1);
+      const opening_time = services[0].opening_time;
+      const closing_time = services[0].closing_time;
 
-      const opening_time = services[0].opening_time || '08:00';
-      const closing_time = services[0].closing_time || '18:00';
-
-      // Check if provider manually closed that date
       db.get(
         `SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?`,
         [providerId, date],

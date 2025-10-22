@@ -19,32 +19,33 @@ function Dashboard({ user }) {
     }
   }, [])
 
-  const fetchHours = async () => {
-    try {
-      const res = await api.get('/auth/profile')
-      if (res.data.user) {
-        setBusinessHours({
-          opening_time: res.data.user.opening_time || '08:00',
-          closing_time: res.data.user.closing_time || '18:00'
-        })
-      }
-    } catch (err) {
-      console.error('Error fetching business hours:', err)
-    }
+const fetchHours = async () => {
+  try {
+    const res = await api.get(`/appointments/providers/${user.id}/availability`, {
+      params: { date: new Date().toISOString().split('T')[0] }
+    })
+    setBusinessHours({
+      opening_time: res.data.opening_time || '08:00',
+      closing_time: res.data.closing_time || '18:00'
+    })
+  } catch (err) {
+    console.error('Error fetching business hours:', err)
   }
+}
 
-  const handleSaveBusinessHours = async () => {
-    try {
-      setSavingHours(true)
-      await api.patch('/auth/hours', businessHours)
-      alert('✅ Business hours updated successfully!')
-    } catch (err) {
-      console.error('Error updating business hours:', err)
-      alert('❌ Failed to update business hours')
-    } finally {
-      setSavingHours(false)
-    }
+const handleSaveBusinessHours = async () => {
+  try {
+    setSavingHours(true);
+    await api.put('/auth/business-hours', businessHours);
+    alert('✅ Business hours updated successfully!');
+    await fetchHours(); // refresh after save
+  } catch (err) {
+    console.error('Error updating business hours:', err);
+    alert('❌ Failed to update business hours');
+  } finally {
+    setSavingHours(false);
   }
+};
 
   const renderContent = () => {
     switch (activeTab) {
