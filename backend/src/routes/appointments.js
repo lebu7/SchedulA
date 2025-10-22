@@ -1,3 +1,4 @@
+// backend/routes/appointments.js
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { db } from '../config/database.js';
@@ -6,7 +7,7 @@ import { authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 
 /* ---------------------------------------------
-   ✅ Ensure "rebooked" status exists
+   ✅ Ensure "rebooked" status exists in table
 --------------------------------------------- */
 db.get(
   `SELECT sql FROM sqlite_master WHERE type='table' AND name='appointments'`,
@@ -24,7 +25,8 @@ db.get(
             provider_id INTEGER NOT NULL,
             service_id INTEGER NOT NULL,
             appointment_date DATETIME NOT NULL,
-            status TEXT DEFAULT 'scheduled' CHECK(status IN ('pending', 'scheduled', 'completed', 'cancelled', 'no-show', 'rebooked')),
+            status TEXT DEFAULT 'scheduled' 
+              CHECK(status IN ('pending', 'scheduled', 'completed', 'cancelled', 'no-show', 'rebooked')),
             notes TEXT,
             client_deleted BOOLEAN DEFAULT 0,
             provider_deleted BOOLEAN DEFAULT 0,
@@ -45,7 +47,7 @@ db.get(
 );
 
 /* ---------------------------------------------
-   ✅ Fetch appointments (client & provider)
+   ✅ Fetch appointments (client or provider)
 --------------------------------------------- */
 router.get('/', authenticateToken, (req, res) => {
   const userId = req.user.userId;
@@ -106,7 +108,7 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (checks closure & hours)
+   ✅ Create new appointment (with hours check)
 --------------------------------------------- */
 router.post(
   '/',
@@ -124,6 +126,7 @@ router.post(
     const { service_id, appointment_date, notes, rebook_from } = req.body;
     const client_id = req.user.userId;
     const appointmentDate = new Date(appointment_date);
+
     if (appointmentDate <= new Date())
       return res.status(400).json({ error: 'Appointment date must be in the future' });
 
@@ -135,8 +138,8 @@ router.post(
       if (service.is_closed)
         return res.status(400).json({ error: `${service.name}'s provider is currently closed.` });
 
-      // ✅ Check closed days
       const day = appointmentDate.toISOString().split('T')[0];
+
       db.get(
         'SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?',
         [service.provider_id, day],
@@ -146,16 +149,19 @@ router.post(
               error: `Provider is closed on ${day}. Please select another date.`,
             });
 
-          // ✅ Get provider business hours
+          // ✅ Get provider hours from users table
           db.get(
-            `SELECT opening_time, closing_time FROM services WHERE provider_id = ? LIMIT 1`,
+            `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
             [service.provider_id],
-            (err3, hours) => {
+            (err3, provider) => {
               if (err3)
                 return res.status(500).json({ error: 'Error checking provider hours' });
+              if (!provider)
+                return res.status(404).json({ error: 'Provider not found' });
 
-              const open = hours?.opening_time || '08:00';
-              const close = hours?.closing_time || '18:00';
+              const open = provider.opening_time || '08:00';
+              const close = provider.closing_time || '18:00';
+
               const [hour, minute] = appointmentDate.toISOString().split('T')[1].split(':');
               const currentTime = `${hour}:${minute}`;
               if (currentTime < open || currentTime > close)
@@ -213,7 +219,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Provider can toggle open/closed status
+   ✅ Provider toggles open/closed status
 --------------------------------------------- */
 router.put('/providers/:id/closed', authenticateToken, (req, res) => {
   const providerId = req.params.id;
@@ -231,7 +237,7 @@ router.put('/providers/:id/closed', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider sets global business hours
+   ✅ Provider sets business hours (✅ fixed)
 --------------------------------------------- */
 router.put(
   '/providers/:id/hours',
@@ -250,12 +256,13 @@ router.put(
         .json({ error: 'Closing time must be later than opening time.' });
 
     db.run(
-      `UPDATE services 
+      `UPDATE users 
        SET opening_time = ?, closing_time = ?
        WHERE id = ? AND user_type = 'provider'`,
       [opening_time, closing_time, providerId],
       function (err) {
         if (err) return res.status(500).json({ error: 'Failed to update business hours' });
+        if (this.changes === 0) return res.status(404).json({ error: 'Provider not found' });
         res.json({
           message: `Business hours updated for provider ${providerId}`,
           opening_time,
@@ -287,7 +294,7 @@ router.post('/providers/:id/closed-days', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Check provider availability
+   ✅ Check provider availability (✅ fixed)
 --------------------------------------------- */
 router.get('/providers/:id/availability', (req, res) => {
   const providerId = req.params.id;
@@ -295,17 +302,15 @@ router.get('/providers/:id/availability', (req, res) => {
   if (!date)
     return res.status(400).json({ error: 'Date query parameter is required (YYYY-MM-DD)' });
 
-  db.all(
-    `SELECT is_closed, opening_time, closing_time FROM services WHERE provider_id = ?`,
+  db.get(
+    `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
     [providerId],
-    (err, services) => {
+    (err, provider) => {
       if (err) return res.status(500).json({ error: 'Database error' });
-      if (!services?.length)
-        return res.status(404).json({ error: 'Provider has no registered services' });
+      if (!provider) return res.status(404).json({ error: 'Provider not found' });
 
-      const allClosed = services.every((s) => s.is_closed === 1);
-      const opening_time = services[0].opening_time;
-      const closing_time = services[0].closing_time;
+      const opening_time = provider.opening_time || '08:00';
+      const closing_time = provider.closing_time || '18:00';
 
       db.get(
         `SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?`,
@@ -313,14 +318,13 @@ router.get('/providers/:id/availability', (req, res) => {
         (err2, closedDay) => {
           if (err2) return res.status(500).json({ error: 'Database error' });
 
-          const is_closed = allClosed || !!closedDay;
+          const is_closed = !!closedDay;
 
           res.json({
             provider_id: providerId,
             date,
             is_closed,
-            closed_reason:
-              closedDay?.reason || (allClosed ? 'All services are closed' : null),
+            closed_reason: closedDay?.reason || null,
             opening_time,
             closing_time,
           });
