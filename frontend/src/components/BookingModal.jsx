@@ -1,3 +1,4 @@
+// BookingModal.jsx
 import React, { useState, useEffect } from "react";
 import api from "../services/auth";
 import "./BookingModal.css";
@@ -120,21 +121,17 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError("");
   };
 
-  /** ✅ Generate available time slots only within provider-set hours */
   const generateTimeSlots = () => {
-    const open = availability?.opening_time || serviceMeta.opening_time;
-    const close = availability?.closing_time || serviceMeta.closing_time;
-
-    // If no hours set, return empty (don’t show dropdown)
-    if (!open || !close) return [];
-
+    const open =
+      availability?.opening_time || serviceMeta.opening_time || "08:00";
+    const close =
+      availability?.closing_time || serviceMeta.closing_time || "18:00";
     const [openH, openM] = open.split(":").map(Number);
     const [closeH, closeM] = close.split(":").map(Number);
     const slots = [];
     let h = openH;
     let m = openM;
-
-    while (h < closeH || (h === closeH && m < closeM)) {
+    while (h < closeH || (h === closeH && m <= closeM)) {
       const value = `${h.toString().padStart(2, "0")}:${m
         .toString()
         .padStart(2, "0")}`;
@@ -148,22 +145,16 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return slots;
   };
 
-  const timeSlots = generateTimeSlots();
   const isClosed = availability?.is_closed;
   const closedReason = availability?.closed_reason;
   const isGloballyClosed = serviceMeta?.is_closed && !availability;
-  const hasConfiguredHours =
-    (availability?.opening_time && availability?.closing_time) ||
-    (serviceMeta?.opening_time && serviceMeta?.closing_time);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{serviceMeta.rebook ? "Rebook" : "Book"} {serviceMeta.name}</h3>
-          <button className="close-btn" onClick={onClose} disabled={booking}>
-            ×
-          </button>
+          <button className="close-btn" onClick={onClose} disabled={booking}>×</button>
         </div>
 
         <div className="service-info">
@@ -208,51 +199,36 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
               )}
             </div>
 
-            {/* ✅ Show time dropdown only if provider has configured hours */}
-            {hasConfiguredHours && (
-              <div className="form-group">
-                <label>Select Time *</label>
-                <select
-                  value={selectedTime}
-                  onChange={handleTimeChange}
-                  disabled={
-                    booking ||
-                    !selectedDate ||
-                    loadingAvailability ||
-                    isClosed ||
-                    isGloballyClosed
-                  }
-                >
-                  <option value="">
-                    {isClosed || isGloballyClosed
-                      ? "Provider closed"
-                      : "Choose a time"}
-                  </option>
-                  {!isClosed &&
-                    !isGloballyClosed &&
-                    timeSlots.map((time) => (
-                      <option key={time} value={time}>
-                        {formatTimeDisplay(time)}
-                      </option>
-                    ))}
-                </select>
-                {availability && !isClosed && (
-                  <small>
-                    Business hours: {availability.opening_time} -{" "}
-                    {availability.closing_time}
-                  </small>
-                )}
-              </div>
-            )}
-
-            {/* 🚫 If no hours configured at all */}
-            {!hasConfiguredHours && (
-              <div className="form-group">
-                <div className="error-message">
-                  ⚠️ Provider has not set business hours yet.
-                </div>
-              </div>
-            )}
+            <div className="form-group">
+              <label>Select Time *</label>
+              <select
+                value={selectedTime}
+                onChange={handleTimeChange}
+                disabled={
+                  booking ||
+                  !selectedDate ||
+                  loadingAvailability ||
+                  isClosed ||
+                  isGloballyClosed
+                }
+              >
+                <option value="">
+                  {isClosed || isGloballyClosed ? "Provider closed" : "Choose a time"}
+                </option>
+                {!isClosed &&
+                  !isGloballyClosed &&
+                  generateTimeSlots().map((time) => (
+                    <option key={time} value={time}>
+                      {formatTimeDisplay(time)}
+                    </option>
+                  ))}
+              </select>
+              {availability && !isClosed && (
+                <small>
+                  Business hours: {availability.opening_time} - {availability.closing_time}
+                </small>
+              )}
+            </div>
           </div>
 
           {selectedDate && selectedTime && !isClosed && !isGloballyClosed && (
@@ -278,7 +254,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 </div>
                 <div className="preview-item total">
                   <span className="preview-label">Total:</span>
-                  <span className="preview-value">KES {serviceMeta.price}</span>
+                  <span className="preview-value">
+                    KES {serviceMeta.price}
+                  </span>
                 </div>
               </div>
             </div>
@@ -298,11 +276,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           </div>
 
           <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
             <button
@@ -314,18 +288,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 !selectedTime ||
                 isClosed ||
                 isGloballyClosed ||
-                loadingAvailability ||
-                !hasConfiguredHours
+                loadingAvailability
               }
             >
               {booking ? (
                 <>
                   <span className="spinner"></span> Sending request...
                 </>
-              ) : serviceMeta.rebook ? (
-                "Confirm Rebook"
               ) : (
-                "Send Request"
+                serviceMeta.rebook ? "Confirm Rebook" : "Send Request"
               )}
             </button>
           </div>
