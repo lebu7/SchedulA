@@ -13,16 +13,19 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [availability, setAvailability] = useState(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
 
+  // Sync selected service
   useEffect(() => {
     if (service) setServiceMeta(service);
   }, [service]);
 
+  // Handle rebook case
   useEffect(() => {
     if (service && service.rebook) {
       setNotes(`Rebooking for ${service.name}`);
     }
   }, [service]);
 
+  // Fetch provider availability for selected date
   useEffect(() => {
     const fetchAvailability = async () => {
       if (!serviceMeta?.provider_id || !selectedDate) return;
@@ -42,6 +45,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     fetchAvailability();
   }, [selectedDate, serviceMeta]);
 
+  // Format 24h -> 12h
   const formatTimeDisplay = (timeStr) => {
     const [h, m] = timeStr.split(":").map(Number);
     const period = h >= 12 ? "PM" : "AM";
@@ -49,6 +53,34 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return `${displayHours}:${m.toString().padStart(2, "0")} ${period}`;
   };
 
+  // Generate time slots based on provider hours
+  const generateTimeSlots = () => {
+    if (!availability || availability.is_closed) return [];
+
+    const open = availability.opening_time || "08:00";
+    const close = availability.closing_time || "18:00";
+    const [openH, openM] = open.split(":").map(Number);
+    const [closeH, closeM] = close.split(":").map(Number);
+
+    const slots = [];
+    let h = openH;
+    let m = openM;
+
+    while (h < closeH || (h === closeH && m < closeM)) {
+      const value = `${h.toString().padStart(2, "0")}:${m
+        .toString()
+        .padStart(2, "0")}`;
+      slots.push(value);
+      m += 30;
+      if (m >= 60) {
+        m = 0;
+        h++;
+      }
+    }
+    return slots;
+  };
+
+  // Submit appointment booking
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedDate || !selectedTime) {
@@ -98,6 +130,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     }
   };
 
+  // Helpers for date limits
   const getMinDate = () => {
     const today = new Date();
     today.setDate(today.getDate() + 1);
@@ -121,30 +154,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError("");
   };
 
-  const generateTimeSlots = () => {
-    const open =
-      availability?.opening_time || serviceMeta.opening_time || "08:00";
-    const close =
-      availability?.closing_time || serviceMeta.closing_time || "18:00";
-    const [openH, openM] = open.split(":").map(Number);
-    const [closeH, closeM] = close.split(":").map(Number);
-    const slots = [];
-    let h = openH;
-    let m = openM;
-    while (h < closeH || (h === closeH && m <= closeM)) {
-      const value = `${h.toString().padStart(2, "0")}:${m
-        .toString()
-        .padStart(2, "0")}`;
-      slots.push(value);
-      m += 30;
-      if (m >= 60) {
-        m = 0;
-        h++;
-      }
-    }
-    return slots;
-  };
-
   const isClosed = availability?.is_closed;
   const closedReason = availability?.closed_reason;
   const isGloballyClosed = serviceMeta?.is_closed && !availability;
@@ -153,8 +162,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{serviceMeta.rebook ? "Rebook" : "Book"} {serviceMeta.name}</h3>
-          <button className="close-btn" onClick={onClose} disabled={booking}>×</button>
+          <h3>
+            {serviceMeta.rebook ? "Rebook" : "Book"} {serviceMeta.name}
+          </h3>
+          <button className="close-btn" onClick={onClose} disabled={booking}>
+            ×
+          </button>
         </div>
 
         <div className="service-info">
@@ -209,13 +222,19 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   !selectedDate ||
                   loadingAvailability ||
                   isClosed ||
-                  isGloballyClosed
+                  isGloballyClosed ||
+                  !availability
                 }
               >
                 <option value="">
-                  {isClosed || isGloballyClosed ? "Provider closed" : "Choose a time"}
+                  {!availability
+                    ? "⚠️ Provider has not set business hours yet"
+                    : isClosed || isGloballyClosed
+                    ? "Provider closed"
+                    : "Choose a time"}
                 </option>
-                {!isClosed &&
+                {availability &&
+                  !isClosed &&
                   !isGloballyClosed &&
                   generateTimeSlots().map((time) => (
                     <option key={time} value={time}>
@@ -225,7 +244,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
               </select>
               {availability && !isClosed && (
                 <small>
-                  Business hours: {availability.opening_time} - {availability.closing_time}
+                  Business hours: {availability.opening_time} -{" "}
+                  {availability.closing_time}
                 </small>
               )}
             </div>
@@ -276,7 +296,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           </div>
 
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onClose}
+            >
               Cancel
             </button>
             <button
@@ -295,8 +319,10 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 <>
                   <span className="spinner"></span> Sending request...
                 </>
+              ) : serviceMeta.rebook ? (
+                "Confirm Rebook"
               ) : (
-                serviceMeta.rebook ? "Confirm Rebook" : "Send Request"
+                "Send Request"
               )}
             </button>
           </div>
