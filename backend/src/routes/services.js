@@ -1,16 +1,30 @@
-// backend/routes/services.js
-import express from 'express'
-import { body, validationResult } from 'express-validator'
-import { db } from '../config/database.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import express from "express";
+import { body, validationResult } from "express-validator";
+import { db } from "../config/database.js";
+import { authenticateToken, requireRole } from "../middleware/auth.js";
 
-const router = express.Router()
+const router = express.Router();
+
+/* ------------------------------------------------
+   🧱 Ensure sub_services table exists
+------------------------------------------------ */
+db.run(`
+  CREATE TABLE IF NOT EXISTS sub_services (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    price REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+  )
+`);
 
 /* ---------------------------------------------
-   ✅ GET all services (now includes provider hours)
+   ✅ GET all services (includes sub-services + provider hours)
 --------------------------------------------- */
-router.get('/', (req, res) => {
-  const { search, category, provider } = req.query
+router.get("/", (req, res) => {
+  const { search, category, provider } = req.query;
   let query = `
     SELECT 
       s.*, 
@@ -21,59 +35,92 @@ router.get('/', (req, res) => {
     FROM services s 
     JOIN users u ON s.provider_id = u.id 
     WHERE 1=1
-  `
-  const params = []
+  `;
+  const params = [];
 
   if (search) {
-    query += ` AND (s.name LIKE ? OR s.description LIKE ? OR u.name LIKE ? OR u.business_name LIKE ?)`
-    const searchTerm = `%${search}%`
-    params.push(searchTerm, searchTerm, searchTerm, searchTerm)
+    query += ` AND (s.name LIKE ? OR s.description LIKE ? OR u.name LIKE ? OR u.business_name LIKE ?)`;
+    const term = `%${search}%`;
+    params.push(term, term, term, term);
   }
 
   if (category) {
-    query += ` AND s.category = ?`
-    params.push(category)
+    query += ` AND s.category = ?`;
+    params.push(category);
   }
 
   if (provider) {
-    query += ` AND u.name LIKE ?`
-    params.push(`%${provider}%`)
+    query += ` AND u.name LIKE ?`;
+    params.push(`%${provider}%`);
   }
 
-  query += ` ORDER BY s.created_at DESC`
+  query += ` ORDER BY s.created_at DESC`;
 
   db.all(query, params, (err, services) => {
-    if (err) return res.status(500).json({ error: 'Failed to fetch services' })
-    res.json({ services })
-  })
-})
+    if (err) return res.status(500).json({ error: "Failed to fetch services" });
+
+    if (!services.length) return res.json({ services: [] });
+
+    // 🔹 Fetch sub-services for all main services
+    const serviceIds = services.map((s) => s.id);
+    const placeholders = serviceIds.map(() => "?").join(",");
+
+    db.all(
+      `SELECT * FROM sub_services WHERE service_id IN (${placeholders})`,
+      serviceIds,
+      (subErr, subs) => {
+        if (subErr)
+          return res
+            .status(500)
+            .json({ error: "Failed to fetch sub-services" });
+
+        // Group sub-services by service_id
+        const subsByService = {};
+        subs.forEach((sub) => {
+          if (!subsByService[sub.service_id]) subsByService[sub.service_id] = [];
+          subsByService[sub.service_id].push(sub);
+        });
+
+        // Attach sub-services to main services
+        const combined = services.map((s) => ({
+          ...s,
+          subservices: subsByService[s.id] || [],
+        }));
+
+        res.json({ services: combined });
+      }
+    );
+  });
+});
 
 /* ---------------------------------------------
    ✅ POST create service
 --------------------------------------------- */
 router.post(
-  '/',
+  "/",
   authenticateToken,
-  requireRole('provider'),
+  requireRole("provider"),
   [
-    body('name').notEmpty(),
-    body('category').notEmpty(),
-    body('duration').isInt({ min: 1 }),
-    body('price').optional().isFloat({ min: 0 }),
+    body("name").notEmpty(),
+    body("category").notEmpty(),
+    body("duration").isInt({ min: 1 }),
+    body("price").optional().isFloat({ min: 0 }),
   ],
   (req, res) => {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
+    const errors = validationResult(req);
+    if (!errors.isEmpty())
+      return res.status(400).json({ errors: errors.array() });
 
-    const { name, description, category, duration, price } = req.body
-    const provider_id = req.user.userId
+    const { name, description, category, duration, price } = req.body;
+    const provider_id = req.user.userId;
 
     db.run(
       `INSERT INTO services (provider_id, name, description, category, duration, price)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [provider_id, name, description, category, duration, price],
       function (err) {
-        if (err) return res.status(500).json({ error: 'Failed to create service' })
+        if (err)
+          return res.status(500).json({ error: "Failed to create service" });
         db.get(
           `SELECT s.*, u.name AS provider_name, u.business_name, 
                   u.opening_time AS provider_opening_time, 
@@ -82,130 +129,192 @@ router.post(
            WHERE s.id = ?`,
           [this.lastID],
           (err2, service) => {
-            if (err2) return res.status(500).json({ error: 'Failed to fetch service' })
-            res.status(201).json({ message: 'Service created', service })
+            if (err2)
+              return res.status(500).json({ error: "Failed to fetch service" });
+            res.status(201).json({ message: "Service created", service });
           }
-        )
+        );
       }
-    )
+    );
   }
-)
+);
 
 /* ---------------------------------------------
    ✅ PUT update service
 --------------------------------------------- */
-router.put('/:id', authenticateToken, requireRole('provider'), (req, res) => {
-  const serviceId = req.params.id
-  const provider_id = req.user.userId
-  const updates = []
-  const params = []
+router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
+  const serviceId = req.params.id;
+  const provider_id = req.user.userId;
+  const updates = [];
+  const params = [];
 
   for (const [key, val] of Object.entries(req.body)) {
     if (val !== undefined) {
-      updates.push(`${key} = ?`)
-      params.push(val)
+      updates.push(`${key} = ?`);
+      params.push(val);
     }
   }
 
-  if (!updates.length) return res.status(400).json({ error: 'No fields to update' })
-  params.push(serviceId, provider_id)
+  if (!updates.length)
+    return res.status(400).json({ error: "No fields to update" });
+  params.push(serviceId, provider_id);
 
   db.run(
-    `UPDATE services SET ${updates.join(', ')} WHERE id = ? AND provider_id = ?`,
+    `UPDATE services SET ${updates.join(", ")} WHERE id = ? AND provider_id = ?`,
     params,
     function (err) {
-      if (err) return res.status(500).json({ error: 'Failed to update service' })
-      if (this.changes === 0) return res.status(404).json({ error: 'Service not found' })
-      res.json({ message: 'Service updated successfully' })
+      if (err)
+        return res.status(500).json({ error: "Failed to update service" });
+      if (this.changes === 0)
+        return res.status(404).json({ error: "Service not found" });
+      res.json({ message: "Service updated successfully" });
     }
-  )
-})
+  );
+});
 
 /* ---------------------------------------------
    ✅ PATCH toggle single service
 --------------------------------------------- */
-router.patch('/:id/closure', authenticateToken, requireRole('provider'), (req, res) => {
-  const serviceId = req.params.id
-  const provider_id = req.user.userId
-  const { is_closed } = req.body
+router.patch(
+  "/:id/closure",
+  authenticateToken,
+  requireRole("provider"),
+  (req, res) => {
+    const serviceId = req.params.id;
+    const provider_id = req.user.userId;
+    const { is_closed } = req.body;
 
-  if (is_closed === undefined) return res.status(400).json({ error: 'is_closed is required (0 or 1)' })
+    if (is_closed === undefined)
+      return res
+        .status(400)
+        .json({ error: "is_closed is required (0 or 1)" });
 
-  db.run(
-    'UPDATE services SET is_closed = ? WHERE id = ? AND provider_id = ?',
-    [is_closed ? 1 : 0, serviceId, provider_id],
-    function (err) {
-      if (err) return res.status(500).json({ error: 'Failed to update service status' })
-      if (this.changes === 0) return res.status(404).json({ error: 'Service not found' })
-      res.json({ message: 'Service status updated', is_closed })
-    }
-  )
-})
-
-/* ---------------------------------------------
-   ✅ PATCH toggle all provider services
---------------------------------------------- */
-router.patch('/provider/:id/closure', authenticateToken, requireRole('provider'), (req, res) => {
-  const providerId = req.params.id
-  const { is_closed } = req.body
-
-  if (is_closed === undefined) return res.status(400).json({ error: 'is_closed required (0 or 1)' })
-
-  if (is_closed) {
-    // store open services before closing all
-    db.all('SELECT id FROM services WHERE provider_id = ? AND is_closed = 0', [providerId], (err, openServices) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch open services' })
-      const openIds = openServices.map(s => s.id)
-      const serialized = JSON.stringify(openIds)
-
-      db.run(`CREATE TABLE IF NOT EXISTS provider_service_state (provider_id INTEGER PRIMARY KEY, open_services TEXT)`)
-
-      db.run(
-        `INSERT OR REPLACE INTO provider_service_state (provider_id, open_services) VALUES (?, ?)`,
-        [providerId, serialized],
-        () => {
-          db.run(`UPDATE services SET is_closed = 1 WHERE provider_id = ?`, [providerId], function (err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to close services' })
-            res.json({ message: 'Business closed successfully', changes: this.changes })
-          })
-        }
-      )
-    })
-  } else {
-    // reopen only previously open services
-    db.get(`SELECT open_services FROM provider_service_state WHERE provider_id = ?`, [providerId], (err, row) => {
-      if (err) return res.status(500).json({ error: 'Failed to restore services' })
-      if (!row || !row.open_services) {
-        return res.json({ message: 'No previous open state found' })
+    db.run(
+      "UPDATE services SET is_closed = ? WHERE id = ? AND provider_id = ?",
+      [is_closed ? 1 : 0, serviceId, provider_id],
+      function (err) {
+        if (err)
+          return res
+            .status(500)
+            .json({ error: "Failed to update service status" });
+        if (this.changes === 0)
+          return res.status(404).json({ error: "Service not found" });
+        res.json({ message: "Service status updated", is_closed });
       }
-      const openIds = JSON.parse(row.open_services)
-      if (!openIds.length) return res.json({ message: 'No open services to restore' })
-
-      const placeholders = openIds.map(() => '?').join(',')
-      db.run(
-        `UPDATE services SET is_closed = 0 WHERE id IN (${placeholders}) AND provider_id = ?`,
-        [...openIds, providerId],
-        function (err2) {
-          if (err2) return res.status(500).json({ error: 'Failed to reopen services' })
-          res.json({ message: 'Business reopened successfully', restored: this.changes })
-        }
-      )
-    })
+    );
   }
-})
+);
 
 /* ---------------------------------------------
    ✅ DELETE service
 --------------------------------------------- */
-router.delete('/:id', authenticateToken, requireRole('provider'), (req, res) => {
-  const serviceId = req.params.id
-  const provider_id = req.user.userId
+router.delete(
+  "/:id",
+  authenticateToken,
+  requireRole("provider"),
+  (req, res) => {
+    const serviceId = req.params.id;
+    const provider_id = req.user.userId;
 
-  db.run('DELETE FROM services WHERE id = ? AND provider_id = ?', [serviceId, provider_id], function (err) {
-    if (err) return res.status(500).json({ error: 'Failed to delete service' })
-    if (this.changes === 0) return res.status(404).json({ error: 'Service not found' })
-    res.json({ message: 'Service deleted successfully' })
-  })
-})
+    db.run(
+      "DELETE FROM services WHERE id = ? AND provider_id = ?",
+      [serviceId, provider_id],
+      function (err) {
+        if (err)
+          return res.status(500).json({ error: "Failed to delete service" });
+        if (this.changes === 0)
+          return res.status(404).json({ error: "Service not found" });
+        res.json({ message: "Service deleted successfully" });
+      }
+    );
+  }
+);
 
-export default router
+/* =====================================================
+   🧩 SUB-SERVICES (Add-ons under each main service)
+===================================================== */
+
+/* ✅ Create sub-service */
+router.post(
+  "/:id/sub-services",
+  authenticateToken,
+  requireRole("provider"),
+  (req, res) => {
+    const serviceId = req.params.id;
+    const providerId = req.user.userId;
+    const { name, description, additional_price } = req.body;
+
+    if (!name) return res.status(400).json({ error: "Name is required" });
+
+    db.get(
+      "SELECT id FROM services WHERE id = ? AND provider_id = ?",
+      [serviceId, providerId],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: "Database error" });
+        if (!row)
+          return res
+            .status(404)
+            .json({ error: "Service not found or not owned by you" });
+
+        db.run(
+          `INSERT INTO sub_services (service_id, name, description, price)
+           VALUES (?, ?, ?, ?)`,
+          [serviceId, name, description || "", additional_price || 0],
+          function (err2) {
+            if (err2) {
+              console.error("💥 Sub-service insert error:", err2);
+              return res.status(500).json({ error: "Failed to add sub-service" });
+            }
+            res.status(201).json({
+              message: "Sub-service created",
+              sub_service: {
+                id: this.lastID,
+                name,
+                description,
+                additional_price,
+              },
+            });
+          }
+        );
+      }
+    );
+  }
+);
+
+
+/* ✅ Get sub-services for one service */
+router.get("/:id/sub-services", (req, res) => {
+  const serviceId = req.params.id;
+  db.all(
+    "SELECT * FROM sub_services WHERE service_id = ? ORDER BY created_at DESC",
+    [serviceId],
+    (err, subs) => {
+      if (err)
+        return res.status(500).json({ error: "Failed to fetch sub-services" });
+      res.json({ sub_services: subs });
+    }
+  );
+});
+
+/* ✅ Delete a sub-service */
+router.delete(
+  "/:serviceId/sub-services/:subId",
+  authenticateToken,
+  requireRole("provider"),
+  (req, res) => {
+    const { serviceId, subId } = req.params;
+    db.run(
+      "DELETE FROM sub_services WHERE id = ? AND service_id = ?",
+      [subId, serviceId],
+      function (err) {
+        if (err)
+          return res.status(500).json({ error: "Failed to delete sub-service" });
+        if (this.changes === 0)
+          return res.status(404).json({ error: "Sub-service not found" });
+        res.json({ message: "Sub-service deleted successfully" });
+      }
+    );
+  }
+);
+
+export default router;

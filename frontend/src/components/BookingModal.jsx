@@ -1,4 +1,3 @@
-// BookingModal.jsx
 import React, { useState, useEffect } from "react";
 import api from "../services/auth";
 import "./BookingModal.css";
@@ -12,20 +11,21 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [serviceMeta, setServiceMeta] = useState(service || {});
   const [availability, setAvailability] = useState(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // ✅ used for auto-refresh
 
-  // Sync selected service
+  // ✅ Keep service info updated
   useEffect(() => {
     if (service) setServiceMeta(service);
   }, [service]);
 
-  // Handle rebook case
+  // ✅ Add default rebook note
   useEffect(() => {
     if (service && service.rebook) {
       setNotes(`Rebooking for ${service.name}`);
     }
   }, [service]);
 
-  // Fetch provider availability for selected date
+  // ✅ Fetch provider availability when date changes or refreshKey updates
   useEffect(() => {
     const fetchAvailability = async () => {
       if (!serviceMeta?.provider_id || !selectedDate) return;
@@ -43,9 +43,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       }
     };
     fetchAvailability();
-  }, [selectedDate, serviceMeta]);
+  }, [selectedDate, serviceMeta, refreshKey]);
 
-  // Format 24h -> 12h
   const formatTimeDisplay = (timeStr) => {
     const [h, m] = timeStr.split(":").map(Number);
     const period = h >= 12 ? "PM" : "AM";
@@ -53,34 +52,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return `${displayHours}:${m.toString().padStart(2, "0")} ${period}`;
   };
 
-  // Generate time slots based on provider hours
-  const generateTimeSlots = () => {
-    if (!availability || availability.is_closed) return [];
-
-    const open = availability.opening_time || "08:00";
-    const close = availability.closing_time || "18:00";
-    const [openH, openM] = open.split(":").map(Number);
-    const [closeH, closeM] = close.split(":").map(Number);
-
-    const slots = [];
-    let h = openH;
-    let m = openM;
-
-    while (h < closeH || (h === closeH && m < closeM)) {
-      const value = `${h.toString().padStart(2, "0")}:${m
-        .toString()
-        .padStart(2, "0")}`;
-      slots.push(value);
-      m += 30;
-      if (m >= 60) {
-        m = 0;
-        h++;
-      }
-    }
-    return slots;
-  };
-
-  // Submit appointment booking
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedDate || !selectedTime) {
@@ -121,6 +92,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       await api.post("/appointments", payload);
       if (onBookingSuccess) onBookingSuccess();
       if (onClose) onClose();
+
+      // ✅ Auto-refresh availability after successful booking
+      setRefreshKey((prev) => prev + 1);
     } catch (err) {
       console.error("Booking error:", err);
       const msg = err.response?.data?.error || "Failed to book appointment.";
@@ -130,7 +104,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     }
   };
 
-  // Helpers for date limits
   const getMinDate = () => {
     const today = new Date();
     today.setDate(today.getDate() + 1);
@@ -147,11 +120,36 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setSelectedDate(e.target.value);
     setSelectedTime("");
     setError("");
+    setAvailability(null);
   };
 
   const handleTimeChange = (e) => {
     setSelectedTime(e.target.value);
     setError("");
+  };
+
+  const generateTimeSlots = () => {
+    const open =
+      availability?.opening_time || serviceMeta.opening_time || "08:00";
+    const close =
+      availability?.closing_time || serviceMeta.closing_time || "18:00";
+    const [openH, openM] = open.split(":").map(Number);
+    const [closeH, closeM] = close.split(":").map(Number);
+    const slots = [];
+    let h = openH;
+    let m = openM;
+    while (h < closeH || (h === closeH && m <= closeM)) {
+      const value = `${h.toString().padStart(2, "0")}:${m
+        .toString()
+        .padStart(2, "0")}`;
+      slots.push(value);
+      m += 30;
+      if (m >= 60) {
+        m = 0;
+        h++;
+      }
+    }
+    return slots;
   };
 
   const isClosed = availability?.is_closed;
@@ -194,6 +192,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           )}
 
           <div className="form-row">
+            {/* DATE PICKER */}
             <div className="form-group">
               <label>Select Date *</label>
               <input
@@ -205,13 +204,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 disabled={booking || isGloballyClosed}
               />
               {loadingAvailability && <small>Checking availability...</small>}
-              {isClosed && (
+              {selectedDate && isClosed && (
                 <small className="warning-text">
-                  🚫 Provider closed {closedReason ? `: ${closedReason}` : ""}.
+                  🚫 Provider closed
+                  {closedReason ? `: ${closedReason}` : ""}.
                 </small>
               )}
             </div>
 
+            {/* TIME PICKER */}
             <div className="form-group">
               <label>Select Time *</label>
               <select
@@ -222,32 +223,35 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   !selectedDate ||
                   loadingAvailability ||
                   isClosed ||
-                  isGloballyClosed ||
-                  !availability
+                  isGloballyClosed
                 }
               >
                 <option value="">
-                  {!availability
-                    ? "⚠️ Provider has not set business hours yet"
+                  {!selectedDate
+                    ? "Select a date first"
                     : isClosed || isGloballyClosed
                     ? "Provider closed"
                     : "Choose a time"}
                 </option>
-                {availability &&
-                  !isClosed &&
+                {!isClosed &&
                   !isGloballyClosed &&
+                  selectedDate &&
                   generateTimeSlots().map((time) => (
                     <option key={time} value={time}>
                       {formatTimeDisplay(time)}
                     </option>
                   ))}
               </select>
-              {availability && !isClosed && (
-                <small>
-                  Business hours: {availability.opening_time} -{" "}
-                  {availability.closing_time}
-                </small>
-              )}
+
+              {availability &&
+                !isClosed &&
+                selectedDate &&
+                availability.opening_time && (
+                  <small>
+                    Business hours: {availability.opening_time} -{" "}
+                    {availability.closing_time}
+                  </small>
+                )}
             </div>
           </div>
 
@@ -296,11 +300,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           </div>
 
           <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
             <button
@@ -319,10 +319,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 <>
                   <span className="spinner"></span> Sending request...
                 </>
-              ) : serviceMeta.rebook ? (
-                "Confirm Rebook"
               ) : (
-                "Send Request"
+                serviceMeta.rebook ? "Confirm Rebook" : "Send Request"
               )}
             </button>
           </div>

@@ -18,6 +18,10 @@ function ServiceManager({ user }) {
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [businessClosed, setBusinessClosed] = useState(false);
+  const [subservices, setSubservices] = useState({});
+  const [newSub, setNewSub] = useState({ name: "", price: "" });
+  const [addingSubFor, setAddingSubFor] = useState(null);
+  const [editingSub, setEditingSub] = useState(null);
 
   useEffect(() => {
     fetchMyServices();
@@ -30,10 +34,21 @@ function ServiceManager({ user }) {
         (service) => service.provider_id === user.id
       );
       setServices(myServices);
-      // Do NOT automatically change businessClosed based on services
-      // BusinessClosed is only toggled manually
+      myServices.forEach((svc) => fetchSubservices(svc.id));
     } catch (error) {
       console.error("Error fetching services:", error);
+    }
+  };
+
+  const fetchSubservices = async (serviceId) => {
+    try {
+      const res = await api.get(`/services/${serviceId}/sub-services`);
+      setSubservices((prev) => ({
+        ...prev,
+        [serviceId]: res.data.sub_services || [],
+      }));
+    } catch (error) {
+      console.error("Error fetching sub-services:", error);
     }
   };
 
@@ -59,7 +74,6 @@ function ServiceManager({ user }) {
         duration: parseInt(formData.duration),
         price: parseFloat(formData.price),
       };
-      await new Promise((resolve) => setTimeout(resolve, 500));
       if (editingService) {
         await api.put(`/services/${editingService.id}`, submitData);
       } else {
@@ -68,14 +82,7 @@ function ServiceManager({ user }) {
       await fetchMyServices();
       setShowForm(false);
       setEditingService(null);
-      setFormData({
-        name: "",
-        description: "",
-        category: "",
-        duration: "",
-        price: "",
-      });
-      setErrors({});
+      resetForm();
     } catch (error) {
       console.error("Error saving service:", error);
       setErrors({ submit: "Failed to save service. Please try again." });
@@ -87,9 +94,7 @@ function ServiceManager({ user }) {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleEdit = (service) => {
@@ -109,12 +114,10 @@ function ServiceManager({ user }) {
     if (window.confirm("Are you sure you want to delete this service?")) {
       setDeletingId(serviceId);
       try {
-        await new Promise((resolve) => setTimeout(resolve, 500));
         await api.delete(`/services/${serviceId}`);
         await fetchMyServices();
       } catch (error) {
         console.error("Error deleting service:", error);
-        alert("Failed to delete service. Please try again.");
       } finally {
         setDeletingId(null);
       }
@@ -122,12 +125,10 @@ function ServiceManager({ user }) {
   };
 
   const handleToggleService = async (service) => {
-    // Prevent toggling individual services if business is explicitly closed
     if (businessClosed) {
-      alert("Please open your business first before managing individual services.");
+      alert("Please open your business first before managing services.");
       return;
     }
-
     setTogglingId(service.id);
     try {
       await api.patch(`/services/${service.id}/closure`, {
@@ -136,7 +137,6 @@ function ServiceManager({ user }) {
       await fetchMyServices();
     } catch (error) {
       console.error("Error toggling service:", error);
-      alert("Failed to update service status");
     } finally {
       setTogglingId(null);
     }
@@ -145,15 +145,62 @@ function ServiceManager({ user }) {
   const handleToggleBusiness = async () => {
     try {
       const newStatus = !businessClosed;
-      setBusinessClosed(newStatus); // Explicitly toggle the business state
+      setBusinessClosed(newStatus);
       await api.patch(`/services/provider/${user.id}/closure`, {
         is_closed: newStatus ? 1 : 0,
       });
       await fetchMyServices();
     } catch (error) {
       console.error("Error toggling business:", error);
-      alert("Failed to update business status.");
       setBusinessClosed(!businessClosed);
+    }
+  };
+
+  const handleAddSubservice = async (serviceId) => {
+    if (!newSub.name.trim() || newSub.price === "") {
+      alert("Please enter a name and price for the add-on.");
+      return;
+    }
+    try {
+      const payload = {
+        name: newSub.name,
+        description: "",
+        additional_price: parseFloat(newSub.price),
+      };
+      await api.post(`/services/${serviceId}/sub-services`, payload);
+      await fetchSubservices(serviceId);
+      setAddingSubFor(null);
+      setNewSub({ name: "", price: "" });
+    } catch (error) {
+      console.error("Error adding sub-service:", error);
+    }
+  };
+
+  const handleUpdateSubservice = async (serviceId, subId) => {
+    if (!editingSub.name.trim()) {
+      alert("Please enter a valid add-on name.");
+      return;
+    }
+    try {
+      await api.put(`/services/${serviceId}/sub-services/${subId}`, {
+        name: editingSub.name,
+        description: "",
+        additional_price: parseFloat(editingSub.price),
+      });
+      await fetchSubservices(serviceId);
+      setEditingSub(null);
+    } catch (error) {
+      console.error("Error updating sub-service:", error);
+    }
+  };
+
+  const handleDeleteSubservice = async (subId, serviceId) => {
+    if (!window.confirm("Delete this add-on?")) return;
+    try {
+      await api.delete(`/services/${serviceId}/sub-services/${subId}`);
+      fetchSubservices(serviceId);
+    } catch (error) {
+      console.error("Error deleting sub-service:", error);
     }
   };
 
@@ -176,20 +223,13 @@ function ServiceManager({ user }) {
         <div className="manager-header">
           <h2>Manage Your Services</h2>
           <div className="header-actions">
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowForm(true)}
-              disabled={saving}
-            >
+            <button className="btn btn-primary" onClick={() => setShowForm(true)}>
               Add New Service
             </button>
             {services.length > 0 && (
               <button
-                className={`btn ${
-                  businessClosed ? "btn-success" : "btn-danger"
-                }`}
+                className={`btn ${businessClosed ? "btn-success" : "btn-danger"}`}
                 onClick={handleToggleBusiness}
-                disabled={saving}
               >
                 {businessClosed ? "Open Business" : "Close Business"}
               </button>
@@ -197,14 +237,13 @@ function ServiceManager({ user }) {
           </div>
         </div>
 
+        {/* SERVICE FORM MODAL */}
         {showForm && (
           <div className="modal-overlay" onClick={resetForm}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h3>{editingService ? "Edit Service" : "Create New Service"}</h3>
-                <button className="close-btn" onClick={resetForm}>
-                  ×
-                </button>
+                <button className="close-btn" onClick={resetForm}>×</button>
               </div>
               <form onSubmit={handleSubmit}>
                 <div className="form-group">
@@ -215,11 +254,8 @@ function ServiceManager({ user }) {
                     value={formData.name}
                     onChange={handleInputChange}
                     placeholder="e.g., X Spa, X Barbershop"
-                    disabled={saving}
                   />
-                  {errors.name && (
-                    <span className="field-error">{errors.name}</span>
-                  )}
+                  {errors.name && <span className="field-error">{errors.name}</span>}
                 </div>
 
                 <div className="form-group">
@@ -230,7 +266,6 @@ function ServiceManager({ user }) {
                     onChange={handleInputChange}
                     rows="3"
                     placeholder="Describe your service..."
-                    disabled={saving}
                   />
                 </div>
 
@@ -241,7 +276,6 @@ function ServiceManager({ user }) {
                       name="category"
                       value={formData.category}
                       onChange={handleInputChange}
-                      disabled={saving}
                     >
                       <option value="">Select Category</option>
                       <option value="Salon">Salon</option>
@@ -263,12 +297,7 @@ function ServiceManager({ user }) {
                       placeholder="e.g., 60"
                       min="15"
                       step="5"
-                      disabled={saving}
                     />
-                    {errors.duration && (
-                      <span className="field-error">{errors.duration}</span>
-                    )}
-                    <small className="field-hint">Minimum 15 minutes</small>
                   </div>
 
                   <div className="form-group">
@@ -281,37 +310,15 @@ function ServiceManager({ user }) {
                       placeholder="e.g., 1500"
                       min="0"
                       step="50"
-                      disabled={saving}
                     />
-                    {errors.price && (
-                      <span className="field-error">{errors.price}</span>
-                    )}
-                    <small className="field-hint">Enter 0 for free service</small>
                   </div>
                 </div>
 
                 <div className="form-actions">
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <>
-                        <span className="spinner"></span> Saving...
-                      </>
-                    ) : editingService ? (
-                      "Update Service"
-                    ) : (
-                      "Create Service"
-                    )}
+                  <button type="submit" className="btn btn-primary" disabled={saving}>
+                    {editingService ? "Update Service" : "Create Service"}
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={resetForm}
-                    disabled={saving}
-                  >
+                  <button type="button" className="btn btn-secondary" onClick={resetForm}>
                     Cancel
                   </button>
                 </div>
@@ -320,76 +327,170 @@ function ServiceManager({ user }) {
           </div>
         )}
 
+        {/* SERVICES LIST */}
         <div className="services-list">
           {services.map((service) => (
-            <div
-              key={service.id}
-              className={`service-item card ${
-                service.is_closed ? "closed" : ""
-              }`}
-            >
+            <div key={service.id} className={`service-item card ${service.is_closed ? "closed" : ""}`}>
               <div className="service-info">
-                <h4>
-                  {service.name}{" "}
-                  {service.is_closed && (
-                    <span className="closed-badge">(Closed)</span>
-                  )}
-                </h4>
+                <h4>{service.name}</h4>
                 <p className="service-category">{service.category}</p>
                 <p className="service-description">{service.description}</p>
                 <div className="service-meta">
-                  <span>Duration: {service.duration} minutes</span>
-                  <span>
-                    Price: {service.price ? `KES ${service.price}` : "Free"}
-                  </span>
+                  <span>Duration: {service.duration} mins</span>
+                  <span>Price: {service.price ? `KES ${service.price}` : "Free"}</span>
                 </div>
               </div>
-              <div className="service-actions">
+
+              {/* SUB-SERVICES */}
+              <div className="subservice-section">
+                <div className="subservice-header">
+                  <h5>Add-ons / Sub-services</h5>
+                </div>
+                <ul className="subservice-list">
+                  {(subservices[service.id] || []).map((sub) => (
+                    <li key={sub.id}>
+                      <span>
+                        {sub.name} — <strong>KES {sub.price}</strong>
+                      </span>
+                      <div className="subservice-actions">
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() =>
+                            setEditingSub({
+                              ...sub,
+                              serviceId: service.id,
+                            })
+                          }
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDeleteSubservice(sub.id, service.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
                 <button
-                  className="btn btn-secondary"
-                  onClick={() => handleEdit(service)}
-                  disabled={saving || deletingId === service.id}
+                  className="add-subservice-btn"
+                  onClick={() => setAddingSubFor(service.id)}
                 >
+                  + Add Add-on
+                </button>
+              </div>
+
+              <div className="service-actions">
+                <button className="btn btn-secondary" onClick={() => handleEdit(service)}>
                   Edit
                 </button>
                 <button
                   className="btn btn-danger"
                   onClick={() => handleDelete(service.id)}
-                  disabled={saving || deletingId === service.id}
+                  disabled={deletingId === service.id}
                 >
-                  {deletingId === service.id ? (
-                    <>
-                      <span className="spinner"></span> Deleting...
-                    </>
-                  ) : (
-                    "Delete"
-                  )}
+                  {deletingId === service.id ? "Deleting..." : "Delete"}
                 </button>
                 <button
-                  className={`btn ${
-                    service.is_closed ? "btn-success" : "btn-primary"
-                  }`}
+                  className={`btn ${service.is_closed ? "btn-success" : "btn-primary"}`}
                   onClick={() => handleToggleService(service)}
-                  disabled={togglingId === service.id}
                 >
-                  {togglingId === service.id
-                    ? "Updating..."
-                    : service.is_closed
-                    ? "Open Service"
-                    : "Close Service"}
+                  {service.is_closed ? "Open" : "Close"}
                 </button>
               </div>
             </div>
           ))}
         </div>
 
+        {/* ADD / EDIT SUBSERVICE MODAL */}
+        {(addingSubFor || editingSub) && (
+          <div
+            className="modal-overlay"
+            onClick={() => {
+              setAddingSubFor(null);
+              setEditingSub(null);
+              setNewSub({ name: "", price: "" });
+            }}
+          >
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>{editingSub ? "Edit Add-on" : "Add New Add-on"}</h3>
+                <button
+                  className="close-btn"
+                  onClick={() => {
+                    setAddingSubFor(null);
+                    setEditingSub(null);
+                    setNewSub({ name: "", price: "" });
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="form-group">
+                <label>Add-on Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Beard Trim"
+                  value={editingSub ? editingSub.name : newSub.name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    editingSub
+                      ? setEditingSub((prev) => ({ ...prev, name: val }))
+                      : setNewSub((prev) => ({ ...prev, name: val }));
+                  }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Price (KES)</label>
+                <input
+                  type="number"
+                  placeholder="e.g., 500"
+                  value={editingSub ? editingSub.price : newSub.price}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    editingSub
+                      ? setEditingSub((prev) => ({ ...prev, price: val }))
+                      : setNewSub((prev) => ({ ...prev, price: val }));
+                  }}
+                />
+              </div>
+
+              <div className="form-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (editingSub) {
+                      handleUpdateSubservice(editingSub.serviceId, editingSub.id);
+                    } else {
+                      handleAddSubservice(addingSubFor);
+                    }
+                  }}
+                >
+                  {editingSub ? "Update Add-on" : "Add Add-on"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setAddingSubFor(null);
+                    setEditingSub(null);
+                    setNewSub({ name: "", price: "" });
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {services.length === 0 && !showForm && (
           <div className="no-services card">
             <p>You haven't created any services yet.</p>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowForm(true)}
-            >
+            <button className="btn btn-primary" onClick={() => setShowForm(true)}>
               Create Your First Service
             </button>
           </div>

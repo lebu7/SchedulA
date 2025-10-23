@@ -184,3 +184,69 @@
   font-weight: bold;
   font-size: 16px;
 }
+/* ===========================
+   ADD-ONS (SUB-SERVICES) IN SERVICE LIST
+=========================== */
+.addons-section {
+  margin-top: 15px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+}
+
+.addons-section .btn-outline {
+  width: 100%;
+  background: #f8f9fa;
+  border: 1px solid #007bff;
+  color: #007bff;
+  border-radius: 8px;
+  font-weight: 600;
+  padding: 10px;
+  transition: all 0.2s ease;
+}
+
+.addons-section .btn-outline:hover {
+  background: #007bff;
+  color: #fff;
+}
+
+.addons-list {
+  margin-top: 12px;
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 15px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.addons-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.addons-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  border: 1px solid #e1e5e9;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #444;
+}
+
+.addons-list li strong {
+  color: #2c3e50;
+}
+
+.addons-list li small {
+  color: #888;
+  margin-left: 4px;
+  font-style: italic;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
