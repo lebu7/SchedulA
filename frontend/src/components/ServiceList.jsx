@@ -14,6 +14,8 @@ function ServiceList({ user }) {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [subServices, setSubServices] = useState({});
   const [expandedServiceId, setExpandedServiceId] = useState(null);
+  const [selectedAddons, setSelectedAddons] = useState({});
+  const [totalPrice, setTotalPrice] = useState({});
 
   useEffect(() => {
     fetchAllServices();
@@ -99,6 +101,23 @@ function ServiceList({ user }) {
     setShowBookingModal(false);
     setSelectedService(null);
   };
+  const handleAddonSelect = (serviceId, addon, isChecked) => {
+  setSelectedAddons((prev) => {
+    const current = prev[serviceId] || [];
+    const updated = isChecked
+      ? [...current, addon]
+      : current.filter((a) => a.id !== addon.id);
+    return { ...prev, [serviceId]: updated };
+  });
+
+  setTotalPrice((prev) => {
+    const base = allServices.find((s) => s.id === serviceId)?.price || 0;
+    const addonsTotal = (selectedAddons[serviceId] || [])
+      .filter((a) => isChecked || a.id !== addon.id)
+      .reduce((sum, a) => sum + parseFloat(a.price || a.additional_price || 0), 0);
+    return { ...prev, [serviceId]: base + addonsTotal };
+  });
+};
 
   return (
     <div className="service-list">
@@ -163,7 +182,13 @@ function ServiceList({ user }) {
                     <p className="service-description">{service.description}</p>
                     <div className="service-details">
                       <span>⏱️ {service.duration} minutes</span>
-                      <span>💰 KES {service.price}</span>
+                        <span>
+                          💰 Total: KES{" "}
+                          {totalPrice[service.id]
+                            ? totalPrice[service.id].toFixed(2)
+                            : parseFloat(service.price).toFixed(2)}
+                        </span>
+
                     </div>
                     <div className="service-provider">
                       <strong>{service.provider_name}</strong>
@@ -196,15 +221,27 @@ function ServiceList({ user }) {
                       <div className="addons-list">
                         {subServices[service.id]?.length ? (
                           <ul>
-                            {subServices[service.id].map((sub) => (
-                              <li key={sub.id}>
-                                <strong>{sub.name}</strong>{" "}
-                                <span>+KES {sub.additional_price}</span>
-                                {sub.description && (
-                                  <small> — {sub.description}</small>
-                                )}
-                              </li>
-                            ))}
+                            {subServices[service.id].map((sub) => {
+                              const isChecked =
+                                selectedAddons[service.id]?.some((a) => a.id === sub.id) || false;
+
+                              return (
+                                <li key={sub.id} className="addon-option">
+                                  <label>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) =>
+                                        handleAddonSelect(service.id, sub, e.target.checked)
+                                      }
+                                    />
+                                    <strong>{sub.name}</strong>{" "}
+                                    <span>+KES {sub.price ?? sub.additional_price}</span>
+                                    {sub.description && <small> — {sub.description}</small>}
+                                  </label>
+                                </li>
+                              );
+                            })}
                           </ul>
                         ) : (
                           <p>No add-ons available.</p>
