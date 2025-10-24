@@ -379,6 +379,74 @@
   display: flex;
   gap: 8px;
 }
+/* ================================
+   Compact & Stylish Add-on Buttons
+================================ */
+.subservice-actions.compact {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-btn {
+  border: none;
+  outline: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn.edit {
+  background: #e9f5ff;
+  color: #007bff;
+  border: 1px solid #b3d9ff;
+}
+
+.icon-btn.edit:hover {
+  background: #007bff;
+  color: #fff;
+}
+
+.icon-btn.delete {
+  background: #ffe9e9;
+  color: #d9534f;
+  border: 1px solid #ffcccc;
+}
+
+.icon-btn.delete:hover {
+  background: #d9534f;
+  color: white;
+}
+.icon-btn.add {
+  background: #f8f9fa;
+  color: #28a745;
+  border: 1px solid #28a745;
+  font-weight: 600;
+  padding: 7px 10px;
+}
+
+.icon-btn.add:hover {
+  background: #218838;
+  color: #fff;
+}
+
+/* Optional: make add-on rows look more unified */
+.addons-dropdown {
+  margin-top: 10px;
+  background: #fdfdfd;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  padding: 10px;
+}
+
+/* Optional: add a little icon scaling on hover */
+.icon-btn:hover {
+  transform: scale(1.05);
+}
 
 .btn-outline {
   background: transparent;
@@ -517,6 +585,7 @@
     transform: translateY(0);
   }
 }
+
 
 
 

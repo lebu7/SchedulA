@@ -433,23 +433,25 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                           <span>
                             {sub.name} — <strong>KES {sub.price}</strong>
                           </span>
-                          <div className="subservice-actions">
+                          <div className="subservice-actions compact">
                             <button
-                              className="btn btn-secondary"
+                              className="icon-btn edit"
                               onClick={() =>
                                 setEditingSub({
                                   ...sub,
                                   serviceId: service.id,
                                 })
                               }
+                              title="Edit Add-on"
                             >
-                              Edit
+                              ✏️
                             </button>
                             <button
-                              className="btn btn-danger"
+                              className="icon-btn delete"
                               onClick={() => handleDeleteSubservice(sub.id, service.id)}
+                              title="Delete Add-on"
                             >
-                              Delete
+                              🗑️
                             </button>
                           </div>
                         </li>
@@ -457,11 +459,13 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                     </ul>
 
                     <button
-                      className="add-subservice-btn"
+                      className="icon-btn add"
                       onClick={() => setAddingSubFor(service.id)}
+                      title="Add new add-on"
                     >
-                      + Add Add-on
+                      ➕ Add Add-on
                     </button>
+
                   </div>
                 )}
               </div>
@@ -545,7 +549,7 @@ const handleUpdateSubservice = async (serviceId, subId) => {
 
               <div className="form-actions">
                 <button
-                  className="btn btn-primary"
+                  className="icon-btn add"
                   onClick={() => {
                     if (editingSub) {
                       handleUpdateSubservice(editingSub.serviceId, editingSub.id);
@@ -554,17 +558,18 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                     }
                   }}
                 >
-                  {editingSub ? "Update Add-on" : "Add Add-on"}
+                  {editingSub ? "💾 Update" : "➕ Add"}
                 </button>
+
                 <button
-                  className="btn btn-secondary"
+                  className="icon-btn delete"
                   onClick={() => {
                     setAddingSubFor(null);
                     setEditingSub(null);
                     setNewSub({ name: "", price: "" });
                   }}
                 >
-                  Cancel
+                  ✖ Cancel
                 </button>
               </div>
             </div>
