@@ -22,8 +22,7 @@ function ServiceManager({ user }) {
   const [newSub, setNewSub] = useState({ name: "", price: "" });
   const [addingSubFor, setAddingSubFor] = useState(null);
   const [editingSub, setEditingSub] = useState(null);
-  const [subSuccess, setSubSuccess] = useState("");
-
+  const [globalSuccess, setGlobalSuccess] = useState("");
 
   useEffect(() => {
     fetchMyServices();
@@ -195,12 +194,12 @@ const handleUpdateSubservice = async (serviceId, subId) => {
     await fetchSubservices(serviceId);
 
     // Show success message briefly
-    setSubSuccess("✅ Add-on updated successfully!");
+    setGlobalSuccess("✅ Add-on updated successfully!");
 
     // Delay modal close slightly so user sees the message
     setTimeout(() => {
       setEditingSub(null);
-      setSubSuccess("");
+      setGlobalSuccess("");
     }, 1500);
   } catch (error) {
     console.error("Error updating sub-service:", error);
@@ -222,6 +221,11 @@ const handleUpdateSubservice = async (serviceId, subId) => {
 
   return (
     <div className="service-manager">
+              {globalSuccess && (
+                <div className="global-success-popup">
+                  {globalSuccess}
+                </div>
+              )}
       <div className="container">
         <div className="manager-header">
           <h2>Manage Your Services</h2>
@@ -377,11 +381,6 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                     </li>
                   ))}
                 </ul>
-                {subSuccess && (
-                <div className="success-message" style={{ marginBottom: "10px" }}>
-                 {subSuccess}
-                </div>
-                )}
 
                 <button
                   className="add-subservice-btn"
@@ -437,10 +436,6 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                   ×
                 </button>
               </div>
-
-              {subSuccess && (
-                <div className="success-banner">{subSuccess}</div>
-              )}
 
               <div className="form-group">
                 <label>Add-on Name *</label>

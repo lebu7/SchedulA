@@ -383,13 +383,37 @@
 .add-subservice-btn:hover {
   background: #218838;
 }
-.success-message {
-  background-color: #d4edda;
-  color: #155724;
-  padding: 10px 14px;
+/* 🔔 Floating top success popup */
+.global-success-popup {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #28a745;
+  color: white;
+  padding: 14px 24px;
   border-radius: 8px;
-  border: 1px solid #c3e6cb;
-  text-align: center;
-  font-weight: 500;
-  animation: fadeIn 0.3s ease-in-out;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  animation: fadeSlideIn 0.4s ease, fadeOut 0.4s ease 1.8s forwards;
 }
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+}
+
