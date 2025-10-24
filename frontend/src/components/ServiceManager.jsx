@@ -23,6 +23,7 @@ function ServiceManager({ user }) {
   const [addingSubFor, setAddingSubFor] = useState(null);
   const [editingSub, setEditingSub] = useState(null);
   const [globalSuccess, setGlobalSuccess] = useState("");
+  const [globalError, setGlobalError] = useState("");
 
   useEffect(() => {
     fetchMyServices();
@@ -158,24 +159,52 @@ function ServiceManager({ user }) {
   };
 
   const handleAddSubservice = async (serviceId) => {
-    if (!newSub.name.trim() || newSub.price === "") {
-      alert("Please enter a name and price for the add-on.");
-      return;
-    }
-    try {
-      const payload = {
-        name: newSub.name,
-        description: "",
-        additional_price: parseFloat(newSub.price),
-      };
-      await api.post(`/services/${serviceId}/sub-services`, payload);
-      await fetchSubservices(serviceId);
-      setAddingSubFor(null);
-      setNewSub({ name: "", price: "" });
-    } catch (error) {
-      console.error("Error adding sub-service:", error);
-    }
-  };
+  if (!newSub.name.trim() || newSub.price === "") {
+    alert("Please enter a name and price for the add-on.");
+    return;
+  }
+  try {
+    const payload = {
+      name: newSub.name,
+      description: "",
+      additional_price: parseFloat(newSub.price),
+    };
+    await api.post(`/services/${serviceId}/sub-services`, payload);
+    await fetchSubservices(serviceId);
+
+    // ✅ Show popup
+    setGlobalSuccess("✅ Add-on created successfully!");
+
+    setTimeout(() => setGlobalSuccess(""), 2000);
+
+    setAddingSubFor(null);
+    setNewSub({ name: "", price: "" });
+  } catch (error) {
+    console.error("Error adding sub-service:", error);
+  }
+};
+
+const handleDeleteSubservice = async (subId, serviceId) => {
+  if (!window.confirm("Are you sure you want to delete this add-on?")) return;
+
+  try {
+    // Delete add-on via API
+    await api.delete(`/services/${serviceId}/sub-services/${subId}`);
+
+    // Refresh sub-services list
+    await fetchSubservices(serviceId);
+
+    // ✅ Show success popup
+    setGlobalSuccess("✅ Add-on deleted successfully!");
+    setTimeout(() => setGlobalSuccess(""), 2000);
+  } catch (error) {
+    console.error("Error deleting sub-service:", error);
+
+    // ❌ Show error popup
+    setGlobalError("❌ Failed to delete add-on. Please try again.");
+    setTimeout(() => setGlobalError(""), 2500);
+  }
+};
 
 const handleUpdateSubservice = async (serviceId, subId) => {
   if (!editingSub.name.trim()) {
@@ -188,19 +217,15 @@ const handleUpdateSubservice = async (serviceId, subId) => {
       description: "",
       additional_price: parseFloat(editingSub.price),
     };
-    await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
 
-    // Refresh list
+    await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
     await fetchSubservices(serviceId);
 
-    // Show success message briefly
+    // ✅ Show popup
     setGlobalSuccess("✅ Add-on updated successfully!");
+    setTimeout(() => setGlobalSuccess(""), 2000);
 
-    // Delay modal close slightly so user sees the message
-    setTimeout(() => {
-      setEditingSub(null);
-      setGlobalSuccess("");
-    }, 1500);
+    setEditingSub(null);
   } catch (error) {
     console.error("Error updating sub-service:", error);
   }
@@ -221,11 +246,8 @@ const handleUpdateSubservice = async (serviceId, subId) => {
 
   return (
     <div className="service-manager">
-              {globalSuccess && (
-                <div className="global-success-popup">
-                  {globalSuccess}
-                </div>
-              )}
+              {globalSuccess && <div className="global-success-popup">{globalSuccess}</div>}
+              {globalError && <div className="global-error-popup">{globalError}</div>}    
       <div className="container">
         <div className="manager-header">
           <h2>Manage Your Services</h2>
