@@ -482,5 +482,41 @@
 .closed-service .btn-success:hover {
   background-color: #218838;
 }
+/* ========== COLLAPSIBLE ADD-ONS SECTION ========== */
+.toggle-addons-btn {
+  background: #007bff;
+  color: white;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+
+.toggle-addons-btn:hover {
+  background: #0056b3;
+}
+
+.addons-dropdown {
+  margin-top: 12px;
+  background: #f8f9fa;
+  border: 1px solid #e1e5e9;
+  border-radius: 10px;
+  padding: 15px;
+  animation: slideDown 0.3s ease forwards;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 
 

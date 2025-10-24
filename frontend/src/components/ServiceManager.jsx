@@ -24,6 +24,8 @@ function ServiceManager({ user }) {
   const [editingSub, setEditingSub] = useState(null);
   const [globalSuccess, setGlobalSuccess] = useState("");
   const [globalError, setGlobalError] = useState("");
+  const [expandedService, setExpandedService] = useState(null);
+
 
   useEffect(() => {
     fetchMyServices();
@@ -413,43 +415,55 @@ const handleUpdateSubservice = async (serviceId, subId) => {
               {/* SUB-SERVICES */}
               <div className="subservice-section">
                 <div className="subservice-header">
-                  <h5>Add-ons / Sub-services</h5>
+                  <button
+                    className="toggle-addons-btn"
+                    onClick={() =>
+                      setExpandedService(expandedService === service.id ? null : service.id)
+                    }
+                  >
+                    {expandedService === service.id ? "Hide Add-ons" : "View Add-ons"}
+                  </button>
                 </div>
-                <ul className="subservice-list">
-                  {(subservices[service.id] || []).map((sub) => (
-                    <li key={sub.id}>
-                      <span>
-                        {sub.name} — <strong>KES {sub.price}</strong>
-                      </span>
-                      <div className="subservice-actions">
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() =>
-                            setEditingSub({
-                              ...sub,
-                              serviceId: service.id,
-                            })
-                          }
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-danger"
-                          onClick={() => handleDeleteSubservice(sub.id, service.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
 
-                <button
-                  className="add-subservice-btn"
-                  onClick={() => setAddingSubFor(service.id)}
-                >
-                  + Add Add-on
-                </button>
+                {expandedService === service.id && (
+                  <div className="addons-dropdown">
+                    <ul className="subservice-list">
+                      {(subservices[service.id] || []).map((sub) => (
+                        <li key={sub.id}>
+                          <span>
+                            {sub.name} — <strong>KES {sub.price}</strong>
+                          </span>
+                          <div className="subservice-actions">
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() =>
+                                setEditingSub({
+                                  ...sub,
+                                  serviceId: service.id,
+                                })
+                              }
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="btn btn-danger"
+                              onClick={() => handleDeleteSubservice(sub.id, service.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <button
+                      className="add-subservice-btn"
+                      onClick={() => setAddingSubFor(service.id)}
+                    >
+                      + Add Add-on
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="service-actions">
