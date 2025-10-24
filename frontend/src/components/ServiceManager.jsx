@@ -127,22 +127,35 @@ function ServiceManager({ user }) {
   };
 
   const handleToggleService = async (service) => {
-    if (businessClosed) {
-      alert("Please open your business first before managing services.");
-      return;
-    }
-    setTogglingId(service.id);
-    try {
-      await api.patch(`/services/${service.id}/closure`, {
-        is_closed: service.is_closed ? 0 : 1,
-      });
-      await fetchMyServices();
-    } catch (error) {
-      console.error("Error toggling service:", error);
-    } finally {
-      setTogglingId(null);
-    }
-  };
+  setTogglingId(service.id);
+  try {
+    const updatedStatus = service.is_closed ? 0 : 1;
+
+    await api.patch(`/services/${service.id}/closure`, {
+      is_closed: updatedStatus,
+    });
+
+    // Update local state without refetch
+    setServices((prev) =>
+      prev.map((s) =>
+        s.id === service.id ? { ...s, is_closed: updatedStatus } : s
+      )
+    );
+
+    setGlobalSuccess(
+      updatedStatus
+        ? "✅ Service closed successfully!"
+        : "✅ Service opened successfully!"
+    );
+    setTimeout(() => setGlobalSuccess(""), 2000);
+  } catch (error) {
+    console.error("Error toggling service:", error);
+    setGlobalError("❌ Failed to toggle service. Try again.");
+    setTimeout(() => setGlobalError(""), 2000);
+  } finally {
+    setTogglingId(null);
+  }
+};
 
   const handleToggleBusiness = async () => {
   try {

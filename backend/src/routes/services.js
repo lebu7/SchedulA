@@ -176,6 +176,34 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
    ✅ PATCH toggle single service
 --------------------------------------------- */
 router.patch(
+  "/:id/closure",
+  authenticateToken,
+  requireRole("provider"),
+  (req, res) => {
+    const serviceId = req.params.id;
+    const providerId = req.user.userId;
+    const { is_closed } = req.body;
+
+    if (is_closed === undefined)
+      return res.status(400).json({ error: "is_closed is required (0 or 1)" });
+
+    db.run(
+      "UPDATE services SET is_closed = ? WHERE id = ? AND provider_id = ?",
+      [is_closed ? 1 : 0, serviceId, providerId],
+      function (err) {
+        if (err)
+          return res.status(500).json({ error: "Failed to update service status" });
+        if (this.changes === 0)
+          return res.status(404).json({ error: "Service not found or not owned by you" });
+        res.json({
+          message: `Service ${is_closed ? "closed" : "opened"} successfully`,
+          is_closed,
+        });
+      }
+    );
+  }
+);
+router.patch(
   "/provider/:providerId/closure",
   authenticateToken,
   requireRole("provider"),
