@@ -161,26 +161,22 @@ function ServiceManager({ user }) {
   try {
     const newStatus = !businessClosed;
 
-    // Update all services for this provider
+    // 🔄 Update business closure on backend
     await api.patch(`/services/provider/${user.id}/closure`, {
       is_closed: newStatus ? 1 : 0,
     });
 
-    // Reflect on frontend
+    // ✅ Refetch services to sync exact state from DB
+    await fetchMyServices();
+
+    // Reflect new business toggle state
     setBusinessClosed(newStatus);
 
-    // Update each service visually
-    setServices((prev) =>
-      prev.map((s) => ({
-        ...s,
-        is_closed: newStatus ? 1 : 0,
-      }))
-    );
-
+    // 🟢 Show popup
     setGlobalSuccess(
       newStatus
-        ? "✅ Business closed — all services are now unavailable to clients."
-        : "✅ Business opened — services are available again."
+        ? "✅ Business closed — all active services have been temporarily closed."
+        : "✅ Business reopened — only services closed by business reopened."
     );
     setTimeout(() => setGlobalSuccess(""), 3000);
   } catch (error) {
@@ -189,7 +185,6 @@ function ServiceManager({ user }) {
     setTimeout(() => setGlobalError(""), 3000);
   }
 };
-
 
   const handleAddSubservice = async (serviceId) => {
   if (!newSub.name.trim() || newSub.price === "") {

@@ -20,6 +20,18 @@ db.run(`
   )
 `);
 
+/* ------------------------------------------------
+   ✅ Ensure closed_by_business column exists
+------------------------------------------------ */
+db.run(
+  `ALTER TABLE services ADD COLUMN closed_by_business INTEGER DEFAULT 0`,
+  (err) => {
+    if (err && !err.message.includes("duplicate column")) {
+      console.error("Error adding closed_by_business column:", err);
+    }
+  }
+);
+
 /* ---------------------------------------------
    ✅ GET all services (includes sub-services + provider hours)
 --------------------------------------------- */
@@ -70,9 +82,7 @@ router.get("/", (req, res) => {
       serviceIds,
       (subErr, subs) => {
         if (subErr)
-          return res
-            .status(500)
-            .json({ error: "Failed to fetch sub-services" });
+          return res.status(500).json({ error: "Failed to fetch sub-services" });
 
         // Group sub-services by service_id
         const subsByService = {};
@@ -194,7 +204,9 @@ router.patch(
         if (err)
           return res.status(500).json({ error: "Failed to update service status" });
         if (this.changes === 0)
-          return res.status(404).json({ error: "Service not found or not owned by you" });
+          return res
+            .status(404)
+            .json({ error: "Service not found or not owned by you" });
         res.json({
           message: `Service ${is_closed ? "closed" : "opened"} successfully`,
           is_closed,
@@ -203,6 +215,12 @@ router.patch(
     );
   }
 );
+
+/* ---------------------------------------------
+   ✅ PATCH toggle all services for a provider
+   - Close: closes all open services
+   - Open: only reopens those closed by business
+--------------------------------------------- */
 router.patch(
   "/provider/:providerId/closure",
   authenticateToken,
@@ -214,24 +232,42 @@ router.patch(
     if (is_closed === undefined)
       return res.status(400).json({ error: "is_closed is required (0 or 1)" });
 
-    // Update all services for that provider
-    db.run(
-      "UPDATE services SET is_closed = ? WHERE provider_id = ?",
-      [is_closed ? 1 : 0, providerId],
-      function (err) {
-        if (err)
-          return res
-            .status(500)
-            .json({ error: "Failed to update business service status" });
+    let query, params;
 
-        res.json({
-          message: `All services ${
-            is_closed ? "closed" : "opened"
-          } successfully`,
-          is_closed,
-        });
+    if (is_closed) {
+      // ✅ Close business: mark open services as closed & tag them
+      query = `
+        UPDATE services
+        SET is_closed = 1, closed_by_business = 1
+        WHERE provider_id = ? AND is_closed = 0
+      `;
+      params = [providerId];
+    } else {
+      // ✅ Reopen business: only open services that were closed by business
+      query = `
+        UPDATE services
+        SET is_closed = 0, closed_by_business = 0
+        WHERE provider_id = ? AND closed_by_business = 1
+      `;
+      params = [providerId];
+    }
+
+    db.run(query, params, function (err) {
+      if (err) {
+        console.error("❌ Error toggling business closure:", err);
+        return res
+          .status(500)
+          .json({ error: "Failed to toggle business closure" });
       }
-    );
+
+      res.json({
+        message: is_closed
+          ? "✅ Business closed — all active services have been temporarily closed."
+          : "✅ Business reopened — only business-closed services reopened.",
+        is_closed,
+        affected: this.changes,
+      });
+    });
   }
 );
 
@@ -293,7 +329,9 @@ router.post(
           function (err2) {
             if (err2) {
               console.error("💥 Sub-service insert error:", err2);
-              return res.status(500).json({ error: "Failed to add sub-service" });
+              return res
+                .status(500)
+                .json({ error: "Failed to add sub-service" });
             }
             res.status(201).json({
               message: "Sub-service created",
@@ -310,7 +348,6 @@ router.post(
     );
   }
 );
-
 
 /* ✅ Get sub-services for one service */
 router.get("/:id/sub-services", (req, res) => {
@@ -346,6 +383,7 @@ router.delete(
     );
   }
 );
+
 /* ✅ Update a sub-service */
 router.put(
   "/:serviceId/sub-services/:subId",
