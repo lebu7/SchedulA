@@ -151,19 +151,14 @@ function ServiceList({ user }) {
           <>
             <div className="services-grid">
               {filteredServices.map((service) => (
-                <div
-                  key={service.id}
-                  className={`service-card ${
-                    service.is_closed ? "closed-service" : ""
-                  }`}
-                >
+                <div className={`service-card ${service.is_closed ? "closed-service" : ""}`} data-status={service.is_closed ? "Closed" : ""}>
                   <div
                     className="service-main"
                     onClick={() =>
                       !service.is_closed && handleBookClick(service)
                     }
                   >
-                    <h3>{service.name}</h3>
+
                     <p className="service-category">{service.category}</p>
                     <p className="service-description">{service.description}</p>
                     <div className="service-details">

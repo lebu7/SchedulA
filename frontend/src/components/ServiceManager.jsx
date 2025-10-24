@@ -145,18 +145,38 @@ function ServiceManager({ user }) {
   };
 
   const handleToggleBusiness = async () => {
-    try {
-      const newStatus = !businessClosed;
-      setBusinessClosed(newStatus);
-      await api.patch(`/services/provider/${user.id}/closure`, {
+  try {
+    const newStatus = !businessClosed;
+
+    // Update all services for this provider
+    await api.patch(`/services/provider/${user.id}/closure`, {
+      is_closed: newStatus ? 1 : 0,
+    });
+
+    // Reflect on frontend
+    setBusinessClosed(newStatus);
+
+    // Update each service visually
+    setServices((prev) =>
+      prev.map((s) => ({
+        ...s,
         is_closed: newStatus ? 1 : 0,
-      });
-      await fetchMyServices();
-    } catch (error) {
-      console.error("Error toggling business:", error);
-      setBusinessClosed(!businessClosed);
-    }
-  };
+      }))
+    );
+
+    setGlobalSuccess(
+      newStatus
+        ? "✅ Business closed — all services are now unavailable to clients."
+        : "✅ Business opened — services are available again."
+    );
+    setTimeout(() => setGlobalSuccess(""), 3000);
+  } catch (error) {
+    console.error("Error toggling business:", error);
+    setGlobalError("❌ Failed to toggle business. Try again.");
+    setTimeout(() => setGlobalError(""), 3000);
+  }
+};
+
 
   const handleAddSubservice = async (serviceId) => {
   if (!newSub.name.trim() || newSub.price === "") {
@@ -357,9 +377,21 @@ const handleUpdateSubservice = async (serviceId, subId) => {
         )}
 
         {/* SERVICES LIST */}
-        <div className="services-list">
+        <div className= "services-list">
           {services.map((service) => (
-            <div key={service.id} className={`service-item card ${service.is_closed ? "closed" : ""}`}>
+            <div
+              key={service.id}
+              className={`service-item card ${
+                businessClosed || service.is_closed ? "closed-service" : ""
+              }`}
+              data-status={
+                businessClosed
+                  ? "Business Closed"
+                  : service.is_closed
+                  ? "Service Closed"
+                  : ""
+              }
+            >
               <div className="service-info">
                 <h4>{service.name}</h4>
                 <p className="service-category">{service.category}</p>
