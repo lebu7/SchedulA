@@ -316,5 +316,39 @@ router.delete(
     );
   }
 );
+/* ✅ Update a sub-service */
+router.put(
+  "/:serviceId/sub-services/:subId",
+  authenticateToken,
+  requireRole("provider"),
+  (req, res) => {
+    const { serviceId, subId } = req.params;
+    const { name, description, additional_price } = req.body;
+
+    if (!name || additional_price === undefined) {
+      return res.status(400).json({ error: "Name and price are required" });
+    }
+
+    db.run(
+      `UPDATE sub_services 
+       SET name = ?, description = ?, price = ? 
+       WHERE id = ? AND service_id = ?`,
+      [name, description || "", additional_price, subId, serviceId],
+      function (err) {
+        if (err) {
+          console.error("💥 Sub-service update error:", err);
+          return res.status(500).json({ error: "Failed to update sub-service" });
+        }
+        if (this.changes === 0) {
+          return res.status(404).json({ error: "Sub-service not found" });
+        }
+        res.json({
+          message: "Sub-service updated successfully",
+          sub_service: { id: subId, name, description, price: additional_price },
+        });
+      }
+    );
+  }
+);
 
 export default router;

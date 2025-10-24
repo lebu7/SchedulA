@@ -22,6 +22,8 @@ function ServiceManager({ user }) {
   const [newSub, setNewSub] = useState({ name: "", price: "" });
   const [addingSubFor, setAddingSubFor] = useState(null);
   const [editingSub, setEditingSub] = useState(null);
+  const [subSuccess, setSubSuccess] = useState("");
+
 
   useEffect(() => {
     fetchMyServices();
@@ -176,33 +178,34 @@ function ServiceManager({ user }) {
     }
   };
 
-  const handleUpdateSubservice = async (serviceId, subId) => {
-    if (!editingSub.name.trim()) {
-      alert("Please enter a valid add-on name.");
-      return;
-    }
-    try {
-      await api.put(`/services/${serviceId}/sub-services/${subId}`, {
-        name: editingSub.name,
-        description: "",
-        additional_price: parseFloat(editingSub.price),
-      });
-      await fetchSubservices(serviceId);
-      setEditingSub(null);
-    } catch (error) {
-      console.error("Error updating sub-service:", error);
-    }
-  };
+const handleUpdateSubservice = async (serviceId, subId) => {
+  if (!editingSub.name.trim()) {
+    alert("Please enter a valid add-on name.");
+    return;
+  }
+  try {
+    const payload = {
+      name: editingSub.name,
+      description: "",
+      additional_price: parseFloat(editingSub.price),
+    };
+    await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
 
-  const handleDeleteSubservice = async (subId, serviceId) => {
-    if (!window.confirm("Delete this add-on?")) return;
-    try {
-      await api.delete(`/services/${serviceId}/sub-services/${subId}`);
-      fetchSubservices(serviceId);
-    } catch (error) {
-      console.error("Error deleting sub-service:", error);
-    }
-  };
+    // Refresh list
+    await fetchSubservices(serviceId);
+
+    // Show success message briefly
+    setSubSuccess("✅ Add-on updated successfully!");
+
+    // Delay modal close slightly so user sees the message
+    setTimeout(() => {
+      setEditingSub(null);
+      setSubSuccess("");
+    }, 1500);
+  } catch (error) {
+    console.error("Error updating sub-service:", error);
+  }
+};
 
   const resetForm = () => {
     setShowForm(false);
@@ -374,6 +377,12 @@ function ServiceManager({ user }) {
                     </li>
                   ))}
                 </ul>
+                {subSuccess && (
+                <div className="success-message" style={{ marginBottom: "10px" }}>
+                 {subSuccess}
+                </div>
+                )}
+
                 <button
                   className="add-subservice-btn"
                   onClick={() => setAddingSubFor(service.id)}
@@ -428,6 +437,10 @@ function ServiceManager({ user }) {
                   ×
                 </button>
               </div>
+
+              {subSuccess && (
+                <div className="success-banner">{subSuccess}</div>
+              )}
 
               <div className="form-group">
                 <label>Add-on Name *</label>
