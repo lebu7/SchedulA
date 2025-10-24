@@ -102,23 +102,26 @@ function ServiceList({ user }) {
     setSelectedService(null);
   };
   const handleAddonSelect = (serviceId, addon, isChecked) => {
-  setSelectedAddons((prev) => {
-    const current = prev[serviceId] || [];
+  setSelectedAddons((prevSelectedAddons) => {
+    const current = prevSelectedAddons[serviceId] || [];
     const updated = isChecked
       ? [...current, addon]
       : current.filter((a) => a.id !== addon.id);
-    return { ...prev, [serviceId]: updated };
-  });
-
-  setTotalPrice((prev) => {
-    const base = allServices.find((s) => s.id === serviceId)?.price || 0;
-    const addonsTotal = (selectedAddons[serviceId] || [])
-      .filter((a) => isChecked || a.id !== addon.id)
-      .reduce((sum, a) => sum + parseFloat(a.price || a.additional_price || 0), 0);
-    return { ...prev, [serviceId]: base + addonsTotal };
+    
+    // Calculate price using the UPDATED addons list
+    const basePrice = allServices.find((s) => s.id === serviceId)?.price || 0;
+    const addonsTotal = updated.reduce((sum, a) => 
+      sum + parseFloat(a.price || a.additional_price || 0), 0);
+    
+    // Update both states together
+    setTotalPrice((prevPrice) => ({
+      ...prevPrice,
+      [serviceId]: parseFloat(basePrice) + addonsTotal
+    }));
+    
+    return { ...prevSelectedAddons, [serviceId]: updated };
   });
 };
-
   return (
     <div className="service-list">
       <div className="container">
