@@ -16,6 +16,7 @@ function ServiceList({ user }) {
   const [expandedServiceId, setExpandedServiceId] = useState(null);
   const [selectedAddons, setSelectedAddons] = useState({});
   const [totalPrice, setTotalPrice] = useState({});
+  const [activeAddonPopup, setActiveAddonPopup] = useState(null);
 
   useEffect(() => {
     fetchAllServices();
@@ -48,6 +49,15 @@ function ServiceList({ user }) {
       console.error("Error fetching sub-services:", err);
     }
   };
+
+  const toggleAddonPopup = (serviceId) => {
+  if (activeAddonPopup === serviceId) {
+    setActiveAddonPopup(null);
+  } else {
+    fetchSubServices(serviceId);
+    setActiveAddonPopup(serviceId);
+  }
+};
 
   const toggleExpand = (serviceId) => {
     if (expandedServiceId === serviceId) {
@@ -185,12 +195,18 @@ function ServiceList({ user }) {
                     <p className="service-description">{service.description}</p>
                     <div className="service-details">
                       <span>⏱️ {service.duration} minutes</span>
-                        <span>
-                          💰 Total: KES{" "}
-                          {totalPrice[service.id]
+                        <div className="price-section">
+                          <span>💰 Total: KES {totalPrice[service.id]
                             ? totalPrice[service.id].toFixed(2)
-                            : parseFloat(service.price).toFixed(2)}
-                        </span>
+                            : parseFloat(service.price).toFixed(2)}</span>
+                          <button
+                            className="addon-trigger-btn"
+                            onClick={() => toggleAddonPopup(service.id)}
+                            title="Customize Add-ons"
+                          >
+                            <i className="fa fa-sliders"></i>
+                          </button>
+                        </div>
 
                     </div>
                     <div className="service-provider">
