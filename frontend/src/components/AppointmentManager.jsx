@@ -11,6 +11,7 @@ function AppointmentManager({ user }) {
     past: [],
   });
   const [loading, setLoading] = useState(true);
+  const [addonsData, setAddonsData] = useState({});
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
@@ -25,11 +26,37 @@ function AppointmentManager({ user }) {
     try {
       setLoading(true);
       const response = await api.get('/appointments');
-      setAppointments(response.data.appointments);
+      const appts = response.data.appointments;
+
+      setAppointments(appts);
+      // Fetch add-ons for all related services
+      const serviceIds = [
+        ...new Set(
+          Object.values(appts)
+            .flat()
+            .map((a) => a.service_id)
+        ),
+      ];
+      await fetchAddonsForServices(serviceIds);
     } catch (error) {
       console.error('Error fetching appointments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAddonsForServices = async (serviceIds) => {
+    try {
+      const results = {};
+      await Promise.all(
+        serviceIds.map(async (id) => {
+          const res = await api.get(`/services/${id}/sub-services`);
+          results[id] = res.data.sub_services || [];
+        })
+      );
+      setAddonsData(results);
+    } catch (err) {
+      console.error('Error fetching add-ons:', err);
     }
   };
 
@@ -123,14 +150,20 @@ function AppointmentManager({ user }) {
   };
 
   const renderAddons = (apt) => {
-    if (!apt.addons || apt.addons.length === 0) {
+    const allAddons = addonsData[apt.service_id] || [];
+    const selected = allAddons.filter((addon) =>
+      apt.addons?.includes(addon.id)
+    );
+
+    if (!selected.length) {
       return <p className="no-addons-text">No add-ons selected.</p>;
     }
+
     return (
       <div className="addons-container">
         <h5>Add-ons Selected</h5>
         <ul className="addon-list">
-          {apt.addons.map((addon) => (
+          {selected.map((addon) => (
             <li key={addon.id} className="addon-item">
               <span className="addon-name">{addon.name}</span>
               <span className="addon-price">
@@ -163,36 +196,23 @@ function AppointmentManager({ user }) {
                   <p>
                     <strong>With:</strong> {apt.provider_name}
                   </p>
-                  <p>
-                    <strong>When:</strong> {formatDate(apt.appointment_date)}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {apt.duration} minutes
-                  </p>
-                  <p>
-                    <strong>Deposit:</strong> KES {apt.price}
-                  </p>
-                  {getStatusBadge(apt.status)}
-                  {renderAddons(apt)}
                 </>
               ) : (
-                <>
-                  <p>
-                    <strong>Client:</strong> {apt.client_name} ({apt.client_phone})
-                  </p>
-                  <p>
-                    <strong>When:</strong> {formatDate(apt.appointment_date)}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {apt.duration} minutes
-                  </p>
-                  <p>
-                    <strong>Deposit:</strong> KES {apt.price}
-                  </p>
-                  {getStatusBadge(apt.status)}
-                  {renderAddons(apt)}
-                </>
+                <p>
+                  <strong>Client:</strong> {apt.client_name} ({apt.client_phone})
+                </p>
               )}
+              <p>
+                <strong>When:</strong> {formatDate(apt.appointment_date)}
+              </p>
+              <p>
+                <strong>Duration:</strong> {apt.duration} minutes
+              </p>
+              <p>
+                <strong>Deposit:</strong> KES {apt.price}
+              </p>
+              {getStatusBadge(apt.status)}
+              {renderAddons(apt)}
             </div>
 
             <div className="appointment-actions">
@@ -223,16 +243,6 @@ function AppointmentManager({ user }) {
                       </button>
                     </div>
                   )}
-                  {['completed', 'rebooked'].includes(apt.status) && (
-                    <div className="action-row">
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
@@ -253,18 +263,6 @@ function AppointmentManager({ user }) {
                         Reject
                       </button>
                     </div>
-                  ) : ['completed', 'cancelled', 'no-show', 'rebooked'].includes(
-                      apt.status
-                    ) ? (
-                    <>
-                      <p className="hint">Status locked</p>
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        Delete
-                      </button>
-                    </>
                   ) : (
                     <div className="status-dropdown-container">
                       <select
