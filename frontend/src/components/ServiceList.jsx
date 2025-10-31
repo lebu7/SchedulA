@@ -13,10 +13,6 @@ function ServiceList({ user }) {
   const [selectedService, setSelectedService] = useState(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [subServices, setSubServices] = useState({});
-  const [expandedServiceId, setExpandedServiceId] = useState(null);
-  const [selectedAddons, setSelectedAddons] = useState({});
-  const [totalPrice, setTotalPrice] = useState({});
-  const [activeAddonPopup, setActiveAddonPopup] = useState(null);
 
   useEffect(() => {
     fetchAllServices();
@@ -50,24 +46,6 @@ function ServiceList({ user }) {
     }
   };
 
-  const toggleAddonPopup = (serviceId) => {
-  if (activeAddonPopup === serviceId) {
-    setActiveAddonPopup(null);
-  } else {
-    fetchSubServices(serviceId);
-    setActiveAddonPopup(serviceId);
-  }
-};
-
-  const toggleExpand = (serviceId) => {
-    if (expandedServiceId === serviceId) {
-      setExpandedServiceId(null);
-    } else {
-      setExpandedServiceId(serviceId);
-      fetchSubServices(serviceId);
-    }
-  };
-
   const filterServices = () => {
     let filtered = allServices;
     if (searchTerm.trim()) {
@@ -96,8 +74,9 @@ function ServiceList({ user }) {
     setFilteredServices(filtered);
   };
 
-  const handleBookClick = (service) => {
+  const handleBookClick = async (service) => {
     if (service.is_closed) return;
+    await fetchSubServices(service.id);
     setSelectedService(service);
     setShowBookingModal(true);
   };
@@ -111,27 +90,17 @@ function ServiceList({ user }) {
     setShowBookingModal(false);
     setSelectedService(null);
   };
-  const handleAddonSelect = (serviceId, addon, isChecked) => {
-  setSelectedAddons((prevSelectedAddons) => {
-    const current = prevSelectedAddons[serviceId] || [];
-    const updated = isChecked
-      ? [...current, addon]
-      : current.filter((a) => a.id !== addon.id);
-    
-    // Calculate price using the UPDATED addons list
-    const basePrice = allServices.find((s) => s.id === serviceId)?.price || 0;
-    const addonsTotal = updated.reduce((sum, a) => 
-      sum + parseFloat(a.price || a.additional_price || 0), 0);
-    
-    // Update both states together
-    setTotalPrice((prevPrice) => ({
-      ...prevPrice,
-      [serviceId]: parseFloat(basePrice) + addonsTotal
-    }));
-    
-    return { ...prevSelectedAddons, [serviceId]: updated };
-  });
-};
+
+  // Assign dynamic color class based on category
+  const getCategoryClass = (category) => {
+    if (!category) return "default-category";
+    const cat = category.toLowerCase();
+    if (cat.includes("salon")) return "salon-header";
+    if (cat.includes("spa")) return "spa-header";
+    if (cat.includes("barber")) return "barber-header";
+    return "default-category";
+  };
+
   return (
     <div className="service-list">
       <div className="container">
@@ -182,94 +151,79 @@ function ServiceList({ user }) {
         ) : (
           <>
             <div className="services-grid">
-              {filteredServices.map((service) => (
-                <div className={`service-card ${service.is_closed ? "closed-service" : ""}`} data-status={service.is_closed ? "Closed" : ""}>
+              {filteredServices.map((service) => {
+                const addons = subServices[service.id] || [];
+
+                return (
                   <div
-                    className="service-main"
-                    onClick={() =>
-                      !service.is_closed && handleBookClick(service)
-                    }
+                    key={service.id}
+                    className={`service-card ${
+                      service.is_closed ? "closed-service" : ""
+                    }`}
+                    data-status={service.is_closed ? "Closed" : ""}
                   >
-
-                    <p className="service-category">{service.category}</p>
-                    <p className="service-description">{service.description}</p>
-                    <div className="service-details">
-                      <span>⏱️ {service.duration} minutes</span>
-                        <div className="price-section">
-                          <span>💰 Total: KES {totalPrice[service.id]
-                            ? totalPrice[service.id].toFixed(2)
-                            : parseFloat(service.price).toFixed(2)}</span>
-                          <button
-                            className="addon-trigger-btn"
-                            onClick={() => toggleAddonPopup(service.id)}
-                            title="Customize Add-ons"
-                          >
-                            <i className="fa fa-sliders"></i>
-                          </button>
-                        </div>
-
+                    {/* === HEADER BAR === */}
+                    <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
+                      <h3 className="service-name">{service.name}</h3>
+                      <p className="service-provider">
+                        {service.provider_name}
+                        {service.business_name && (
+                          <span className="business-name">
+                            {" "}
+                            — {service.business_name}
+                          </span>
+                        )}
+                      </p>
                     </div>
-                    <div className="service-provider">
-                      <strong>{service.provider_name}</strong>
-                      {service.business_name && (
-                        <span> - {service.business_name}</span>
+
+                    {/* === MAIN CONTENT === */}
+                    <div
+                      className="service-main"
+                      onClick={() =>
+                        !service.is_closed && handleBookClick(service)
+                      }
+                    >
+                      <p className="service-category">{service.category}</p>
+                      <p className="service-description">{service.description}</p>
+
+                      {/* Booking Summary */}
+                      <div className="service-details">
+                        <span>{service.duration} minutes</span>
+                        <span className="price-text">
+                          Deposit:{" "}
+                          <strong>KES {parseFloat(service.price).toFixed(2)}</strong>
+                        </span>
+                      </div>
+
+                      {/* Example Add-ons Preview */}
+                      {addons.length > 0 && (
+                        <div className="addon-preview">
+                          <p>Popular add-ons:</p>
+                          <ul>
+                            {addons.slice(0, 2).map((a) => (
+                              <li key={a.id}>
+                                {a.name} (+KES {a.price ?? a.additional_price})
+                              </li>
+                            ))}
+                            {addons.length > 2 && (
+                              <li className="more-addons">+ more available</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+
+                      {user?.user_type === "client" && (
+                        <button
+                          className="btn btn-primary book-btn"
+                          disabled={service.is_closed}
+                        >
+                          {service.is_closed ? "Closed" : "Book Appointment"}
+                        </button>
                       )}
                     </div>
-                    {user?.user_type === "client" && (
-                      <button
-                        className="btn btn-primary book-btn"
-                        disabled={service.is_closed}
-                      >
-                        {service.is_closed ? "Closed" : "Book Appointment"}
-                      </button>
-                    )}
                   </div>
-
-                  {/* === Sub-services (Add-ons) === */}
-                  <div className="addons-section">
-                    <button
-                      className="btn btn-outline"
-                      onClick={() => toggleExpand(service.id)}
-                    >
-                      {expandedServiceId === service.id
-                        ? "Hide Add-ons"
-                        : "View Add-ons"}
-                    </button>
-
-                    {expandedServiceId === service.id && (
-                      <div className="addons-list">
-                        {subServices[service.id]?.length ? (
-                          <ul>
-                            {subServices[service.id].map((sub) => {
-                              const isChecked =
-                                selectedAddons[service.id]?.some((a) => a.id === sub.id) || false;
-
-                              return (
-                                <li key={sub.id} className="addon-option">
-                                  <label>
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={(e) =>
-                                        handleAddonSelect(service.id, sub, e.target.checked)
-                                      }
-                                    />
-                                    <strong>{sub.name}</strong>{" "}
-                                    <span>+KES {sub.price ?? sub.additional_price}</span>
-                                    {sub.description && <small> — {sub.description}</small>}
-                                  </label>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        ) : (
-                          <p>No add-ons available.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {filteredServices.length === 0 && !loading && (
