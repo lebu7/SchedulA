@@ -145,67 +145,84 @@ router.post(
               error: `Provider is closed on ${day}. Please select another date.`,
             });
 
-          // ✅ Use provider hours from users table
-          db.get(
-            `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
-            [service.provider_id],
-            (err3, provider) => {
-              if (err3)
-                return res.status(500).json({ error: 'Error checking provider hours' });
+              // ✅ Use provider hours from users table
+              db.get(
+                `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
+                [service.provider_id],
+                (err3, provider) => {
+                  if (err3)
+                    return res.status(500).json({ error: 'Error checking provider hours' });
 
-              const open = provider?.opening_time || '08:00';
-              const close = provider?.closing_time || '18:00';
-              const [hour, minute] = appointmentDate.toISOString().split('T')[1].split(':');
-              const currentTime = `${hour}:${minute}`;
-              if (currentTime < open || currentTime > close)
-                return res.status(400).json({
-                  error: `Bookings are only allowed between ${open} and ${close}.`,
-                });
-
-              // ✅ Create appointment
-              db.run(
-                `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status)
-                 VALUES (?, ?, ?, ?, ?, 'pending')`,
-                [client_id, service.provider_id, service_id, appointment_date, notes || ''],
-                function (err4) {
-                  if (err4)
-                    return res.status(500).json({ error: 'Failed to create appointment' });
-
-                  const newId = this.lastID;
-
-                  if (rebook_from) {
-                    db.run(
-                      `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
-                      [rebook_from, client_id],
-                      (e) => e && console.error('Failed to mark rebooked:', e)
-                    );
+                  const open = provider?.opening_time || '08:00';
+                  const close = provider?.closing_time || '18:00';
+                  
+                  // ✅ FIX: Extract time from ISO date correctly
+                  const appointmentDate = new Date(appointment_date);
+                  
+                  // Get UTC hours and minutes
+                  const utcHours = appointmentDate.getUTCHours();
+                  const utcMinutes = appointmentDate.getUTCMinutes();
+                  
+                  // Adjust for EAT timezone (UTC+3 for Kenya)
+                  const eatHours = (utcHours + 3) % 24;
+                  
+                  const appointmentTime = `${eatHours.toString().padStart(2, '0')}:${utcMinutes.toString().padStart(2, '0')}`;
+                  
+                  console.log('🕒 Appointment UTC:', `${utcHours}:${utcMinutes}`);
+                  console.log('🕒 Appointment EAT:', appointmentTime);
+                  console.log('🕒 Business hours:', open, '-', close);
+                  
+                  // Compare times
+                  if (appointmentTime < open || appointmentTime > close) {
+                    return res.status(400).json({
+                      error: `Bookings are only allowed between ${open} and ${close}. Your selected time is ${appointmentTime}.`,
+                    });
                   }
 
-                  db.get(
-                    `SELECT a.*, s.name AS service_name, s.duration, s.price,
-                            u.name AS provider_name, u.business_name
-                     FROM appointments a
-                     JOIN services s ON a.service_id = s.id
-                     JOIN users u ON a.provider_id = u.id
-                     WHERE a.id = ?`,
-                    [newId],
-                    (e, appointment) => {
-                      if (e)
-                        return res
-                          .status(500)
-                          .json({ error: 'Appointment created but fetch failed' });
-                      res.status(201).json({
-                        message:
-                          'Appointment requested successfully (pending provider confirmation)',
-                        appointment,
-                      });
+                  // ✅ Create appointment
+                  db.run(
+                    `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status)
+                    VALUES (?, ?, ?, ?, ?, 'pending')`,
+                    [client_id, service.provider_id, service_id, appointment_date, notes || ''],
+                    function (err4) {
+                      if (err4)
+                        return res.status(500).json({ error: 'Failed to create appointment' });
+
+                      const newId = this.lastID;
+
+                      if (rebook_from) {
+                        db.run(
+                          `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
+                          [rebook_from, client_id],
+                          (e) => e && console.error('Failed to mark rebooked:', e)
+                        );
+                      }
+
+                      db.get(
+                        `SELECT a.*, s.name AS service_name, s.duration, s.price,
+                                u.name AS provider_name, u.business_name
+                        FROM appointments a
+                        JOIN services s ON a.service_id = s.id
+                        JOIN users u ON a.provider_id = u.id
+                        WHERE a.id = ?`,
+                        [newId],
+                        (e, appointment) => {
+                          if (e)
+                            return res
+                              .status(500)
+                              .json({ error: 'Appointment created but fetch failed' });
+                          res.status(201).json({
+                            message:
+                              'Appointment requested successfully (pending provider confirmation)',
+                            appointment,
+                          });
+                        }
+                      );
                     }
                   );
                 }
               );
-            }
-          );
-        }
+                      }
       );
     });
   }
