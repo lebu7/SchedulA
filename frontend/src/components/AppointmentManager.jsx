@@ -122,6 +122,27 @@ function AppointmentManager({ user }) {
     setShowBooking(false);
   };
 
+  const renderAddons = (apt) => {
+    if (!apt.addons || apt.addons.length === 0) {
+      return <p className="no-addons-text">No add-ons selected.</p>;
+    }
+    return (
+      <div className="addons-container">
+        <h5>Add-ons Selected</h5>
+        <ul className="addon-list">
+          {apt.addons.map((addon) => (
+            <li key={addon.id} className="addon-item">
+              <span className="addon-name">{addon.name}</span>
+              <span className="addon-price">
+                + KES {addon.price ?? addon.additional_price}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   const renderAppointmentsList = (list, type) => {
     if (!list || list.length === 0)
       return <div className="no-appointments">No {type} appointments.</div>;
@@ -149,9 +170,10 @@ function AppointmentManager({ user }) {
                     <strong>Duration:</strong> {apt.duration} minutes
                   </p>
                   <p>
-                    <strong>Price:</strong> KES {apt.price}
+                    <strong>Deposit:</strong> KES {apt.price}
                   </p>
                   {getStatusBadge(apt.status)}
+                  {renderAddons(apt)}
                 </>
               ) : (
                 <>
@@ -165,9 +187,10 @@ function AppointmentManager({ user }) {
                     <strong>Duration:</strong> {apt.duration} minutes
                   </p>
                   <p>
-                    <strong>Price:</strong> KES {apt.price}
+                    <strong>Deposit:</strong> KES {apt.price}
                   </p>
                   {getStatusBadge(apt.status)}
+                  {renderAddons(apt)}
                 </>
               )}
             </div>
@@ -184,7 +207,6 @@ function AppointmentManager({ user }) {
                       {cancelling === apt.id ? 'Cancelling...' : 'Cancel'}
                     </button>
                   )}
-
                   {['cancelled', 'no-show'].includes(apt.status) && (
                     <div className="action-row">
                       <button
@@ -201,7 +223,6 @@ function AppointmentManager({ user }) {
                       </button>
                     </div>
                   )}
-
                   {['completed', 'rebooked'].includes(apt.status) && (
                     <div className="action-row">
                       <button
@@ -215,7 +236,6 @@ function AppointmentManager({ user }) {
                 </>
               ) : (
                 <>
-                  {/* ✅ Provider View */}
                   {apt.status === 'pending' ? (
                     <div className="status-action-row">
                       <button
