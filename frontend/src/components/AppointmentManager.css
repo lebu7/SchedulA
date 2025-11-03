@@ -335,14 +335,31 @@
   font-style: italic;
   margin-top: 6px;
 }
-
-/* === Pending appointment highlight === */
-.highlight-pending {
-  border: 2px solid #facc15;
-  background: #fffbea;
-  box-shadow: 0 3px 10px rgba(250, 204, 21, 0.3);
+.total-cost-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(26, 77, 46, 0.05); /* soft green tint */
+  border: 1px solid #1a4d2e33;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  margin-bottom: 14px; /* ✅ gives space before status badge */
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
+.total-label {
+  color: #1a4d2e;
+  font-weight: 600;
+}
+
+.total-amount {
+  color: #1a4d2e;
+  font-weight: 700;
+}
+
+/* === Pending appointment highlight === */
 .highlight-pending h4 {
   color: #92400e;
 }
