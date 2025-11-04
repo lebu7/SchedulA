@@ -26,7 +26,10 @@ function ServiceList({ user }) {
     try {
       setLoading(true);
       const response = await api.get("/services");
-      setAllServices(response.data.services || []);
+      const services = response.data.services || [];
+      setAllServices(services);
+      // Fetch sub-services for all
+      fetchAllSubServices(services);
     } catch (error) {
       console.error("Error fetching services:", error);
     } finally {
@@ -34,15 +37,23 @@ function ServiceList({ user }) {
     }
   };
 
-  const fetchSubServices = async (serviceId) => {
+  // Fetch sub-services for all visible services
+  const fetchAllSubServices = async (services) => {
     try {
-      const res = await api.get(`/services/${serviceId}/sub-services`);
-      setSubServices((prev) => ({
-        ...prev,
-        [serviceId]: res.data.sub_services || [],
-      }));
+      const results = {};
+      await Promise.all(
+        services.map(async (service) => {
+          try {
+            const res = await api.get(`/services/${service.id}/sub-services`);
+            results[service.id] = res.data.sub_services || [];
+          } catch {
+            results[service.id] = [];
+          }
+        })
+      );
+      setSubServices(results);
     } catch (err) {
-      console.error("Error fetching sub-services:", err);
+      console.error("Error fetching add-ons:", err);
     }
   };
 
@@ -74,9 +85,8 @@ function ServiceList({ user }) {
     setFilteredServices(filtered);
   };
 
-  const handleBookClick = async (service) => {
+  const handleBookClick = (service) => {
     if (service.is_closed) return;
-    await fetchSubServices(service.id);
     setSelectedService(service);
     setShowBookingModal(true);
   };
@@ -91,7 +101,6 @@ function ServiceList({ user }) {
     setSelectedService(null);
   };
 
-  // Assign dynamic color class based on category
   const getCategoryClass = (category) => {
     if (!category) return "default-category";
     const cat = category.toLowerCase();
@@ -162,8 +171,11 @@ function ServiceList({ user }) {
                     }`}
                     data-status={service.is_closed ? "Closed" : ""}
                   >
-                    {/* === HEADER BAR === */}
-                    <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
+                    <div
+                      className={`service-header-bar ${getCategoryClass(
+                        service.category
+                      )}`}
+                    >
                       <h3 className="service-name">{service.name}</h3>
                       <p className="service-provider">
                         {service.provider_name}
@@ -176,7 +188,6 @@ function ServiceList({ user }) {
                       </p>
                     </div>
 
-                    {/* === MAIN CONTENT === */}
                     <div
                       className="service-main"
                       onClick={() =>
@@ -184,18 +195,21 @@ function ServiceList({ user }) {
                       }
                     >
                       <p className="service-category">{service.category}</p>
-                      <p className="service-description">{service.description}</p>
+                      <p className="service-description">
+                        {service.description}
+                      </p>
 
-                      {/* Booking Summary */}
                       <div className="service-details">
                         <span>{service.duration} minutes</span>
                         <span className="price-text">
                           Deposit:{" "}
-                          <strong>KES {parseFloat(service.price).toFixed(2)}</strong>
+                          <strong>
+                            KES {parseFloat(service.price).toFixed(2)}
+                          </strong>
                         </span>
                       </div>
 
-                      {/* Example Add-ons Preview */}
+                      {/* Addon Preview Section */}
                       {addons.length > 0 && (
                         <div className="addon-preview">
                           <p>Popular add-ons:</p>

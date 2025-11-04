@@ -126,22 +126,38 @@ router.post(
 
     db.run(
       `INSERT INTO services (provider_id, name, description, category, duration, price)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?)`,
       [provider_id, name, description, category, duration, price],
       function (err) {
-        if (err)
+        if (err) {
+          console.error("❌ Error inserting service:", err);
           return res.status(500).json({ error: "Failed to create service" });
+        }
+
+        const newServiceId = this.lastID;
+        console.log("✅ New service created with ID:", newServiceId);
+
         db.get(
-          `SELECT s.*, u.name AS provider_name, u.business_name, 
+          `SELECT s.*, 
+                  u.name AS provider_name, 
+                  u.business_name, 
                   u.opening_time AS provider_opening_time, 
                   u.closing_time AS provider_closing_time
-           FROM services s JOIN users u ON s.provider_id = u.id
-           WHERE s.id = ?`,
-          [this.lastID],
+          FROM services s 
+          JOIN users u ON s.provider_id = u.id
+          WHERE s.id = ?`,
+          [newServiceId],
           (err2, service) => {
-            if (err2)
+            if (err2) {
+              console.error("❌ Error fetching new service:", err2);
               return res.status(500).json({ error: "Failed to fetch service" });
-            res.status(201).json({ message: "Service created", service });
+            }
+
+            // ✅ Ensure ID always included and numeric
+            res.status(201).json({
+              message: "Service created successfully",
+              service: { ...service, id: newServiceId },
+            });
           }
         );
       }
@@ -183,33 +199,45 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ PATCH toggle single service
+   ✅ PATCH toggle single service (open/close)
 --------------------------------------------- */
 router.patch(
   "/:id/closure",
   authenticateToken,
   requireRole("provider"),
   (req, res) => {
-    const serviceId = req.params.id;
+    const serviceId = Number(req.params.id);
     const providerId = req.user.userId;
     const { is_closed } = req.body;
 
-    if (is_closed === undefined)
-      return res.status(400).json({ error: "is_closed is required (0 or 1)" });
+    // Validate ID
+    if (!serviceId || isNaN(serviceId)) {
+      return res.status(400).json({ error: "Invalid service ID" });
+    }
+
+    // Validate is_closed field
+    const closedValue =
+      is_closed === true || is_closed === 1 || is_closed === "1" ? 1 : 0;
 
     db.run(
-      "UPDATE services SET is_closed = ? WHERE id = ? AND provider_id = ?",
-      [is_closed ? 1 : 0, serviceId, providerId],
+      `UPDATE services 
+       SET is_closed = ?, closed_by_business = 0
+       WHERE id = ? AND provider_id = ?`,
+      [closedValue, serviceId, providerId],
       function (err) {
-        if (err)
-          return res.status(500).json({ error: "Failed to update service status" });
-        if (this.changes === 0)
-          return res
-            .status(404)
-            .json({ error: "Service not found or not owned by you" });
+        if (err) {
+          console.error("❌ Error updating service:", err);
+          return res.status(500).json({ error: "Failed to update service" });
+        }
+        if (this.changes === 0) {
+          return res.status(404).json({ error: "Service not found or not owned by you" });
+        }
         res.json({
-          message: `Service ${is_closed ? "closed" : "opened"} successfully`,
-          is_closed,
+          message: closedValue
+            ? "✅ Service closed successfully."
+            : "✅ Service reopened successfully.",
+          service_id: serviceId,
+          is_closed: closedValue,
         });
       }
     );

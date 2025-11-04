@@ -26,7 +26,6 @@ function ServiceManager({ user }) {
   const [globalError, setGlobalError] = useState("");
   const [expandedService, setExpandedService] = useState(null);
 
-
   useEffect(() => {
     fetchMyServices();
   }, [user.id]);
@@ -68,25 +67,43 @@ function ServiceManager({ user }) {
     return Object.keys(newErrors).length === 0;
   };
 
+  // ✅ FIXED: Create / Update services safely
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
     setSaving(true);
+
     try {
       const submitData = {
         ...formData,
         duration: parseInt(formData.duration),
         price: parseFloat(formData.price),
       };
-      if (editingService) {
-        await api.put(`/services/${editingService.id}`, submitData);
+
+      const res = editingService
+        ? await api.put(`/services/${editingService.id}`, submitData)
+        : await api.post("/services", submitData);
+
+      if (res.data?.service) {
+        if (editingService) {
+          setServices((prev) =>
+            prev.map((s) =>
+              s.id === editingService.id ? res.data.service : s
+            )
+          );
+        } else {
+          setServices((prev) => [...prev, res.data.service]);
+          await fetchSubservices(res.data.service.id);
+        }
       } else {
-        await api.post("/services", submitData);
+        await fetchMyServices(); // fallback
       }
-      await fetchMyServices();
+
       setShowForm(false);
       setEditingService(null);
       resetForm();
+      setGlobalSuccess("✅ Service saved successfully!");
+      setTimeout(() => setGlobalSuccess(""), 2000);
     } catch (error) {
       console.error("Error saving service:", error);
       setErrors({ submit: "Failed to save service. Please try again." });
@@ -114,30 +131,35 @@ function ServiceManager({ user }) {
     setShowForm(true);
   };
 
+  // ✅ FIXED: Delete button stuck issue
   const handleDelete = async (serviceId) => {
-    if (window.confirm("Are you sure you want to delete this service?")) {
-      setDeletingId(serviceId);
-      try {
-        await api.delete(`/services/${serviceId}`);
-        await fetchMyServices();
-      } catch (error) {
-        console.error("Error deleting service:", error);
-      } finally {
-        setDeletingId(null);
-      }
+    if (!window.confirm("Are you sure you want to delete this service?")) return;
+
+    setDeletingId(serviceId);
+    try {
+      await api.delete(`/services/${serviceId}`);
+      setServices((prev) => prev.filter((s) => s.id !== serviceId));
+      setGlobalSuccess("✅ Service deleted successfully!");
+      setTimeout(() => setGlobalSuccess(""), 2000);
+    } catch (error) {
+      console.error("Error deleting service:", error);
+      setGlobalError("❌ Failed to delete service. Try again.");
+      setTimeout(() => setGlobalError(""), 2000);
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const handleToggleService = async (service) => {
   setTogglingId(service.id);
-  try {
-    const updatedStatus = service.is_closed ? 0 : 1;
 
+  try {
+    // Explicitly send integer to backend
+    const updatedStatus = service.is_closed ? 0 : 1;
     await api.patch(`/services/${service.id}/closure`, {
-      is_closed: updatedStatus,
+      is_closed: updatedStatus === 1 ? 1 : 0,
     });
 
-    // Update local state without refetch
     setServices((prev) =>
       prev.map((s) =>
         s.id === service.id ? { ...s, is_closed: updatedStatus } : s
@@ -147,119 +169,106 @@ function ServiceManager({ user }) {
     setGlobalSuccess(
       updatedStatus
         ? "✅ Service closed successfully!"
-        : "✅ Service opened successfully!"
+        : "✅ Service reopened successfully!"
     );
-    setTimeout(() => setGlobalSuccess(""), 2000);
   } catch (error) {
     console.error("Error toggling service:", error);
-    setGlobalError("❌ Failed to toggle service. Try again.");
-    setTimeout(() => setGlobalError(""), 2000);
+    setGlobalError(
+      error.response?.data?.error ||
+        "❌ Failed to toggle service. Please try again."
+    );
   } finally {
+    setTimeout(() => setGlobalSuccess(""), 2000);
+    setTimeout(() => setGlobalError(""), 2000);
     setTogglingId(null);
   }
 };
 
+  // ✅ FIXED: Correct business toggle API
   const handleToggleBusiness = async () => {
-  try {
-    const newStatus = !businessClosed;
+    try {
+      const newStatus = !businessClosed;
+      await api.patch(`/services/provider/${user.id}/closure`, {
+        is_closed: newStatus ? 1 : 0,
+      });
 
-    // 🔄 Update business closure on backend
-    await api.patch(`/services/provider/${user.id}/closure`, {
-      is_closed: newStatus ? 1 : 0,
-    });
+      await fetchMyServices();
+      setBusinessClosed(newStatus);
 
-    // ✅ Refetch services to sync exact state from DB
-    await fetchMyServices();
-
-    // Reflect new business toggle state
-    setBusinessClosed(newStatus);
-
-    // 🟢 Show popup
-    setGlobalSuccess(
-      newStatus
-        ? "✅ Business closed — all active services have been temporarily closed."
-        : "✅ Business reopened — only services closed by business reopened."
-    );
-    setTimeout(() => setGlobalSuccess(""), 3000);
-  } catch (error) {
-    console.error("Error toggling business:", error);
-    setGlobalError("❌ Failed to toggle business. Try again.");
-    setTimeout(() => setGlobalError(""), 3000);
-  }
-};
+      setGlobalSuccess(
+        newStatus
+          ? "✅ Business closed — all active services temporarily closed."
+          : "✅ Business reopened — previously closed services reopened."
+      );
+      setTimeout(() => setGlobalSuccess(""), 3000);
+    } catch (error) {
+      console.error("Error toggling business:", error);
+      setGlobalError("❌ Failed to toggle business. Try again.");
+      setTimeout(() => setGlobalError(""), 3000);
+    }
+  };
 
   const handleAddSubservice = async (serviceId) => {
-  if (!newSub.name.trim() || newSub.price === "") {
-    alert("Please enter a name and price for the add-on.");
-    return;
-  }
-  try {
-    const payload = {
-      name: newSub.name,
-      description: "",
-      additional_price: parseFloat(newSub.price),
-    };
-    await api.post(`/services/${serviceId}/sub-services`, payload);
-    await fetchSubservices(serviceId);
+    if (!newSub.name.trim() || newSub.price === "") {
+      alert("Please enter a name and price for the add-on.");
+      return;
+    }
+    try {
+      const payload = {
+        name: newSub.name,
+        description: "",
+        additional_price: parseFloat(newSub.price),
+      };
+      await api.post(`/services/${serviceId}/sub-services`, payload);
+      await fetchSubservices(serviceId);
 
-    // ✅ Show popup
-    setGlobalSuccess("✅ Add-on created successfully!");
+      setGlobalSuccess("✅ Add-on created successfully!");
+      setTimeout(() => setGlobalSuccess(""), 2000);
 
-    setTimeout(() => setGlobalSuccess(""), 2000);
+      setAddingSubFor(null);
+      setNewSub({ name: "", price: "" });
+    } catch (error) {
+      console.error("Error adding sub-service:", error);
+    }
+  };
 
-    setAddingSubFor(null);
-    setNewSub({ name: "", price: "" });
-  } catch (error) {
-    console.error("Error adding sub-service:", error);
-  }
-};
+  const handleDeleteSubservice = async (subId, serviceId) => {
+    if (!window.confirm("Are you sure you want to delete this add-on?")) return;
+    try {
+      await api.delete(`/services/${serviceId}/sub-services/${subId}`);
+      await fetchSubservices(serviceId);
 
-const handleDeleteSubservice = async (subId, serviceId) => {
-  if (!window.confirm("Are you sure you want to delete this add-on?")) return;
+      setGlobalSuccess("✅ Add-on deleted successfully!");
+      setTimeout(() => setGlobalSuccess(""), 2000);
+    } catch (error) {
+      console.error("Error deleting sub-service:", error);
+      setGlobalError("❌ Failed to delete add-on. Please try again.");
+      setTimeout(() => setGlobalError(""), 2500);
+    }
+  };
 
-  try {
-    // Delete add-on via API
-    await api.delete(`/services/${serviceId}/sub-services/${subId}`);
+  const handleUpdateSubservice = async (serviceId, subId) => {
+    if (!editingSub.name.trim()) {
+      alert("Please enter a valid add-on name.");
+      return;
+    }
+    try {
+      const payload = {
+        name: editingSub.name,
+        description: "",
+        additional_price: parseFloat(editingSub.price),
+      };
+      await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
+      await fetchSubservices(serviceId);
 
-    // Refresh sub-services list
-    await fetchSubservices(serviceId);
+      setGlobalSuccess("✅ Add-on updated successfully!");
+      setTimeout(() => setGlobalSuccess(""), 2000);
 
-    // ✅ Show success popup
-    setGlobalSuccess("✅ Add-on deleted successfully!");
-    setTimeout(() => setGlobalSuccess(""), 2000);
-  } catch (error) {
-    console.error("Error deleting sub-service:", error);
-
-    // ❌ Show error popup
-    setGlobalError("❌ Failed to delete add-on. Please try again.");
-    setTimeout(() => setGlobalError(""), 2500);
-  }
-};
-
-const handleUpdateSubservice = async (serviceId, subId) => {
-  if (!editingSub.name.trim()) {
-    alert("Please enter a valid add-on name.");
-    return;
-  }
-  try {
-    const payload = {
-      name: editingSub.name,
-      description: "",
-      additional_price: parseFloat(editingSub.price),
-    };
-
-    await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
-    await fetchSubservices(serviceId);
-
-    // ✅ Show popup
-    setGlobalSuccess("✅ Add-on updated successfully!");
-    setTimeout(() => setGlobalSuccess(""), 2000);
-
-    setEditingSub(null);
-  } catch (error) {
-    console.error("Error updating sub-service:", error);
-  }
-};
+      setEditingSub(null);
+    } catch (error) {
+      console.error("Error updating sub-service:", error);
+    }
+  };
 
   const resetForm = () => {
     setShowForm(false);
@@ -276,8 +285,9 @@ const handleUpdateSubservice = async (serviceId, subId) => {
 
   return (
     <div className="service-manager">
-              {globalSuccess && <div className="global-success-popup">{globalSuccess}</div>}
-              {globalError && <div className="global-error-popup">{globalError}</div>}    
+      {globalSuccess && <div className="global-success-popup">{globalSuccess}</div>}
+      {globalError && <div className="global-error-popup">{globalError}</div>}
+
       <div className="container">
         <div className="manager-header">
           <h2>Manage Your Services</h2>
@@ -302,7 +312,9 @@ const handleUpdateSubservice = async (serviceId, subId) => {
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h3>{editingService ? "Edit Service" : "Create New Service"}</h3>
-                <button className="close-btn" onClick={resetForm}>×</button>
+                <button className="close-btn" onClick={resetForm}>
+                  ×
+                </button>
               </div>
               <form onSubmit={handleSubmit}>
                 <div className="form-group">
@@ -377,7 +389,11 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                   <button type="submit" className="btn btn-primary" disabled={saving}>
                     {editingService ? "Update Service" : "Create Service"}
                   </button>
-                  <button type="button" className="btn btn-secondary" onClick={resetForm}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={resetForm}
+                  >
                     Cancel
                   </button>
                 </div>
@@ -387,10 +403,10 @@ const handleUpdateSubservice = async (serviceId, subId) => {
         )}
 
         {/* SERVICES LIST */}
-        <div className= "services-list">
+        <div className="services-list">
           {services.map((service) => (
             <div
-              key={service.id}
+              key={service.id || `temp-${service.name}-${Math.random()}`}
               className={`service-item card ${
                 businessClosed || service.is_closed ? "closed-service" : ""
               }`}
@@ -408,7 +424,9 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                 <p className="service-description">{service.description}</p>
                 <div className="service-meta">
                   <span>Duration: {service.duration} mins</span>
-                  <span>Price: {service.price ? `KES ${service.price}` : "Free"}</span>
+                  <span>
+                    Price: {service.price ? `KES ${service.price}` : "Free"}
+                  </span>
                 </div>
               </div>
 
@@ -418,10 +436,14 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                   <button
                     className="toggle-addons-btn"
                     onClick={() =>
-                      setExpandedService(expandedService === service.id ? null : service.id)
+                      setExpandedService(
+                        expandedService === service.id ? null : service.id
+                      )
                     }
                   >
-                    {expandedService === service.id ? "Hide Add-ons" : "View Add-ons"}
+                    {expandedService === service.id
+                      ? "Hide Add-ons"
+                      : "View Add-ons"}
                   </button>
                 </div>
 
@@ -448,7 +470,9 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                             </button>
                             <button
                               className="icon-btn delete"
-                              onClick={() => handleDeleteSubservice(sub.id, service.id)}
+                              onClick={() =>
+                                handleDeleteSubservice(sub.id, service.id)
+                              }
                               title="Delete Add-on"
                             >
                               🗑️
@@ -465,13 +489,15 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                     >
                       ➕ Add Add-on
                     </button>
-
                   </div>
                 )}
               </div>
 
               <div className="service-actions">
-                <button className="btn btn-secondary" onClick={() => handleEdit(service)}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleEdit(service)}
+                >
                   Edit
                 </button>
                 <button
@@ -482,10 +508,16 @@ const handleUpdateSubservice = async (serviceId, subId) => {
                   {deletingId === service.id ? "Deleting..." : "Delete"}
                 </button>
                 <button
-                  className={`btn ${service.is_closed ? "btn-success" : "btn-primary"}`}
+                  className={`btn ${
+                    service.is_closed ? "btn-success" : "btn-primary"
+                  }`}
                   onClick={() => handleToggleService(service)}
                 >
-                  {service.is_closed ? "Open" : "Close"}
+                  {togglingId === service.id
+                    ? "Updating..."
+                    : service.is_closed
+                    ? "Open"
+                    : "Close"}
                 </button>
               </div>
             </div>
