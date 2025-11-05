@@ -125,9 +125,10 @@ router.post(
     const provider_id = req.user.userId;
 
     db.run(
-      `INSERT INTO services (provider_id, name, description, category, duration, price)
-      VALUES (?, ?, ?, ?, ?, ?)`,
-      [provider_id, name, description, category, duration, price],
+      `INSERT INTO services (
+        provider_id, name, description, category, duration, price, slot_interval
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [provider_id, name, description, category, duration, price, duration],
       function (err) {
         if (err) {
           console.error("❌ Error inserting service:", err);
@@ -180,6 +181,11 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
       params.push(val);
     }
   }
+  // 🔄 Automatically sync slot_interval with duration if provided
+    if (req.body.duration !== undefined) {
+      updates.push(`slot_interval = ?`);
+      params.push(req.body.duration);
+    }
 
   if (!updates.length)
     return res.status(400).json({ error: "No fields to update" });
