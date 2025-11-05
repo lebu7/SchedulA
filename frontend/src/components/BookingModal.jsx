@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../services/auth";
+import { PaystackButton } from "react-paystack";
 import "./BookingModal.css";
 
 function BookingModal({ service, user, onClose, onBookingSuccess }) {
@@ -167,6 +168,50 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
 
   const isClosed = availability?.is_closed;
   const isGloballyClosed = serviceMeta?.is_closed && !availability;
+  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+  const email = user?.email || "customer@example.com"; // fallback if user object lacks email
+  const amount = totalPrice * 100; // Paystack expects amount in kobo (KES * 100)
+  const depositPercentage = 0.3; // e.g., 30% deposit
+  const depositAmount = Math.floor(amount * depositPercentage);
+
+  const paystackProps = {
+    email,
+    amount: depositAmount,
+    currency: "KES",
+    metadata: {
+      name: user?.name,
+      service: serviceMeta.name,
+    },
+    publicKey,
+    text: `Pay Deposit (KES ${(depositAmount / 100).toFixed(2)})`,
+    onSuccess: (response) => handlePaymentSuccess(response),
+    onClose: () => setError("Payment window closed before completing payment."),
+  };
+
+    const handlePaymentSuccess = async (response) => {
+      console.log("✅ Payment successful:", response);
+      setError("");
+
+      try {
+        // Continue with booking after successful payment
+        const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
+        const payload = {
+          service_id: serviceMeta.id,
+          appointment_date: appointmentDateTime.toISOString(),
+          notes: notes.trim(),
+          addons: selectedAddons.map((a) => a.id),
+          payment_reference: response.reference, // store Paystack reference
+        };
+
+        await api.post("/appointments", payload);
+        onBookingSuccess?.();
+        onClose?.();
+      } catch (err) {
+        console.error("Booking after payment failed:", err);
+        setError("Payment was successful, but booking failed. Please contact support.");
+      }
+    };
+
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -317,15 +362,15 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={booking}>
-              {booking ? (
-                <>
-                  <span className="spinner"></span> Sending request...
-                </>
-              ) : (
-                "Confirm Booking"
-              )}
-            </button>
+
+            {/* Show Paystack button only when date & time selected */}
+            {selectedDate && selectedTime ? (
+              <PaystackButton className="btn btn-primary" {...paystackProps} />
+            ) : (
+              <button className="btn btn-primary" disabled>
+                Select Date & Time to Pay
+              </button>
+            )}
           </div>
         </form>
       </div>
