@@ -60,6 +60,25 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     );
   };
 
+  // Generate time slots between opening and closing times
+const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
+  const slots = [];
+  const [openH, openM] = openingTime.split(":").map(Number);
+  const [closeH, closeM] = closingTime.split(":").map(Number);
+
+  const openDate = new Date();
+  openDate.setHours(openH, openM, 0, 0);
+  const closeDate = new Date();
+  closeDate.setHours(closeH, closeM, 0, 0);
+
+  for (let time = new Date(openDate); time < closeDate; time.setMinutes(time.getMinutes() + interval)) {
+    const hh = time.getHours().toString().padStart(2, "0");
+    const mm = time.getMinutes().toString().padStart(2, "0");
+    slots.push(`${hh}:${mm}`);
+  }
+  return slots;
+};
+
   // Availability fetch
   useEffect(() => {
     const fetchAvailability = async () => {
@@ -221,13 +240,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 onChange={(e) => setSelectedTime(e.target.value)}
               >
                 <option value="">Choose a time</option>
-                {["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"].map(
-                  (time) => (
-                    <option key={time} value={time}>
-                      {formatTimeDisplay(time)}
-                    </option>
-                  )
-                )}
+                {generateTimeSlots(
+                  serviceMeta.provider_opening_time || "08:30",
+                  serviceMeta.provider_closing_time || "18:00",
+                  serviceMeta.slot_interval || 30
+                ).map((time) => (
+                  <option key={time} value={time}>
+                    {formatTimeDisplay(time)}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

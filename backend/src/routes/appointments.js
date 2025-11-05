@@ -157,10 +157,27 @@ router.post(
               const close = provider?.closing_time || '18:00';
               const [hour, minute] = appointmentDate.toISOString().split('T')[1].split(':');
               const currentTime = `${hour}:${minute}`;
-              if (currentTime < open || currentTime > close)
+              // Convert appointment time to Nairobi local time
+              const nairobiTime = new Date(
+                appointmentDate.toLocaleString("en-US", { timeZone: "Africa/Nairobi" })
+              );
+
+              // Extract HH:MM
+              const bookingHour = nairobiTime.getHours();
+              const bookingMinute = nairobiTime.getMinutes();
+              const bookingTotalMinutes = bookingHour * 60 + bookingMinute;
+
+              // Parse provider open/close
+              const [openH, openM] = (open || "08:00").split(":").map(Number);
+              const [closeH, closeM] = (close || "18:00").split(":").map(Number);
+              const openMinutes = openH * 60 + openM;
+              const closeMinutes = closeH * 60 + closeM;
+
+              if (bookingTotalMinutes < openMinutes || bookingTotalMinutes >= closeMinutes) {
                 return res.status(400).json({
                   error: `Bookings are only allowed between ${open} and ${close}.`,
                 });
+              }
 
               // ✅ Create appointment
               db.run(
