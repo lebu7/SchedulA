@@ -446,3 +446,32 @@
     transform: scale(1);
   }
 }
+.status-payment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.payment-badge {
+  background-color: #ddd;
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.payment-badge:hover {
+  background-color: #ccc;
+}
+
+.payment-badge.paid {
+  color: #28a745;
+  
+}
+
+.payment-badge.unpaid {
+  background-color: #ffc107;
+  color: black;
+}

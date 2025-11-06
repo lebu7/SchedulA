@@ -119,8 +119,6 @@ router.post(
     body('rebook_from').optional().isInt(),
   ],
   (req, res) => {
-    console.log("🧠 Booking payload received:", req.body);
-
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -132,20 +130,8 @@ router.post(
       return res.status(400).json({ error: 'Appointment date must be in the future' });
 
     db.get('SELECT * FROM services WHERE id = ?', [service_id], (err, service) => {
-      if (err) {
-        console.error("❌ Error fetching service:", err.message);
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!service) {
-        console.error("❌ Service not found for ID:", service_id);
-        return res.status(404).json({ error: 'Service not found' });
-      }
-
-      console.log("✅ Service found:", service);
-
-      if (service.is_closed)
-        return res.status(400).json({ error: `${service.name}'s provider is currently closed.` });
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!service) return res.status(404).json({ error: 'Service not found' });
 
       const day = appointmentDate.toISOString().split('T')[0];
       db.get(
@@ -212,10 +198,8 @@ router.post(
                   payment_reference ? 'paid' : 'unpaid',
                 ],
                 function (err4) {
-                  if (err4) {
-                    console.error("❌ SQL Insert Error:", err4.message);
-                    return res.status(500).json({ error: err4.message });
-                  }
+                  if (err4)
+                    return res.status(500).json({ error: 'Failed to create appointment' });
 
                   const newId = this.lastID;
 

@@ -3,6 +3,97 @@ import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import "./AppointmentManager.css";
 
+/* 💳 Printable Payment Info Modal */
+function PaymentInfoModal({ payment, onClose }) {
+  if (!payment) return null;
+
+  const printReceipt = () => {
+    const printContents = document.getElementById("receipt-content").innerHTML;
+    const newWindow = window.open("", "_blank");
+    newWindow.document.write(`
+      <html>
+        <head>
+          <title>Payment Receipt - ${payment.service_name || "Service"}</title>
+          <style>
+            body { font-family: 'Segoe UI', sans-serif; margin: 40px; color: #222; }
+            .receipt-box { border: 1px solid #ddd; padding: 30px; border-radius: 12px; max-width: 600px; margin: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+            .receipt-header { text-align: center; margin-bottom: 20px; }
+            .receipt-header h2 { color: #444; margin: 0; }
+            .divider { border-bottom: 1px dashed #aaa; margin: 20px 0; }
+            .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+            .info-row strong { color: #444; }
+            .amount { font-size: 1.2em; font-weight: bold; color: #007b55; }
+            .footer-note { text-align: center; font-size: 0.85em; color: #555; margin-top: 25px; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-box">
+            <div class="receipt-header">
+              <h2>Payment Receipt</h2>
+              <p>${new Date().toLocaleString("en-KE", { dateStyle: "full", timeStyle: "short" })}</p>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="info-row"><strong>Service:</strong> <span>${payment.service_name || payment.service || "—"}</span></div>
+            <div class="info-row"><strong>Provider:</strong> <span>${payment.provider_name || payment.provider || "—"}</span></div>
+            <div class="info-row"><strong>Appointment Date:</strong> <span>${new Date(payment.appointment_date).toLocaleString("en-KE")}</span></div>
+            <div class="info-row"><strong>Payment Status:</strong> <span>${payment.payment_status === "paid" ? "✅ PAID" : "❌ UNPAID"}</span></div>
+            <div class="info-row"><strong>Payment Reference:</strong> <span>${payment.payment_reference || "—"}</span></div>
+
+            <div class="divider"></div>
+
+            <div class="info-row"><strong>Amount Paid:</strong> <span class="amount">KES ${Number(payment.amount_paid || payment.payment_amount || 0).toLocaleString()}</span></div>
+            <div class="info-row"><strong>Pending Amount:</strong> <span class="amount" style="color:#b30000;">KES ${Math.max((payment.price || 0) - (payment.amount_paid || 0), 0).toLocaleString()}</span></div>
+
+            <div class="divider"></div>
+
+            <div class="footer-note">
+              Thank you for booking with <strong>${payment.provider_name || "our service"}</strong>.<br/>
+              Please keep this receipt for your records.
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    newWindow.document.close();
+    newWindow.print();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content wide-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>💳 Payment Receipt</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+
+        <div id="receipt-content" className="modal-body receipt-body">
+          <p><strong>Service:</strong> {payment.service_name || payment.service}</p>
+          <p><strong>Provider:</strong> {payment.provider_name || payment.provider}</p>
+          <p><strong>Appointment Date:</strong> {new Date(payment.appointment_date).toLocaleString("en-KE")}</p>
+          <p><strong>Payment Reference:</strong> {payment.payment_reference || "—"}</p>
+          <p><strong>Status:</strong> {payment.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}</p>
+          <p><strong>Amount Paid:</strong> KES {Number(payment.amount_paid || payment.payment_amount || 0).toLocaleString()}</p>
+          <p><strong>Pending Amount:</strong> 
+            <span style={{ color: "#b30000" }}>
+              {" "}KES {Math.max((payment.price || 0) - (payment.amount_paid || 0), 0).toLocaleString()}
+            </span>
+          </p>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+          <button className="btn btn-primary" onClick={printReceipt}>🖨️ Print Receipt</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===============================
+   MAIN APPOINTMENT MANAGER
+=============================== */
 function AppointmentManager({ user }) {
   const [appointments, setAppointments] = useState({
     pending: [],
@@ -74,22 +165,6 @@ function AppointmentManager({ user }) {
       minute: "2-digit",
     });
 
-  const getStatusBadge = (status) => {
-    const statusColors = {
-      pending: "gray",
-      scheduled: "blue",
-      completed: "green",
-      cancelled: "red",
-      "no-show": "orange",
-      rebooked: "purple",
-    };
-    return (
-      <span className={`status-badge ${statusColors[status] || "gray"}`}>
-        {status.replace("-", " ")}
-      </span>
-    );
-  };
-
   const handleStatusUpdate = async (id, status) => {
     setUpdating(id);
     try {
@@ -126,14 +201,9 @@ function AppointmentManager({ user }) {
     setShowBooking(false);
   };
 
-  // ✅ Render Add-ons visibly with styled badges
   const renderAddons = (apt) => {
     const selectedAddons =
-      apt.addons ||
-      apt.sub_services ||
-      apt.selected_addons ||
-      apt.addon_items ||
-      [];
+      apt.addons || apt.sub_services || apt.selected_addons || apt.addon_items || [];
 
     if (!Array.isArray(selectedAddons) || selectedAddons.length === 0) {
       return <p className="no-addons-text">No add-ons selected.</p>;
@@ -156,230 +226,168 @@ function AppointmentManager({ user }) {
     );
   };
 
-    const renderAppointmentsList = (list, type) => {
-      if (type === "past") {
-        const pastStatuses = ["completed", "cancelled", "no-show", "rebooked"];
-        list = list.filter((apt) => pastStatuses.includes(apt.status));
-      }
+  const renderAppointmentsList = (list, type) => {
+    // ✅ Filter past correctly (no scheduled items)
+    if (type === "past") {
+      const pastStatuses = ["completed", "cancelled", "no-show", "rebooked"];
+      list = list.filter((apt) => pastStatuses.includes(apt.status));
+    }
 
-      if (!list || list.length === 0)
-        return <div className="no-appointments">No {type} appointments.</div>;
+    if (!list || list.length === 0)
+      return <div className="no-appointments">No {type} appointments.</div>;
 
-      return (
-        <div className="appointments-list">
-          {list.map((apt) => (
-            <div
-              key={apt.id}
-              className={`appointment-card ${
-                apt.status === "pending" ? "highlight-pending" : ""
-              }`}
-            >
-              <div className="appointment-info">
-                <h4>{apt.service_name}</h4>
+    return (
+      <div className="appointments-list">
+        {list.map((apt) => (
+          <div
+            key={apt.id}
+            className={`appointment-card ${
+              apt.status === "pending" ? "highlight-pending" : ""
+            }`}
+          >
+            <div className="appointment-info">
+              <h4>{apt.service_name}</h4>
 
-                {user.user_type === "client" ? (
-                  <p>
-                    <strong>With:</strong> {apt.provider_name}
-                  </p>
-                ) : (
-                  <p>
-                    <strong>Client:</strong> {apt.client_name} ({apt.client_phone})
-                  </p>
+              {user.user_type === "client" ? (
+                <p><strong>With:</strong> {apt.provider_name}</p>
+              ) : (
+                <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+              )}
+
+              <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+              <p><strong>Duration:</strong> {apt.duration} minutes</p>
+
+              {/* 💳 Deposit + Payment badge */}
+              <p className="payment-line">
+                <strong>Deposit:</strong> KES {apt.price}{" "}
+                {apt.payment_status && (
+                  <span
+                    className={`payment-status clickable ${
+                      apt.payment_status === "paid" ? "paid" : "unpaid"
+                    }`}
+                    onClick={() => setSelectedPayment(apt)}
+                  >
+                    {apt.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}
+                  </span>
                 )}
+              </p>
 
-                <p>
-                  <strong>When:</strong> {formatDate(apt.appointment_date)}
-                </p>
-                <p>
-                  <strong>Duration:</strong> {apt.duration} minutes
-                </p>
-                {/* 💳 Deposit & Payment Status */}
-                <p className="payment-line">
-                  <strong>Deposit:</strong> KES {apt.price}{" "}
-                  {apt.payment_status && (
-                    <span
-                      className={`payment-status clickable ${
-                        apt.payment_status === "paid" ? "paid" : "unpaid"
-                      }`}
-                      onClick={() =>
-                        setSelectedPayment({
-                          reference: apt.payment_reference,
-                          amount: apt.price,
-                          status: apt.payment_status,
-                          service: apt.service_name,
-                          provider: apt.provider_name,
-                          date: apt.appointment_date,
-                        })
-                      }
-                      title="View payment details"
-                    >
-                      {apt.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}
-                    </span>
-                  )}
-                </p>
-                {renderAddons(apt)}
+              {renderAddons(apt)}
 
-                {/* ✅ Display visually styled total */}
-                {(() => {
-                  const selectedAddons =
-                    apt.addons ||
-                    apt.sub_services ||
-                    apt.selected_addons ||
-                    apt.addon_items ||
-                    [];
-                  const addonsTotal = Array.isArray(selectedAddons)
-                    ? selectedAddons.reduce(
-                        (sum, addon) =>
-                          sum + Number(addon.price || addon.additional_price || 0),
-                        0
-                      )
-                    : 0;
-                  const total = Number(apt.price || 0) + addonsTotal;
-                  return (
-                    <div className="total-cost-box">
-                      <span className="total-label">Total</span>
-                      <span className="total-amount">
-                        KES {total.toLocaleString()}
-                      </span>
-                    </div>
-                  );
-                })()}
-
-                {getStatusBadge(apt.status)}
-                {selectedPayment && (
-                  <div className="payment-modal-overlay" onClick={() => setSelectedPayment(null)}>
-                    <div
-                      className="payment-modal"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <h3>💳 Payment Receipt</h3>
-                      <p><strong>Service:</strong> {selectedPayment.service}</p>
-                      <p><strong>Provider:</strong> {selectedPayment.provider}</p>
-                      <p><strong>Date:</strong> {formatDate(selectedPayment.date)}</p>
-                      <p><strong>Amount:</strong> KES {selectedPayment.amount}</p>
-                      <p>
-                        <strong>Status:</strong>{" "}
-                        <span
-                          className={`payment-status ${
-                            selectedPayment.status === "paid" ? "paid" : "unpaid"
-                          }`}
-                        >
-                          {selectedPayment.status === "paid" ? "✅ Paid" : "❌ Unpaid"}
-                        </span>
-                      </p>
-                      <p>
-                        <strong>Reference:</strong>{" "}
-                        {selectedPayment.reference || "— Not available —"}
-                      </p>
-
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => setSelectedPayment(null)}
-                      >
-                        Close
-                      </button>
-                    </div>
+              {/* Total */}
+              {(() => {
+                const selectedAddons =
+                  apt.addons || apt.sub_services || apt.selected_addons || apt.addon_items || [];
+                const addonsTotal = Array.isArray(selectedAddons)
+                  ? selectedAddons.reduce(
+                      (sum, addon) =>
+                        sum + Number(addon.price || addon.additional_price || 0),
+                      0
+                    )
+                  : 0;
+                const total = Number(apt.price || 0) + addonsTotal;
+                return (
+                  <div className="total-cost-box">
+                    <span className="total-label">Total</span>
+                    <span className="total-amount">KES {total.toLocaleString()}</span>
                   </div>
-                )}
-              </div>
+                );
+              })()}
+            </div>
 
-              {/* ✅ ACTION BUTTONS */}
-              <div className="appointment-actions">
-                {user.user_type === "client" ? (
-                  <>
-                    {/* 🕓 Client can cancel pending */}
-                    {apt.status === "pending" && (
+            {/* ✅ ACTION BUTTONS (kept same) */}
+            <div className="appointment-actions">
+              {user.user_type === "client" ? (
+                <>
+                  {/* 🕓 Cancel pending */}
+                  {apt.status === "pending" && (
+                    <button
+                      className="btn btn-danger small-btn"
+                      onClick={() => handleCancelAppointment(apt.id)}
+                      disabled={cancelling === apt.id}
+                    >
+                      {cancelling === apt.id ? "Cancelling..." : "Cancel"}
+                    </button>
+                  )}
+
+                  {/* ♻️ Rebook/Delete past */}
+                  {["cancelled", "no-show", "completed"].includes(apt.status) && (
+                    <div className="action-row">
+                      <button
+                        className="btn btn-primary small-btn"
+                        onClick={() => handleRebook(apt)}
+                      >
+                        Rebook
+                      </button>
                       <button
                         className="btn btn-danger small-btn"
-                        onClick={() => handleCancelAppointment(apt.id)}
-                        disabled={cancelling === apt.id}
+                        onClick={() => handleDeleteAppointment(apt.id)}
                       >
-                        {cancelling === apt.id ? "Cancelling..." : "Cancel"}
+                        Delete
                       </button>
-                    )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* ✅ Provider pending controls */}
+                  {apt.status === "pending" && type === "pending" && (
+                    <div className="status-action-row">
+                      <button
+                        className="btn-status confirm"
+                        onClick={() => handleStatusUpdate(apt.id, "scheduled")}
+                        disabled={updating === apt.id}
+                      >
+                        {updating === apt.id ? "Updating..." : "Confirm"}
+                      </button>
+                      <button
+                        className="btn-status reject"
+                        onClick={() => handleStatusUpdate(apt.id, "cancelled")}
+                        disabled={updating === apt.id}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
 
-                    {/* ♻️ Client can rebook or delete only after appointment ended */}
-                    {["cancelled", "no-show", "completed"].includes(apt.status) && (
-                      <div className="action-row">
-                        <button
-                          className="btn btn-primary small-btn"
-                          onClick={() => handleRebook(apt)}
-                        >
-                          Rebook
-                        </button>
-                        <button
-                          className="btn btn-danger small-btn"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {/* ✅ PROVIDER CONTROLS */}
-                    {apt.status === "pending" && type === "pending" && (
-                      <div className="status-action-row">
-                        <button
-                          className="btn-status confirm"
-                          onClick={() =>
-                            handleStatusUpdate(apt.id, "scheduled")
-                          }
-                          disabled={updating === apt.id}
-                        >
-                          {updating === apt.id ? "Updating..." : "Confirm"}
-                        </button>
-                        <button
-                          className="btn-status reject"
-                          onClick={() =>
-                            handleStatusUpdate(apt.id, "cancelled")
-                          }
-                          disabled={updating === apt.id}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
+                  {/* 📅 Upcoming controls */}
+                  {type === "upcoming" && apt.status === "scheduled" && (
+                    <div className="status-dropdown-container">
+                      <select
+                        value={apt.status}
+                        onChange={(e) =>
+                          handleStatusUpdate(apt.id, e.target.value)
+                        }
+                        disabled={updating === apt.id}
+                        className="status-select"
+                      >
+                        <option value="scheduled">Scheduled</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="no-show">No Show</option>
+                      </select>
+                    </div>
+                  )}
 
-                    {/* 📅 Upcoming only — allow provider to manage status */}
-                    {type === "upcoming" && apt.status === "scheduled" && (
-                      <div className="status-dropdown-container">
-                        <select
-                          value={apt.status}
-                          onChange={(e) =>
-                            handleStatusUpdate(apt.id, e.target.value)
-                          }
-                          disabled={updating === apt.id}
-                          className="status-select"
-                        >
-                          <option value="scheduled">Scheduled</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
-                          <option value="no-show">No Show</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {/* 🗑 Past — only delete for providers */}
-                    {type === "past" && (
-                      <div className="action-row">
-                        <button
-                          className="btn btn-danger small-btn"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                  {/* 🗑 Past delete */}
+                  {type === "past" && (
+                    <div className="action-row">
+                      <button
+                        className="btn btn-danger small-btn"
+                        onClick={() => handleDeleteAppointment(apt.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-          ))}
-        </div>
-      );
-    };
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   if (loading)
     return (
@@ -427,6 +435,14 @@ function AppointmentManager({ user }) {
             user={user}
             onClose={() => setShowBooking(false)}
             onBookingSuccess={handleRebookSuccess}
+          />
+        )}
+
+        {/* 💳 Payment Info Modal */}
+        {selectedPayment && (
+          <PaymentInfoModal
+            payment={selectedPayment}
+            onClose={() => setSelectedPayment(null)}
           />
         )}
       </div>
