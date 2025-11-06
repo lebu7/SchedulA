@@ -191,13 +191,10 @@ function AppointmentManager({ user }) {
                 <p>
                   <strong>Duration:</strong> {apt.duration} minutes
                 </p>
-                <p>
-                  <strong>Deposit:</strong> KES {apt.price}
-                </p>
-                {/* 💳 Payment Status */}
-                {apt.payment_status && (
-                  <p>
-                    <strong>Payment Status:</strong>{" "}
+                {/* 💳 Deposit & Payment Status */}
+                <p className="payment-line">
+                  <strong>Deposit:</strong> KES {apt.price}{" "}
+                  {apt.payment_status && (
                     <span
                       className={`payment-status ${
                         apt.payment_status === "paid" ? "paid" : "unpaid"
@@ -205,9 +202,8 @@ function AppointmentManager({ user }) {
                     >
                       {apt.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}
                     </span>
-                  </p>
-                )}
-
+                  )}
+                </p>
                 {renderAddons(apt)}
 
                 {/* ✅ Display visually styled total */}
