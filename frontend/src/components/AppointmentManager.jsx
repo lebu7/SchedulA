@@ -194,6 +194,19 @@ function AppointmentManager({ user }) {
                 <p>
                   <strong>Deposit:</strong> KES {apt.price}
                 </p>
+                {/* 💳 Payment Status */}
+                {apt.payment_status && (
+                  <p>
+                    <strong>Payment Status:</strong>{" "}
+                    <span
+                      className={`payment-status ${
+                        apt.payment_status === "paid" ? "paid" : "unpaid"
+                      }`}
+                    >
+                      {apt.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}
+                    </span>
+                  </p>
+                )}
 
                 {renderAddons(apt)}
 

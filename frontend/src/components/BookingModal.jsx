@@ -201,30 +201,31 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
     onClose: () => setError("Payment window closed before completing payment."),
   };
 
-    const handlePaymentSuccess = async (response) => {
-      console.log("✅ Payment successful:", response);
-      setError("");
+  const handlePaymentSuccess = async (response) => {
+    console.log("✅ Payment successful:", response);
+    setError("");
 
-      try {
-        // Continue with booking after successful payment
-        const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
-        const payload = {
-          service_id: serviceMeta.id,
-          appointment_date: appointmentDateTime.toISOString(),
-          notes: notes.trim(),
-          addons: selectedAddons.map((a) => a.id),
-          payment_reference: response.reference, // store Paystack reference
-        };
+    try {
+      const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
 
-        await api.post("/appointments", payload);
-        onBookingSuccess?.();
-        onClose?.();
-      } catch (err) {
-        console.error("Booking after payment failed:", err);
-        setError("Payment was successful, but booking failed. Please contact support.");
-      }
-    };
+      // include payment details (amount and reference)
+      const payload = {
+        service_id: serviceMeta.id,
+        appointment_date: appointmentDateTime.toISOString(),
+        notes: notes.trim(),
+        addons: selectedAddons.map((a) => a.id),
+        payment_reference: response.reference,
+        payment_amount: selectedPaymentAmount / 100, // convert from kobo
+      };
 
+      await api.post("/appointments", payload);
+      onBookingSuccess?.();
+      onClose?.();
+    } catch (err) {
+      console.error("Booking after payment failed:", err);
+      setError("Payment was successful, but booking failed. Please contact support.");
+    }
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>

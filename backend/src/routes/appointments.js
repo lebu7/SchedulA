@@ -122,7 +122,8 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { service_id, appointment_date, notes, rebook_from } = req.body;
+    const { service_id, appointment_date, notes, rebook_from, payment_reference, payment_amount } = req.body;
+
     const client_id = req.user.userId;
     const appointmentDate = new Date(appointment_date);
     if (appointmentDate <= new Date())
@@ -180,10 +181,24 @@ router.post(
               }
 
               // ✅ Create appointment
-              db.run(
-                `INSERT INTO appointments (client_id, provider_id, service_id, appointment_date, notes, status)
-                 VALUES (?, ?, ?, ?, ?, 'pending')`,
-                [client_id, service.provider_id, service_id, appointment_date, notes || ''],
+              const status = payment_reference ? 'paid' : 'pending';
+            db.run(
+              `INSERT INTO appointments (
+                client_id, provider_id, service_id, appointment_date, notes, status,
+                payment_reference, payment_amount, payment_status
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                client_id,
+                service.provider_id,
+                service_id,
+                appointment_date,
+                notes || '',
+                status,
+                payment_reference || null,
+                payment_amount || 0,
+                payment_reference ? 'paid' : 'unpaid',
+              ],
                 function (err4) {
                   if (err4)
                     return res.status(500).json({ error: 'Failed to create appointment' });

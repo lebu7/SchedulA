@@ -368,3 +368,20 @@
   background-color: #fef3c7;
   color: #92400e;
 }
+/* 💳 Payment status styles */
+.payment-status {
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.payment-status.paid {
+  color: #0a730a;
+  background-color: #d6f5d6;
+}
+
+.payment-status.unpaid {
+  color: #b30000;
+  background-color: #fcdcdc;
+}
