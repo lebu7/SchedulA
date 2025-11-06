@@ -13,7 +13,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [availability, setAvailability] = useState(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-
+  const [paymentOption, setPaymentOption] = useState("deposit");
+  const [customAmount, setCustomAmount] = useState("");
   const [addons, setAddons] = useState([]);
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [totalPrice, setTotalPrice] = useState(parseFloat(service.price || 0));
@@ -168,11 +169,23 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
 
   const isClosed = availability?.is_closed;
   const isGloballyClosed = serviceMeta?.is_closed && !availability;
-  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY; // ✅ fix for Vite (no 'process' error)
   const email = user?.email || "customer@example.com"; // fallback if user object lacks email
-  const amount = totalPrice * 100; // Paystack expects amount in kobo (KES * 100)
-  const depositPercentage = 0.3; // e.g., 30% deposit
-  const depositAmount = Math.floor(amount * depositPercentage);
+
+  // 💰 Payment calculations
+  const depositPercentage = 0.3; // 30% deposit
+  const fullAmount = totalPrice * 100; // Paystack uses kobo (KES * 100)
+  const depositAmount = Math.floor(fullAmount * depositPercentage);
+
+  // ✅ compute payment amount based on selected option
+  const selectedPaymentAmount = (() => {
+    if (paymentOption === "full") return fullAmount;
+    if (paymentOption === "custom") {
+      const entered = parseFloat(customAmount || 0) * 100;
+      return entered >= depositAmount ? entered : depositAmount; // must be ≥ deposit
+    }
+    return depositAmount; // default = deposit
+  })();
 
   const paystackProps = {
     email,

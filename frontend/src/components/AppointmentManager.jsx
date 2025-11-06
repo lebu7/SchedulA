@@ -13,7 +13,9 @@ function AppointmentManager({ user }) {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTab] = useState(
+    user.user_type === "provider" ? "upcoming" : "pending"
+  );
   const [showBooking, setShowBooking] = useState(false);
   const [rebookService, setRebookService] = useState(null);
 
@@ -193,18 +195,31 @@ function AppointmentManager({ user }) {
 
               {/* ✅ Display visually styled total */}
               {(() => {
-                const addonsTotal = (apt.addons || []).reduce(
-                  (sum, addon) => sum + Number(addon.price || 0),
-                  0
-                );
-                const total = Number(apt.price || 0) + addonsTotal;
-                return (
-                  <div className="total-cost-box">
-                    <span className="total-label">Total</span>
-                    <span className="total-amount">KES {total.toLocaleString()}</span>
-                  </div>
-                );
-              })()}
+              const selectedAddons =
+                apt.addons ||
+                apt.sub_services ||
+                apt.selected_addons ||
+                apt.addon_items ||
+                [];
+
+              const addonsTotal = Array.isArray(selectedAddons)
+                ? selectedAddons.reduce(
+                    (sum, addon) => sum + Number(addon.price || addon.additional_price || 0),
+                    0
+                  )
+                : 0;
+
+              const total = Number(apt.price || 0) + addonsTotal;
+
+              return (
+                <div className="total-cost-box">
+                  <span className="total-label">Total</span>
+                  <span className="total-amount">
+                    KES {total.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })()}
 
               {getStatusBadge(apt.status)}
             </div>
