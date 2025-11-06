@@ -13,6 +13,7 @@ function AppointmentManager({ user }) {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [selectedPayment, setSelectedPayment] = useState(null);
   const [activeTab, setActiveTab] = useState(
     user.user_type === "provider" ? "upcoming" : "pending"
   );
@@ -197,9 +198,20 @@ function AppointmentManager({ user }) {
                   <strong>Deposit:</strong> KES {apt.price}{" "}
                   {apt.payment_status && (
                     <span
-                      className={`payment-status ${
+                      className={`payment-status clickable ${
                         apt.payment_status === "paid" ? "paid" : "unpaid"
                       }`}
+                      onClick={() =>
+                        setSelectedPayment({
+                          reference: apt.payment_reference,
+                          amount: apt.price,
+                          status: apt.payment_status,
+                          service: apt.service_name,
+                          provider: apt.provider_name,
+                          date: apt.appointment_date,
+                        })
+                      }
+                      title="View payment details"
                     >
                       {apt.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}
                     </span>
@@ -234,6 +246,41 @@ function AppointmentManager({ user }) {
                 })()}
 
                 {getStatusBadge(apt.status)}
+                {selectedPayment && (
+                  <div className="payment-modal-overlay" onClick={() => setSelectedPayment(null)}>
+                    <div
+                      className="payment-modal"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <h3>💳 Payment Receipt</h3>
+                      <p><strong>Service:</strong> {selectedPayment.service}</p>
+                      <p><strong>Provider:</strong> {selectedPayment.provider}</p>
+                      <p><strong>Date:</strong> {formatDate(selectedPayment.date)}</p>
+                      <p><strong>Amount:</strong> KES {selectedPayment.amount}</p>
+                      <p>
+                        <strong>Status:</strong>{" "}
+                        <span
+                          className={`payment-status ${
+                            selectedPayment.status === "paid" ? "paid" : "unpaid"
+                          }`}
+                        >
+                          {selectedPayment.status === "paid" ? "✅ Paid" : "❌ Unpaid"}
+                        </span>
+                      </p>
+                      <p>
+                        <strong>Reference:</strong>{" "}
+                        {selectedPayment.reference || "— Not available —"}
+                      </p>
+
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setSelectedPayment(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ✅ ACTION BUTTONS */}

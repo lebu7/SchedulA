@@ -119,6 +119,8 @@ router.post(
     body('rebook_from').optional().isInt(),
   ],
   (req, res) => {
+    console.log("🧠 Booking payload received:", req.body);
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -130,8 +132,17 @@ router.post(
       return res.status(400).json({ error: 'Appointment date must be in the future' });
 
     db.get('SELECT * FROM services WHERE id = ?', [service_id], (err, service) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      if (!service) return res.status(404).json({ error: 'Service not found' });
+      if (err) {
+        console.error("❌ Error fetching service:", err.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (!service) {
+        console.error("❌ Service not found for ID:", service_id);
+        return res.status(404).json({ error: 'Service not found' });
+      }
+
+      console.log("✅ Service found:", service);
 
       if (service.is_closed)
         return res.status(400).json({ error: `${service.name}'s provider is currently closed.` });
@@ -181,27 +192,30 @@ router.post(
               }
 
               // ✅ Create appointment
-              const status = payment_reference ? 'paid' : 'pending';
-            db.run(
-              `INSERT INTO appointments (
-                client_id, provider_id, service_id, appointment_date, notes, status,
-                payment_reference, payment_amount, payment_status
-              )
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                client_id,
-                service.provider_id,
-                service_id,
-                appointment_date,
-                notes || '',
-                status,
-                payment_reference || null,
-                payment_amount || 0,
-                payment_reference ? 'paid' : 'unpaid',
-              ],
+              const status = 'pending'; // all new appointments start pending, regardless of payment
+
+              db.run(
+                `INSERT INTO appointments (
+                  client_id, provider_id, service_id, appointment_date, notes, status,
+                  payment_reference, payment_amount, payment_status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  client_id,
+                  service.provider_id,
+                  service_id,
+                  appointment_date,
+                  notes || '',
+                  status,
+                  payment_reference || null,
+                  payment_amount || 0,
+                  payment_reference ? 'paid' : 'unpaid',
+                ],
                 function (err4) {
-                  if (err4)
-                    return res.status(500).json({ error: 'Failed to create appointment' });
+                  if (err4) {
+                    console.error("❌ SQL Insert Error:", err4.message);
+                    return res.status(500).json({ error: err4.message });
+                  }
 
                   const newId = this.lastID;
 
@@ -414,6 +428,31 @@ router.delete('/:id', authenticateToken, (req, res) => {
           res.json({ message: 'Appointment removed from dashboard' });
         }
       );
+    }
+  );
+});
+/* ---------------------------------------------
+   ✅ Update payment details (called after Paystack payment)
+--------------------------------------------- */
+router.put('/:id/payment', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { payment_reference, amount_paid, payment_status } = req.body;
+
+  if (!payment_reference)
+    return res.status(400).json({ error: 'Missing payment reference' });
+
+  db.run(
+    `UPDATE appointments 
+     SET payment_reference = ?, 
+         amount_paid = ?, 
+         payment_status = ? 
+     WHERE id = ?`,
+    [payment_reference, amount_paid || 0, payment_status || 'paid', id],
+    function (err) {
+      if (err) return res.status(500).json({ error: 'Failed to update payment info' });
+      if (this.changes === 0)
+        return res.status(404).json({ error: 'Appointment not found' });
+      res.json({ message: 'Payment info updated successfully' });
     }
   );
 });

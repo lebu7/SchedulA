@@ -201,31 +201,46 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
     onClose: () => setError("Payment window closed before completing payment."),
   };
 
-  const handlePaymentSuccess = async (response) => {
-    console.log("✅ Payment successful:", response);
-    setError("");
+    const handlePaymentSuccess = async (response) => {
+      console.log("✅ Payment successful:", response);
+      setError("");
 
-    try {
-      const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
+      try {
+        const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
 
-      // include payment details (amount and reference)
-      const payload = {
-        service_id: serviceMeta.id,
-        appointment_date: appointmentDateTime.toISOString(),
-        notes: notes.trim(),
-        addons: selectedAddons.map((a) => a.id),
-        payment_reference: response.reference,
-        payment_amount: selectedPaymentAmount / 100, // convert from kobo
-      };
+        // Step 1️⃣ — Create appointment and include payment reference + amount
+        const payload = {
+          service_id: serviceMeta.id,
+          appointment_date: appointmentDateTime.toISOString(),
+          notes: notes.trim(),
+          addons: selectedAddons.map((a) => a.id),
+          payment_reference: response.reference,
+          payment_amount: selectedPaymentAmount / 100, // convert from kobo
+        };
 
-      await api.post("/appointments", payload);
-      onBookingSuccess?.();
-      onClose?.();
-    } catch (err) {
-      console.error("Booking after payment failed:", err);
-      setError("Payment was successful, but booking failed. Please contact support.");
-    }
-  };
+        const { data } = await api.post("/appointments", payload);
+        const newAppointmentId = data?.appointment?.id;
+
+        // Step 2️⃣ — If the appointment was created successfully, update payment details in DB
+        if (newAppointmentId) {
+          await api.put(`/appointments/${newAppointmentId}/payment`, {
+            payment_reference: response.reference,
+            amount_paid: selectedPaymentAmount / 100,
+            payment_status: "paid",
+          });
+          console.log("💾 Payment info saved to DB for appointment:", newAppointmentId);
+        }
+
+        // Step 3️⃣ — Notify success + close modal
+        onBookingSuccess?.();
+        onClose?.();
+      } catch (err) {
+        console.error("Booking after payment failed:", err);
+        setError(
+          "Payment was successful, but booking update failed. Please contact support."
+        );
+      }
+    };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
