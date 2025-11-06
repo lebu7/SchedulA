@@ -157,7 +157,8 @@ function AppointmentManager({ user }) {
 
     const renderAppointmentsList = (list, type) => {
       if (type === "past") {
-        list = list.filter((apt) => apt.status !== "pending");
+        const pastStatuses = ["completed", "cancelled", "no-show", "rebooked"];
+        list = list.filter((apt) => pastStatuses.includes(apt.status));
       }
 
       if (!list || list.length === 0)

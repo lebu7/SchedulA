@@ -47,6 +47,27 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+// ✅ Auto-cancel past pending appointments function
+const autoCancelPastAppointments = async () => {
+  try {
+    await db.run(`
+      UPDATE appointments
+      SET status = 'cancelled'
+      WHERE status = 'pending'
+      AND datetime(appointment_date) < datetime('now')
+    `);
+    console.log('🕒 Auto-cancelled past pending appointments');
+  } catch (error) {
+    console.error('❌ Error auto-cancelling appointments:', error);
+  }
+};
+
+// Run once when server starts
+autoCancelPastAppointments();
+
+// Schedule to run every hour
+setInterval(autoCancelPastAppointments, 60 * 60 * 1000); // every 1 hour
+
 app.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
