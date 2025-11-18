@@ -122,7 +122,7 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { service_id, appointment_date, notes, rebook_from, payment_reference, payment_amount } = req.body;
+    const { service_id, appointment_date, notes, rebook_from, payment_reference, payment_amount, addons } = req.body;
 
     const client_id = req.user.userId;
     const appointmentDate = new Date(appointment_date);
@@ -153,21 +153,18 @@ router.post(
 
               const open = provider?.opening_time || '08:00';
               const close = provider?.closing_time || '18:00';
-              const [hour, minute] = appointmentDate.toISOString().split('T')[1].split(':');
-              const currentTime = `${hour}:${minute}`;
+
               // Convert appointment time to Nairobi local time
               const nairobiTime = new Date(
-                appointmentDate.toLocaleString("en-US", { timeZone: "Africa/Nairobi" })
+                appointmentDate.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' })
               );
 
-              // Extract HH:MM
               const bookingHour = nairobiTime.getHours();
               const bookingMinute = nairobiTime.getMinutes();
               const bookingTotalMinutes = bookingHour * 60 + bookingMinute;
 
-              // Parse provider open/close
-              const [openH, openM] = (open || "08:00").split(":").map(Number);
-              const [closeH, closeM] = (close || "18:00").split(":").map(Number);
+              const [openH, openM] = open.split(':').map(Number);
+              const [closeH, closeM] = close.split(':').map(Number);
               const openMinutes = openH * 60 + openM;
               const closeMinutes = closeH * 60 + closeM;
 
@@ -180,12 +177,26 @@ router.post(
               // ✅ Create appointment
               const status = 'pending'; // all new appointments start pending, regardless of payment
 
+              // 🧮 Calculate add-on totals
+              let addons_total = 0;
+              if (Array.isArray(addons) && addons.length > 0) {
+                addons_total = addons.reduce(
+                  (sum, addon) => sum + Number(addon.price ?? addon.price ?? 0),
+                  0
+                );
+              }
+              // 🧾 Compute totals based on service and addons
+              const total_price = Number(service.price || 0) + addons_total;
+              const deposit_amount = Math.round(total_price * 0.3);
+
+              // 🧠 Insert into database
               db.run(
                 `INSERT INTO appointments (
                   client_id, provider_id, service_id, appointment_date, notes, status,
-                  payment_reference, payment_amount, payment_status
+                  payment_reference, payment_amount, payment_status,
+                  total_price, deposit_amount, addons_total
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                   client_id,
                   service.provider_id,
@@ -196,13 +207,21 @@ router.post(
                   payment_reference || null,
                   payment_amount || 0,
                   payment_reference ? 'paid' : 'unpaid',
+                  total_price,
+                  deposit_amount,
+                  addons_total,
                 ],
                 function (err4) {
-                  if (err4)
-                    return res.status(500).json({ error: 'Failed to create appointment' });
+                  if (err4) {
+                    console.error('❌ SQL Insert Error:', err4.message);
+                    return res
+                      .status(500)
+                      .json({ error: 'Failed to create appointment', details: err4.message });
+                  }
 
                   const newId = this.lastID;
 
+                  // 🔁 Handle rebooking if applicable
                   if (rebook_from) {
                     db.run(
                       `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
@@ -211,6 +230,7 @@ router.post(
                     );
                   }
 
+                  // ✅ Fetch the created appointment
                   db.get(
                     `SELECT a.*, s.name AS service_name, s.duration, s.price,
                             u.name AS provider_name, u.business_name
@@ -220,13 +240,23 @@ router.post(
                      WHERE a.id = ?`,
                     [newId],
                     (e, appointment) => {
-                      if (e)
+                      if (e) {
+                        console.error('❌ Fetch after insert failed:', e);
                         return res
                           .status(500)
                           .json({ error: 'Appointment created but fetch failed' });
+                      }
+
+                      console.log('✅ Appointment created successfully:', {
+                        id: newId,
+                        total_price,
+                        deposit_amount,
+                        addons_total,
+                      });
+
                       res.status(201).json({
                         message:
-                          'Appointment requested successfully (pending provider confirmation)',
+                          'Appointment booked successfully (pending provider confirmation)',
                         appointment,
                       });
                     }
@@ -260,7 +290,7 @@ router.put('/providers/:id/closed', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider sets global business hours (update in users)
+   ✅ Provider sets global business hours
 --------------------------------------------- */
 router.put(
   '/providers/:id/hours',
@@ -415,6 +445,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
     }
   );
 });
+
 /* ---------------------------------------------
    ✅ Update payment details (called after Paystack payment)
 --------------------------------------------- */

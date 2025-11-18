@@ -475,3 +475,19 @@
   background-color: #ffc107;
   color: black;
 }
+.payment-details {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+.payment-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.receipt-icon:hover {
+  transform: scale(1.1);
+  color: #005c3a;
+  transition: all 0.2s ease-in-out;
+}

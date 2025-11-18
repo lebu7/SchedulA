@@ -342,7 +342,7 @@ router.post(
   (req, res) => {
     const serviceId = req.params.id;
     const providerId = req.user.userId;
-    const { name, description, additional_price } = req.body;
+    const { name, description, price } = req.body;
 
     if (!name) return res.status(400).json({ error: "Name is required" });
 
@@ -359,7 +359,7 @@ router.post(
         db.run(
           `INSERT INTO sub_services (service_id, name, description, price)
            VALUES (?, ?, ?, ?)`,
-          [serviceId, name, description || "", additional_price || 0],
+          [serviceId, name, description || "", price || 0],
           function (err2) {
             if (err2) {
               console.error("💥 Sub-service insert error:", err2);
@@ -373,7 +373,7 @@ router.post(
                 id: this.lastID,
                 name,
                 description,
-                additional_price,
+                price,
               },
             });
           }
@@ -425,9 +425,9 @@ router.put(
   requireRole("provider"),
   (req, res) => {
     const { serviceId, subId } = req.params;
-    const { name, description, additional_price } = req.body;
+    const { name, description, price } = req.body;
 
-    if (!name || additional_price === undefined) {
+    if (!name || price === undefined) {
       return res.status(400).json({ error: "Name and price are required" });
     }
 
@@ -435,7 +435,7 @@ router.put(
       `UPDATE sub_services 
        SET name = ?, description = ?, price = ? 
        WHERE id = ? AND service_id = ?`,
-      [name, description || "", additional_price, subId, serviceId],
+      [name, description || "", price, subId, serviceId],
       function (err) {
         if (err) {
           console.error("💥 Sub-service update error:", err);
@@ -446,7 +446,7 @@ router.put(
         }
         res.json({
           message: "Sub-service updated successfully",
-          sub_service: { id: subId, name, description, price: additional_price },
+          sub_service: { id: subId, name, description, price: price },
         });
       }
     );

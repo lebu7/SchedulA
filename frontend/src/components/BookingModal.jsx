@@ -34,7 +34,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     }
   };
 
-  //Close addon dropdown
+  // Close addon dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest(".addon-dropdown")) {
@@ -45,12 +45,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-
   // Update total when addons change
   useEffect(() => {
     const addonTotal = selectedAddons.reduce(
       (sum, addon) =>
-        sum + parseFloat(addon.price || addon.additional_price || 0),
+        sum + parseFloat(addon.price || addon.price || 0),
       0
     );
     setTotalPrice(parseFloat(service.price) + addonTotal);
@@ -63,23 +62,27 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   };
 
   // Generate time slots between opening and closing times
-const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
-  const slots = [];
-  const [openH, openM] = openingTime.split(":").map(Number);
-  const [closeH, closeM] = closingTime.split(":").map(Number);
+  const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
+    const slots = [];
+    const [openH, openM] = openingTime.split(":").map(Number);
+    const [closeH, closeM] = closingTime.split(":").map(Number);
 
-  const openDate = new Date();
-  openDate.setHours(openH, openM, 0, 0);
-  const closeDate = new Date();
-  closeDate.setHours(closeH, closeM, 0, 0);
+    const openDate = new Date();
+    openDate.setHours(openH, openM, 0, 0);
+    const closeDate = new Date();
+    closeDate.setHours(closeH, closeM, 0, 0);
 
-  for (let time = new Date(openDate); time < closeDate; time.setMinutes(time.getMinutes() + interval)) {
-    const hh = time.getHours().toString().padStart(2, "0");
-    const mm = time.getMinutes().toString().padStart(2, "0");
-    slots.push(`${hh}:${mm}`);
-  }
-  return slots;
-};
+    for (
+      let time = new Date(openDate);
+      time < closeDate;
+      time.setMinutes(time.getMinutes() + interval)
+    ) {
+      const hh = time.getHours().toString().padStart(2, "0");
+      const mm = time.getMinutes().toString().padStart(2, "0");
+      slots.push(`${hh}:${mm}`);
+    }
+    return slots;
+  };
 
   // Availability fetch
   useEffect(() => {
@@ -139,7 +142,7 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
         service_id: serviceMeta.id,
         appointment_date: appointmentDateTime.toISOString(),
         notes: notes.trim(),
-        addons: selectedAddons.map((a) => a.id),
+        addons: selectedAddons, // ✅ send full addon objects
       };
 
       await api.post("/appointments", payload);
@@ -169,78 +172,101 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
 
   const isClosed = availability?.is_closed;
   const isGloballyClosed = serviceMeta?.is_closed && !availability;
-  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY; // ✅ fix for Vite (no 'process' error)
-  const email = user?.email || "customer@example.com"; // fallback if user object lacks email
+  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+  const email = user?.email || "customer@example.com";
 
   // 💰 Payment calculations
-  const depositPercentage = 0.3; // 30% deposit
-  const fullAmount = totalPrice * 100; // Paystack uses kobo (KES * 100)
-  const depositAmount = Math.floor(fullAmount * depositPercentage);
+  const depositPercentage = 0.3;
+  const basePrice = parseFloat(service.price || 0);
 
-  // ✅ compute payment amount based on selected option
+  const addonsTotal = selectedAddons.reduce(
+    (sum, addon) => sum + parseFloat(addon.price || addon.price || 0),
+    0
+  );
+
+  const totalKES = basePrice + addonsTotal;
+  const depositKES = Math.round(totalKES * depositPercentage);
+
+  const fullAmount = totalKES * 100;
+  const depositAmount = depositKES * 100;
+
   const selectedPaymentAmount = (() => {
     if (paymentOption === "full") return fullAmount;
     if (paymentOption === "custom") {
       const entered = parseFloat(customAmount || 0) * 100;
-      return entered >= depositAmount ? entered : depositAmount; // must be ≥ deposit
+      return entered >= depositAmount ? entered : depositAmount;
     }
-    return depositAmount; // default = deposit
+    return depositAmount;
   })();
 
   const paystackProps = {
     email,
-    amount: depositAmount,
+    amount: selectedPaymentAmount,
     currency: "KES",
     metadata: {
       name: user?.name,
       service: serviceMeta.name,
+      addons: selectedAddons.map((a) => a.name).join(", ") || "None",
+      totalPrice: totalPrice,
     },
     publicKey,
-    text: `Pay Deposit (KES ${(depositAmount / 100).toFixed(2)})`,
+    text: `Pay Deposit (KES ${(selectedPaymentAmount / 100).toFixed(2)})`,
     onSuccess: (response) => handlePaymentSuccess(response),
     onClose: () => setError("Payment window closed before completing payment."),
   };
 
-    const handlePaymentSuccess = async (response) => {
-      console.log("✅ Payment successful:", response);
-      setError("");
+  const handlePaymentSuccess = async (response) => {
+    console.log("✅ Payment successful:", response);
+    setError("");
 
-      try {
-        const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
+    try {
+      const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
 
-        // Step 1️⃣ — Create appointment and include payment reference + amount
-        const payload = {
-          service_id: serviceMeta.id,
-          appointment_date: appointmentDateTime.toISOString(),
-          notes: notes.trim(),
-          addons: selectedAddons.map((a) => a.id),
+      const basePrice = parseFloat(serviceMeta.price || 0);
+      const addonsTotal = selectedAddons.reduce(
+        (sum, addon) => sum + parseFloat(addon.price || addon.price || 0),
+        0
+      );
+      const totalKES = basePrice + addonsTotal;
+      const depositKES = Math.round(totalKES * 0.3);
+      const paidAmount = selectedPaymentAmount / 100;
+
+      const payload = {
+        service_id: serviceMeta.id,
+        appointment_date: appointmentDateTime.toISOString(),
+        notes: notes.trim(),
+        addons: selectedAddons, // ✅ send full addon objects
+        addons_total: addonsTotal,
+        total_price: totalKES,
+        deposit_amount: depositKES,
+        payment_reference: response.reference,
+        payment_amount: paidAmount,
+      };
+
+      const { data } = await api.post("/appointments", payload);
+      const newAppointmentId = data?.appointment?.id;
+
+      if (newAppointmentId) {
+        await api.put(`/appointments/${newAppointmentId}/payment`, {
           payment_reference: response.reference,
-          payment_amount: selectedPaymentAmount / 100, // convert from kobo
-        };
-
-        const { data } = await api.post("/appointments", payload);
-        const newAppointmentId = data?.appointment?.id;
-
-        // Step 2️⃣ — If the appointment was created successfully, update payment details in DB
-        if (newAppointmentId) {
-          await api.put(`/appointments/${newAppointmentId}/payment`, {
-            payment_reference: response.reference,
-            amount_paid: selectedPaymentAmount / 100,
-            payment_status: "paid",
-          });
-          console.log("💾 Payment info saved to DB for appointment:", newAppointmentId);
-        }
-
-        // Step 3️⃣ — Notify success + close modal
-        onBookingSuccess?.();
-        onClose?.();
-      } catch (err) {
-        console.error("Booking after payment failed:", err);
-        setError(
-          "Payment was successful, but booking update failed. Please contact support."
+          amount_paid: paidAmount,
+          payment_status: "paid",
+          total_price: totalKES,
+        });
+        console.log(
+          `💾 Payment recorded: KES ${paidAmount} (Ref: ${response.reference}) for appointment ${newAppointmentId}`
         );
       }
-    };
+
+      onBookingSuccess?.();
+      onClose?.();
+    } catch (err) {
+      console.error("❌ Booking after payment failed:", err);
+      setError(
+        "Payment succeeded, but saving the booking failed. Please contact support."
+      );
+    }
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -339,7 +365,9 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
                 {selectedAddons.length > 0
                   ? `${selectedAddons.length} selected`
                   : "Choose add-ons"}{" "}
-                <i className={`fa fa-chevron-${showAddonDropdown ? "up" : "down"}`}></i>
+                <i
+                  className={`fa fa-chevron-${showAddonDropdown ? "up" : "down"}`}
+                ></i>
               </button>
 
               {showAddonDropdown && (
@@ -361,7 +389,7 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
                             />
                             <span>{addon.name}</span>
                             <span className="addon-price">
-                              +KES {addon.price ?? addon.additional_price}
+                              +KES {addon.price ?? addon.price}
                             </span>
                           </label>
                         );
@@ -392,7 +420,6 @@ const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
               Cancel
             </button>
 
-            {/* Show Paystack button only when date & time selected */}
             {selectedDate && selectedTime ? (
               <PaystackButton className="btn btn-primary" {...paystackProps} />
             ) : (

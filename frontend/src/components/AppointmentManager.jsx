@@ -1,7 +1,28 @@
 import React, { useState, useEffect } from "react";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
+import { Receipt } from "lucide-react"; // receipt icon
 import "./AppointmentManager.css";
+
+// ===== Helper: make sure addons are an ARRAY (handles JSON string stored in DB) =====
+const parseAddons = (apt) => {
+  let selectedAddons =
+    apt?.addons || apt?.sub_services || apt?.selected_addons || apt?.addon_items || [];
+
+  // If the DB returned a JSON string (common with SQLite TEXT column), parse it
+  if (typeof selectedAddons === "string") {
+    try {
+      selectedAddons = JSON.parse(selectedAddons);
+    } catch (e) {
+      console.warn("Failed to parse addons JSON for appointment", apt.id, e);
+      selectedAddons = [];
+    }
+  }
+
+  // Ensure we return an array
+  if (!Array.isArray(selectedAddons)) selectedAddons = [];
+  return selectedAddons;
+};
 
 /* 💳 Printable Payment Info Modal */
 function PaymentInfoModal({ payment, onClose }) {
@@ -44,7 +65,7 @@ function PaymentInfoModal({ payment, onClose }) {
             <div class="divider"></div>
 
             <div class="info-row"><strong>Amount Paid:</strong> <span class="amount">KES ${Number(payment.amount_paid || payment.payment_amount || 0).toLocaleString()}</span></div>
-            <div class="info-row"><strong>Pending Amount:</strong> <span class="amount" style="color:#b30000;">KES ${Math.max((payment.price || 0) - (payment.amount_paid || 0), 0).toLocaleString()}</span></div>
+            <div class="info-row"><strong>Pending Amount:</strong> <span class="amount" style="color:#b30000;">KES ${Math.max((payment.total_price ?? payment.price ?? 0) - (payment.amount_paid ?? 0), 0).toLocaleString()}</span></div>
 
             <div class="divider"></div>
 
@@ -77,7 +98,7 @@ function PaymentInfoModal({ payment, onClose }) {
           <p><strong>Amount Paid:</strong> KES {Number(payment.amount_paid || payment.payment_amount || 0).toLocaleString()}</p>
           <p><strong>Pending Amount:</strong> 
             <span style={{ color: "#b30000" }}>
-              {" "}KES {Math.max((payment.price || 0) - (payment.amount_paid || 0), 0).toLocaleString()}
+              {" "}KES {Math.max((payment.total_price ?? payment.price ?? 0) - (payment.amount_paid ?? 0), 0).toLocaleString()}
             </span>
           </p>
         </div>
@@ -202,8 +223,7 @@ function AppointmentManager({ user }) {
   };
 
   const renderAddons = (apt) => {
-    const selectedAddons =
-      apt.addons || apt.sub_services || apt.selected_addons || apt.addon_items || [];
+    const selectedAddons = parseAddons(apt);
 
     if (!Array.isArray(selectedAddons) || selectedAddons.length === 0) {
       return <p className="no-addons-text">No add-ons selected.</p>;
@@ -214,10 +234,10 @@ function AppointmentManager({ user }) {
         <h5 className="addons-heading">💅 Add-ons Selected</h5>
         <ul className="addon-list">
           {selectedAddons.map((addon) => (
-            <li key={addon.id} className="addon-item">
+            <li key={addon.id ?? addon.name} className="addon-item">
               <span className="addon-name">{addon.name}</span>
               <span className="addon-price">
-                + KES {addon.price ?? addon.additional_price}
+                + KES {addon.price ?? addon.price ?? 0}
               </span>
             </li>
           ))}
@@ -235,6 +255,22 @@ function AppointmentManager({ user }) {
 
     if (!list || list.length === 0)
       return <div className="no-appointments">No {type} appointments.</div>;
+
+      const calculateTotals = (apt) => {
+        const selectedAddons = parseAddons(apt);
+
+        const addonsTotal = selectedAddons.reduce(
+          (sum, addon) => sum + Number(addon.price ?? addon.price ?? 0),
+          0
+        );
+
+        const total = Number(apt.total_price ?? apt.price ?? 0);
+        const deposit = Number(apt.deposit_amount ?? Math.round(total * 0.3));
+        const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
+        const pending = Math.max(total - paid, 0);
+
+        return { addonsTotal, total, deposit, paid, pending, selectedAddons };
+      };
 
     return (
       <div className="appointments-list">
@@ -257,39 +293,65 @@ function AppointmentManager({ user }) {
               <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
               <p><strong>Duration:</strong> {apt.duration} minutes</p>
 
-              {/* 💳 Deposit + Payment badge */}
-              <p className="payment-line">
-                <strong>Deposit:</strong> KES {apt.price}{" "}
-                {apt.payment_status && (
-                  <span
-                    className={`payment-status clickable ${
-                      apt.payment_status === "paid" ? "paid" : "unpaid"
-                    }`}
-                    onClick={() => setSelectedPayment(apt)}
-                  >
-                    {apt.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}
-                  </span>
-                )}
-              </p>
+              {/* 💳 Deposit, Payment Info & Receipt */}
+              {(() => {
+                const { total, deposit, paid, pending } = calculateTotals(apt);
+
+                return (
+                  <div className="payment-details">
+                    <p className="payment-line">
+                      <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}{" "}
+                      <span
+                        className={`payment-status ${apt.payment_status === "paid" ? "paid" : "unpaid"}`}
+                        style={{
+                          backgroundColor: apt.payment_status === "paid" ? "#d4edda" : "#f8d7da",
+                          color: apt.payment_status === "paid" ? "#155724" : "#721c24",
+                          borderRadius: "6px",
+                          padding: "2px 8px",
+                          marginLeft: "8px",
+                          fontWeight: "600",
+                          cursor: "default",
+                        }}
+                      >
+                        {apt.payment_status === "paid" ? "Paid" : "Unpaid"}
+                      </span>
+
+                      {/* 🧾 Receipt Icon */}
+                      {apt.payment_status === "paid" && (
+                        <Receipt
+                          size={18}
+                          className="receipt-icon"
+                          style={{
+                            marginLeft: "10px",
+                            color: "#007b55",
+                            cursor: "pointer",
+                            verticalAlign: "middle",
+                          }}
+                          onClick={() => setSelectedPayment(apt)}
+                          title="View Receipt"
+                        />
+                      )}
+                    </p>
+
+                    <p>
+                      <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
+                    </p>
+                    <p style={{ color: pending > 0 ? "#b30000" : "#007b55" }}>
+                      <strong>Pending Amount:</strong> KES {pending.toLocaleString()}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {renderAddons(apt)}
 
-              {/* Total */}
+              {/* Total (base + add-ons) */}
               {(() => {
-                const selectedAddons =
-                  apt.addons || apt.sub_services || apt.selected_addons || apt.addon_items || [];
-                const addonsTotal = Array.isArray(selectedAddons)
-                  ? selectedAddons.reduce(
-                      (sum, addon) =>
-                        sum + Number(addon.price || addon.additional_price || 0),
-                      0
-                    )
-                  : 0;
-                const total = Number(apt.price || 0) + addonsTotal;
+                const { total } = calculateTotals(apt);
                 return (
                   <div className="total-cost-box">
                     <span className="total-label">Total</span>
-                    <span className="total-amount">KES {total.toLocaleString()}</span>
+                    <span className="total-amount">KES {Number(total).toLocaleString()}</span>
                   </div>
                 );
               })()}
