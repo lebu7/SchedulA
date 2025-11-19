@@ -216,21 +216,32 @@ function ServiceManager({ user }) {
       alert("Please enter a name and price for the add-on.");
       return;
     }
+
     try {
+      const formattedPrice = parseFloat(newSub.price);
+      if (isNaN(formattedPrice)) {
+        alert("Price must be a number.");
+        return;
+      }
+
       const payload = {
         name: newSub.name,
         description: "",
-        additional_price: parseFloat(newSub.price),
+        price: formattedPrice,               // backend CREATE may expect this
+        additional_price: formattedPrice,    // backend CREATE may expect this
       };
+
       await api.post(`/services/${serviceId}/sub-services`, payload);
       await fetchSubservices(serviceId);
+
+      // normalize price
       setSubservices(prev => ({
-      ...prev,
-      [serviceId]: prev[serviceId].map(sub => ({
-        ...sub,
-        price: sub.additional_price ?? sub.price ?? 0
-      }))
-    }));
+        ...prev,
+        [serviceId]: prev[serviceId].map(sub => ({
+          ...sub,
+          price: sub.additional_price ?? sub.price ?? 0
+        }))
+      }));
 
       setGlobalSuccess("✅ Add-on created successfully!");
       setTimeout(() => setGlobalSuccess(""), 2000);
@@ -239,6 +250,7 @@ function ServiceManager({ user }) {
       setNewSub({ name: "", price: "" });
     } catch (error) {
       console.error("Error adding sub-service:", error);
+      alert(error.response?.data?.error || "Failed to save add-on.");
     }
   };
 
