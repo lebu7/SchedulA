@@ -49,7 +49,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   useEffect(() => {
     const addonTotal = selectedAddons.reduce(
       (sum, addon) =>
-        sum + parseFloat(addon.price || addon.price || 0),
+        sum + parseFloat(addon.price ?? addon.additional_price ?? 0),
       0
     );
     setTotalPrice(parseFloat(service.price) + addonTotal);
@@ -140,7 +140,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     try {
       const basePrice = parseFloat(serviceMeta.price || 0);
       const addonsTotal = selectedAddons.reduce(
-        (sum, addon) => sum + parseFloat(addon.price || addon.additional_price || 0),
+        (sum, addon) =>
+          sum + parseFloat(addon.price ?? addon.additional_price ?? 0),
         0
       );
 
@@ -157,9 +158,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         deposit_amount: depositKES,
       };
 
-      await api.post("/appointments", payload);
-      onBookingSuccess?.();
-      onClose?.();
       setRefreshKey((prev) => prev + 1);
     } catch (err) {
       console.error("Booking error:", err);
@@ -236,7 +234,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
 
       const basePrice = parseFloat(serviceMeta.price || 0);
       const addonsTotal = selectedAddons.reduce(
-        (sum, addon) => sum + parseFloat(addon.price || addon.price || 0),
+        (sum, addon) => sum + parseFloat(addon.price ?? addon.additional_price ?? 0),
         0
       );
       const totalKES = basePrice + addonsTotal;
@@ -315,7 +313,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 <div key={a.id} className="preview-item addon-line">
                   <span className="preview-label">+ {a.name}</span>
                   <span className="preview-value">
-                    KES {a.price ?? a.additional_price}
+                    KES {a.price ?? a.additional_price ?? 0}
                   </span>
                 </div>
               ))}
@@ -401,7 +399,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                             />
                             <span>{addon.name}</span>
                             <span className="addon-price">
-                              +KES {addon.price ?? addon.price}
+                              +KES {addon.price ?? addon.price ?? 0}
                             </span>
                           </label>
                         );
