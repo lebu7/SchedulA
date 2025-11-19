@@ -48,7 +48,10 @@ function ServiceManager({ user }) {
       const res = await api.get(`/services/${serviceId}/sub-services`);
       setSubservices((prev) => ({
         ...prev,
-        [serviceId]: res.data.sub_services || [],
+        [serviceId]: (res.data.sub_services || []).map(sub => ({
+          ...sub,
+          price: sub.additional_price ?? sub.price ?? 0
+        })),
       }));
     } catch (error) {
       console.error("Error fetching sub-services:", error);
@@ -221,6 +224,13 @@ function ServiceManager({ user }) {
       };
       await api.post(`/services/${serviceId}/sub-services`, payload);
       await fetchSubservices(serviceId);
+      setSubservices(prev => ({
+      ...prev,
+      [serviceId]: prev[serviceId].map(sub => ({
+        ...sub,
+        price: sub.additional_price ?? sub.price ?? 0
+      }))
+    }));
 
       setGlobalSuccess("✅ Add-on created successfully!");
       setTimeout(() => setGlobalSuccess(""), 2000);
@@ -237,7 +247,13 @@ function ServiceManager({ user }) {
     try {
       await api.delete(`/services/${serviceId}/sub-services/${subId}`);
       await fetchSubservices(serviceId);
-
+      setSubservices(prev => ({
+        ...prev,
+        [serviceId]: prev[serviceId].map(sub => ({
+          ...sub,
+          price: sub.additional_price ?? sub.price ?? 0
+        }))
+      }));
       setGlobalSuccess("✅ Add-on deleted successfully!");
       setTimeout(() => setGlobalSuccess(""), 2000);
     } catch (error) {
@@ -252,14 +268,32 @@ function ServiceManager({ user }) {
       alert("Please enter a valid add-on name.");
       return;
     }
+
     try {
+      const formattedPrice = parseFloat(editingSub.price);
+      if (isNaN(formattedPrice)) {
+        alert("Price must be a number.");
+        return;
+      }
+
       const payload = {
         name: editingSub.name,
         description: "",
-        additional_price: parseFloat(editingSub.price),
+        price: formattedPrice,               // backend update validation requires this
+        additional_price: formattedPrice,    // backend create uses this
       };
+
       await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
+
       await fetchSubservices(serviceId);
+
+      setSubservices(prev => ({
+        ...prev,
+        [serviceId]: prev[serviceId].map(sub => ({
+          ...sub,
+          price: sub.additional_price ?? sub.price ?? 0
+        }))
+      }));
 
       setGlobalSuccess("✅ Add-on updated successfully!");
       setTimeout(() => setGlobalSuccess(""), 2000);
@@ -267,6 +301,7 @@ function ServiceManager({ user }) {
       setEditingSub(null);
     } catch (error) {
       console.error("Error updating sub-service:", error);
+      alert(error.response?.data?.error || "Failed to update add-on.");
     }
   };
 
@@ -453,14 +488,16 @@ function ServiceManager({ user }) {
                       {(subservices[service.id] || []).map((sub) => (
                         <li key={sub.id}>
                           <span>
-                            {sub.name} — <strong>KES {sub.price}</strong>
+                            {sub.name} — <strong>KES {sub.additional_price ?? sub.price ?? 0}</strong>
                           </span>
                           <div className="subservice-actions compact">
                             <button
                               className="icon-btn edit"
                               onClick={() =>
                                 setEditingSub({
-                                  ...sub,
+                                  id: sub.id,
+                                  name: sub.name,
+                                  price: sub.additional_price ?? sub.price ?? 0,
                                   serviceId: service.id,
                                 })
                               }
