@@ -7,7 +7,7 @@ import "./AppointmentManager.css";
 // ===== Helper: make sure addons are an ARRAY (handles JSON string stored in DB) =====
 const parseAddons = (apt) => {
   let selectedAddons =
-    apt?.addons || apt?.sub_services || apt?.selected_addons || apt?.addon_items || [];
+    apt?.addons || apt?.addon_items || apt?.sub_services || [];
 
   // If the DB returned a JSON string (common with SQLite TEXT column), parse it
   if (typeof selectedAddons === "string") {
@@ -233,11 +233,11 @@ function AppointmentManager({ user }) {
       <div className="addons-container">
         <h5 className="addons-heading">💅 Add-ons Selected</h5>
         <ul className="addon-list">
-          {selectedAddons.map((addon) => (
-            <li key={addon.id ?? addon.name} className="addon-item">
+          {selectedAddons.map((addon, idx) => (
+            <li key={addon.id ?? idx} className="addon-item">
               <span className="addon-name">{addon.name}</span>
               <span className="addon-price">
-                + KES {addon.price ?? addon.price ?? 0}
+                + KES {Number(addon.price ?? addon.additional_price ?? 0).toLocaleString()}
               </span>
             </li>
           ))}
@@ -257,19 +257,29 @@ function AppointmentManager({ user }) {
       return <div className="no-appointments">No {type} appointments.</div>;
 
       const calculateTotals = (apt) => {
+        // parseAddons handles JSON string or array
         const selectedAddons = parseAddons(apt);
 
         const addonsTotal = selectedAddons.reduce(
-          (sum, addon) => sum + Number(addon.price ?? addon.price ?? 0),
+          (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
           0
         );
 
-        const total = Number(apt.total_price ?? apt.price ?? 0);
+        // base price should come from apt.price (service base). Fallback to total_price-addonsTotal if missing.
+        const basePrice = Number(apt.price ?? ((apt.total_price ?? 0) - addonsTotal) ?? 0);
+
+        // total: prefer stored total_price (backend sets it), otherwise base + addons
+        const total = Number(apt.total_price ?? basePrice + addonsTotal);
+
+        // deposit: prefer stored deposit_amount; otherwise compute 30% of total
         const deposit = Number(apt.deposit_amount ?? Math.round(total * 0.3));
+
+        // amount paid: backend stores amount_paid (or payment_amount). fallback zero
         const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
+
         const pending = Math.max(total - paid, 0);
 
-        return { addonsTotal, total, deposit, paid, pending, selectedAddons };
+        return { basePrice, addonsTotal, total, deposit, paid, pending, selectedAddons };
       };
 
     return (
@@ -295,15 +305,13 @@ function AppointmentManager({ user }) {
 
               {/* 💳 Deposit, Payment Info & Receipt */}
               {(() => {
-                const { total, deposit, paid, pending } = calculateTotals(apt);
+                const { basePrice, addonsTotal, total, deposit, paid, pending } = calculateTotals(apt);
 
                 return (
                   <div className="payment-details">
                     <p className="payment-line">
-                      <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}{" "}
-                      <span
-                        className={`payment-status ${apt.payment_status === "paid" ? "paid" : "unpaid"}`}
-                        style={{
+                      <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}{' '}
+                      <span className={`payment-status ${apt.payment_status === "paid" ? "paid" : "unpaid"}`} style={{
                           backgroundColor: apt.payment_status === "paid" ? "#d4edda" : "#f8d7da",
                           color: apt.payment_status === "paid" ? "#155724" : "#721c24",
                           borderRadius: "6px",
@@ -311,31 +319,21 @@ function AppointmentManager({ user }) {
                           marginLeft: "8px",
                           fontWeight: "600",
                           cursor: "default",
-                        }}
-                      >
+                        }}>
                         {apt.payment_status === "paid" ? "Paid" : "Unpaid"}
                       </span>
 
-                      {/* 🧾 Receipt Icon */}
                       {apt.payment_status === "paid" && (
-                        <Receipt
-                          size={18}
-                          className="receipt-icon"
-                          style={{
-                            marginLeft: "10px",
-                            color: "#007b55",
-                            cursor: "pointer",
-                            verticalAlign: "middle",
-                          }}
-                          onClick={() => setSelectedPayment(apt)}
-                          title="View Receipt"
-                        />
+                        <Receipt size={18} className="receipt-icon" onClick={() => setSelectedPayment(apt)} />
                       )}
                     </p>
 
-                    <p>
-                      <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
-                    </p>
+                    <p><strong>Amount Paid:</strong> KES {paid.toLocaleString()}</p>
+
+                    <div className="info-row"><strong>Total Amount:</strong>
+                      <span className="amount">KES {total.toLocaleString()}</span>
+                    </div>
+
                     <p style={{ color: pending > 0 ? "#b30000" : "#007b55" }}>
                       <strong>Pending Amount:</strong> KES {pending.toLocaleString()}
                     </p>
@@ -347,11 +345,25 @@ function AppointmentManager({ user }) {
 
               {/* Total (base + add-ons) */}
               {(() => {
-                const { total } = calculateTotals(apt);
+                const { basePrice, addonsTotal, total } = calculateTotals(apt);
                 return (
                   <div className="total-cost-box">
-                    <span className="total-label">Total</span>
-                    <span className="total-amount">KES {Number(total).toLocaleString()}</span>
+                    <div className="total-row">
+                      <span>Base Price:</span>
+                      <strong>KES {basePrice.toLocaleString()}</strong>
+                    </div>
+
+                    <div className="total-row">
+                      <span>Add-ons:</span>
+                      <strong>+ KES {addonsTotal.toLocaleString()}</strong>
+                    </div>
+
+                    <div className="total-divider" />
+
+                    <div className="total-row total-final">
+                      <span>Total:</span>
+                      <strong>KES {total.toLocaleString()}</strong>
+                    </div>
                   </div>
                 );
               })()}

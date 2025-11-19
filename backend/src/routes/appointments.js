@@ -189,14 +189,14 @@ router.post(
               const total_price = Number(service.price || 0) + addons_total;
               const deposit_amount = Math.round(total_price * 0.3);
 
-              // 🧠 Insert into database
+              // 🧠 Insert into database (store addons JSON too)
               db.run(
                 `INSERT INTO appointments (
                   client_id, provider_id, service_id, appointment_date, notes, status,
                   payment_reference, payment_amount, payment_status,
-                  total_price, deposit_amount, addons_total
+                  total_price, deposit_amount, addons_total, addons
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                   client_id,
                   service.provider_id,
@@ -210,6 +210,7 @@ router.post(
                   total_price,
                   deposit_amount,
                   addons_total,
+                  JSON.stringify(Array.isArray(addons) ? addons : [])  // SAVE addons JSON
                 ],
                 function (err4) {
                   if (err4) {
@@ -221,7 +222,7 @@ router.post(
 
                   const newId = this.lastID;
 
-                  // 🔁 Handle rebooking if applicable
+                  // existing rebook logic...
                   if (rebook_from) {
                     db.run(
                       `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
@@ -230,14 +231,14 @@ router.post(
                     );
                   }
 
-                  // ✅ Fetch the created appointment
+                  // fetch created appointment (a.* includes addons now)
                   db.get(
                     `SELECT a.*, s.name AS service_name, s.duration, s.price,
                             u.name AS provider_name, u.business_name
-                     FROM appointments a
-                     JOIN services s ON a.service_id = s.id
-                     JOIN users u ON a.provider_id = u.id
-                     WHERE a.id = ?`,
+                    FROM appointments a
+                    JOIN services s ON a.service_id = s.id
+                    JOIN users u ON a.provider_id = u.id
+                    WHERE a.id = ?`,
                     [newId],
                     (e, appointment) => {
                       if (e) {

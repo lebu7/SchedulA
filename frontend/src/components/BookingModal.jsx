@@ -138,11 +138,23 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError("");
 
     try {
+      const basePrice = parseFloat(serviceMeta.price || 0);
+      const addonsTotal = selectedAddons.reduce(
+        (sum, addon) => sum + parseFloat(addon.price || addon.additional_price || 0),
+        0
+      );
+
+      const totalKES = basePrice + addonsTotal;
+      const depositKES = Math.round(totalKES * 0.3);
+
       const payload = {
         service_id: serviceMeta.id,
         appointment_date: appointmentDateTime.toISOString(),
         notes: notes.trim(),
-        addons: selectedAddons, // ✅ send full addon objects
+        addons: selectedAddons,
+        addons_total: addonsTotal,
+        total_price: totalKES,
+        deposit_amount: depositKES,
       };
 
       await api.post("/appointments", payload);
