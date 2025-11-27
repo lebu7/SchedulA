@@ -7,22 +7,63 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [notes, setNotes] = useState("");
-  const [booking, setBooking] = useState(false);
+  const [booking, setBooking] = useState(false); // general booking flag (not used for payment)
   const [error, setError] = useState("");
   const [serviceMeta, setServiceMeta] = useState(service || {});
   const [availability, setAvailability] = useState(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [paymentOption, setPaymentOption] = useState("deposit");
+  const [paymentOption, setPaymentOption] = useState("deposit"); // deposit | full | custom
   const [customAmount, setCustomAmount] = useState("");
   const [addons, setAddons] = useState([]);
   const [selectedAddons, setSelectedAddons] = useState([]);
-  const [totalPrice, setTotalPrice] = useState(parseFloat(service.price || 0));
+  const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
   const [showAddonDropdown, setShowAddonDropdown] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false); // disables pay buttons
 
+  // ---------- Helpers ----------
+  const getMinDate = () => {
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+    return today.toISOString().split("T")[0];
+  };
+
+  const getMaxDate = () => {
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 30);
+    return maxDate.toISOString().split("T")[0];
+  };
+
+  const formatTimeDisplay = (timeStr) => {
+    if (!timeStr) return "";
+    const [h, m] = timeStr.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const displayHours = h % 12 || 12;
+    return `${displayHours}:${m.toString().padStart(2, "0")} ${period}`;
+  };
+
+  const generateTimeSlots = (openingTime = "08:30", closingTime = "18:00", interval = 30) => {
+    const slots = [];
+    const [openH, openM] = openingTime.split(":").map(Number);
+    const [closeH, closeM] = closingTime.split(":").map(Number);
+
+    const openDate = new Date();
+    openDate.setHours(openH, openM, 0, 0);
+    const closeDate = new Date();
+    closeDate.setHours(closeH, closeM, 0, 0);
+
+    for (let time = new Date(openDate); time < closeDate; time.setMinutes(time.getMinutes() + interval)) {
+      const hh = time.getHours().toString().padStart(2, "0");
+      const mm = time.getMinutes().toString().padStart(2, "0");
+      slots.push(`${hh}:${mm}`);
+    }
+    return slots;
+  };
+
+  // ---------- Init / fetch addons ----------
   useEffect(() => {
     if (service) setServiceMeta(service);
-    fetchAddons(service.id);
+    if (service?.id) fetchAddons(service.id);
   }, [service]);
 
   const fetchAddons = async (serviceId) => {
@@ -34,7 +75,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     }
   };
 
-  // Close addon dropdown
+  // Close addon dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest(".addon-dropdown")) {
@@ -48,12 +89,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   // Update total when addons change
   useEffect(() => {
     const addonTotal = selectedAddons.reduce(
-      (sum, addon) =>
-        sum + parseFloat(addon.price ?? addon.additional_price ?? 0),
+      (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
       0
     );
-    setTotalPrice(parseFloat(service.price) + addonTotal);
-  }, [selectedAddons, service.price]);
+    setTotalPrice(Number(service?.price || 0) + addonTotal);
+  }, [selectedAddons, service?.price]);
 
   const handleAddonToggle = (addon, checked) => {
     setSelectedAddons((prev) =>
@@ -61,30 +101,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     );
   };
 
-  // Generate time slots between opening and closing times
-  const generateTimeSlots = (openingTime, closingTime, interval = 30) => {
-    const slots = [];
-    const [openH, openM] = openingTime.split(":").map(Number);
-    const [closeH, closeM] = closingTime.split(":").map(Number);
-
-    const openDate = new Date();
-    openDate.setHours(openH, openM, 0, 0);
-    const closeDate = new Date();
-    closeDate.setHours(closeH, closeM, 0, 0);
-
-    for (
-      let time = new Date(openDate);
-      time < closeDate;
-      time.setMinutes(time.getMinutes() + interval)
-    ) {
-      const hh = time.getHours().toString().padStart(2, "0");
-      const mm = time.getMinutes().toString().padStart(2, "0");
-      slots.push(`${hh}:${mm}`);
-    }
-    return slots;
-  };
-
-  // Availability fetch
+  // Fetch provider availability when date selected
   useEffect(() => {
     const fetchAvailability = async () => {
       if (!serviceMeta?.provider_id || !selectedDate) return;
@@ -104,186 +121,182 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     fetchAvailability();
   }, [selectedDate, serviceMeta, refreshKey]);
 
-  const formatTimeDisplay = (timeStr) => {
-    const [h, m] = timeStr.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const displayHours = h % 12 || 12;
-    return `${displayHours}:${m.toString().padStart(2, "0")} ${period}`;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (addons.length > 0 && selectedAddons.length === 0) {
-      setError("Please select at least one add-on service.");
-      return;
-    }
-    if (!selectedDate || !selectedTime) {
-      setError("Please select both date and time");
-      return;
-    }
-    if (availability?.is_closed) {
-      setError("Provider is closed on this date.");
-      return;
-    }
-
-    const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
-    const now = new Date();
-    if (appointmentDateTime <= now) {
-      setError("Please select a future date and time");
-      return;
-    }
-
-    setBooking(true);
-    setError("");
-
-    try {
-      const basePrice = parseFloat(serviceMeta.price || 0);
-      const addonsTotal = selectedAddons.reduce(
-        (sum, addon) =>
-          sum + parseFloat(addon.price ?? addon.additional_price ?? 0),
-        0
-      );
-
-      const totalKES = basePrice + addonsTotal;
-      const depositKES = Math.round(totalKES * 0.3);
-
-      const payload = {
-        service_id: serviceMeta.id,
-        appointment_date: appointmentDateTime.toISOString(),
-        notes: notes.trim(),
-        addons: selectedAddons,
-        addons_total: addonsTotal,
-        total_price: totalKES,
-        deposit_amount: depositKES,
-      };
-
-      setRefreshKey((prev) => prev + 1);
-    } catch (err) {
-      console.error("Booking error:", err);
-      const msg = err.response?.data?.error || "Failed to book appointment.";
-      setError(msg);
-    } finally {
-      setBooking(false);
-    }
-  };
-
-  const getMinDate = () => {
-    const today = new Date();
-    today.setDate(today.getDate() + 1);
-    return today.toISOString().split("T")[0];
-  };
-
-  const getMaxDate = () => {
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 30);
-    return maxDate.toISOString().split("T")[0];
-  };
-
-  const isClosed = availability?.is_closed;
-  const isGloballyClosed = serviceMeta?.is_closed && !availability;
-  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-  const email = user?.email || "customer@example.com";
-
-  // 💰 Payment calculations
+  // ---------- Payment calculations ----------
   const depositPercentage = 0.3;
-  const basePrice = parseFloat(service.price || 0);
-
+  const basePrice = Number(serviceMeta?.price || 0);
   const addonsTotal = selectedAddons.reduce(
-    (sum, addon) => sum + parseFloat(addon.price || addon.price || 0),
+    (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
     0
   );
-
   const totalKES = basePrice + addonsTotal;
   const depositKES = Math.round(totalKES * depositPercentage);
 
-  const fullAmount = totalKES * 100;
-  const depositAmount = depositKES * 100;
-
-  const selectedPaymentAmount = (() => {
-    if (paymentOption === "full") return fullAmount;
+  const computeSelectedAmountKES = () => {
+    if (paymentOption === "full") return totalKES;
     if (paymentOption === "custom") {
-      const entered = parseFloat(customAmount || 0) * 100;
-      return entered >= depositAmount ? entered : depositAmount;
+      const entered = Number(customAmount || 0);
+      return entered >= depositKES ? Math.round(entered) : depositKES;
     }
-    return depositAmount;
-  })();
-
-  const paystackProps = {
-    email,
-    amount: selectedPaymentAmount,
-    currency: "KES",
-    metadata: {
-      name: user?.name,
-      service: serviceMeta.name,
-      addons: selectedAddons.map((a) => a.name).join(", ") || "None",
-      totalPrice: totalPrice,
-    },
-    publicKey,
-    text: `Pay Deposit (KES ${(selectedPaymentAmount / 100).toFixed(2)})`,
-    onSuccess: (response) => handlePaymentSuccess(response),
-    onClose: () => setError("Payment window closed before completing payment."),
+    return depositKES;
   };
 
-  const handlePaymentSuccess = async (response) => {
-    console.log("✅ Payment successful:", response);
-    setError("");
+  const computeSelectedAmountPaystack = () => {
+    return computeSelectedAmountKES() * 100; // Paystack expects amount in "kobo" (×100)
+  };
 
-    try {
-      const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
-
-      const basePrice = parseFloat(serviceMeta.price || 0);
-      const addonsTotal = selectedAddons.reduce(
-        (sum, addon) => sum + parseFloat(addon.price ?? addon.additional_price ?? 0),
-        0
-      );
-      const totalKES = basePrice + addonsTotal;
-      const depositKES = Math.round(totalKES * 0.3);
-      const paidAmount = selectedPaymentAmount / 100;
-
-      const payload = {
-        service_id: serviceMeta.id,
-        appointment_date: appointmentDateTime.toISOString(),
-        notes: notes.trim(),
-        addons: selectedAddons, // ✅ send full addon objects
-        addons_total: addonsTotal,
-        total_price: totalKES,
-        deposit_amount: depositKES,
-        payment_reference: response.reference,
-        payment_amount: paidAmount,
-      };
-
-      const { data } = await api.post("/appointments", payload);
-      const newAppointmentId = data?.appointment?.id;
-
-      if (newAppointmentId) {
-        await api.put(`/appointments/${newAppointmentId}/payment`, {
-          payment_reference: response.reference,
-          amount_paid: paidAmount,
-          payment_status: "paid",
-          total_price: totalKES,
-        });
-        console.log(
-          `💾 Payment recorded: KES ${paidAmount} (Ref: ${response.reference}) for appointment ${newAppointmentId}`
-        );
+  // ---------- Payment handler using react-paystack's PaystackButton (old method) ----------
+  // We'll create paystack props dynamically based on chosen option.
+  const buildPaystackConfig = (forOption) => {
+    const amount = (() => {
+      if (forOption === "full") return totalKES * 100;
+      if (forOption === "custom") {
+        const n = Number(customAmount || 0);
+        const resolved = n >= depositKES ? Math.round(n * 100) : depositKES * 100;
+        return resolved;
       }
+      return depositKES * 100;
+    })();
 
-      onBookingSuccess?.();
-      onClose?.();
-    } catch (err) {
-      console.error("❌ Booking after payment failed:", err);
-      setError(
-        "Payment succeeded, but saving the booking failed. Please contact support."
-      );
-    }
+    const email = user?.email || "customer@example.com";
+    const metadata = {
+      name: user?.name,
+      service: serviceMeta?.name,
+      addons: selectedAddons.map((a) => a.name).join(", ") || "None",
+      totalPrice: totalKES,
+      selectedDate,
+      selectedTime,
+      deposit_amount: depositKES,
+      addons_total: addonsTotal,
+    };
+
+    return {
+      email,
+      amount,
+      currency: "KES",
+      metadata,
+      publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+      text: `Pay KES ${(amount / 100).toFixed(2)}`,
+      onSuccess: async (response) => {
+        setProcessingPayment(true);
+        setError("");
+
+        try {
+          const token = localStorage.getItem("token"); // <--- FIX ADDED
+
+          const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
+          const paidAmountKES = amount / 100;
+
+          let payment_status =
+            paidAmountKES >= totalKES ? "paid" : "deposit-paid";
+
+          const payload = {
+            service_id: serviceMeta.id,
+            appointment_date: appointmentDateTime.toISOString(),
+            notes: notes.trim(),
+            addons: selectedAddons,
+            addons_total: addonsTotal,
+            total_price: totalKES,
+            deposit_amount: depositKES,
+
+            payment_reference: response.reference,
+            payment_amount: paidAmountKES,
+            amount_paid: paidAmountKES,
+            payment_status: payment_status,
+          };
+
+          const { data } = await api.post("/appointments", payload, {
+            headers: { Authorization: `Bearer ${token}` }   // <--- REQUIRED FIX
+          });
+
+          const newAppointmentId = data?.appointment?.id;
+
+          if (newAppointmentId) {
+            await api.put(
+              `/appointments/${newAppointmentId}/payment`,
+              {
+                payment_reference: response.reference,
+                payment_amount: paidAmountKES,
+                amount_paid: paidAmountKES,
+                payment_status: payment_status,
+                total_price: totalKES,
+              },
+              {
+                headers: { Authorization: `Bearer ${token}` } // <--- REQUIRED FIX
+              }
+            );
+
+            onBookingSuccess?.();
+            onClose?.();
+          } else {
+            setError(
+              "Payment succeeded but saving the booking failed. Contact support with your reference."
+            );
+          }
+        } catch (err) {
+          console.error("❌ Error saving appointment after payment:", err);
+          setError(
+            "Payment succeeded but saving the booking failed. Contact support with your reference."
+          );
+        } finally {
+          setProcessingPayment(false);
+        }
+      },
+      onClose: () => {
+        // Payment window closed before completion
+        setProcessingPayment(false);
+        setError("Payment window closed before completing payment.");
+      },
+    };
   };
+
+  // ---------- UI actions ----------
+  const handlePayDepositClick = () => {
+    setPaymentOption("deposit");
+    setProcessingPayment(true);
+    // PaystackButton will open when rendered and clicked — but to reuse react-paystack we render two PaystackButton components.
+    // We don't need extra logic here; clicking the deposit PaystackButton triggers onSuccess/onClose.
+  };
+
+  const handlePayFullClick = () => {
+    setPaymentOption("full");
+    setProcessingPayment(true);
+  };
+
+  const handlePayCustomClick = () => {
+    setPaymentOption("custom");
+    setProcessingPayment(true);
+  };
+
+  // Prevent the native form submission (we require payment)
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError("Please pay to complete booking (deposit or full).");
+  };
+
+  // ---------- Render ----------
+  // We will render three PaystackButton components but show/hide labels & disabled states accordingly.
+  // The PaystackButton requires a config prop object; react-paystack accepts props directly.
+
+  // Build configs for deposit, full, custom:
+  const depositConfig = buildPaystackConfig("deposit");
+  const fullConfig = buildPaystackConfig("full");
+  const customConfig = buildPaystackConfig("custom");
+
+  // Ensure pay buttons are disabled until date/time chosen
+  const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Book {serviceMeta.name}</h3>
-          <button className="close-btn" onClick={onClose} disabled={booking}>
+          <h3>Book {serviceMeta?.name}</h3>
+          <button
+            className="close-btn"
+            onClick={() => {
+              if (!processingPayment) onClose?.();
+            }}
+            disabled={processingPayment}
+          >
             ×
           </button>
         </div>
@@ -291,15 +304,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         <div className="service-info">
           <div className="service-detail">
             <span className="detail-label">Provider:</span>
-            <span className="detail-value">{serviceMeta.provider_name}</span>
+            <span className="detail-value">{serviceMeta?.provider_name}</span>
           </div>
           <div className="service-detail">
             <span className="detail-label">Duration:</span>
-            <span className="detail-value">{serviceMeta.duration} minutes</span>
+            <span className="detail-value">{serviceMeta?.duration} minutes</span>
           </div>
           <div className="service-detail">
             <span className="detail-label">Base Price:</span>
-            <span className="detail-value">KES {serviceMeta.price}</span>
+            <span className="detail-value">KES {serviceMeta?.price}</span>
           </div>
 
           <div className="appointment-preview compact">
@@ -307,14 +320,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             <div className="preview-details">
               <div className="preview-item">
                 <span className="preview-label">Base:</span>
-                <span className="preview-value">KES {serviceMeta.price}</span>
+                <span className="preview-value">KES {serviceMeta?.price}</span>
               </div>
               {selectedAddons.map((a) => (
                 <div key={a.id} className="preview-item addon-line">
                   <span className="preview-label">+ {a.name}</span>
-                  <span className="preview-value">
-                    KES {a.price ?? a.additional_price ?? 0}
-                  </span>
+                  <span className="preview-value">KES {a.price ?? a.additional_price ?? 0}</span>
                 </div>
               ))}
               <div className="preview-item total">
@@ -345,16 +356,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             </div>
             <div className="form-group">
               <label>Select Time *</label>
-              <select
-                value={selectedTime}
-                onChange={(e) => setSelectedTime(e.target.value)}
-              >
+              <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}>
                 <option value="">Choose a time</option>
-                {generateTimeSlots(
-                  serviceMeta.provider_opening_time || "08:30",
-                  serviceMeta.provider_closing_time || "18:00",
-                  serviceMeta.slot_interval || 30
-                ).map((time) => (
+                {generateTimeSlots(serviceMeta?.provider_opening_time || "08:30", serviceMeta?.provider_closing_time || "18:00", serviceMeta?.slot_interval || 30).map((time) => (
                   <option key={time} value={time}>
                     {formatTimeDisplay(time)}
                   </option>
@@ -363,80 +367,140 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             </div>
           </div>
 
-          {/* ADDON DROPDOWN */}
-          <div className="form-group">
-            <label>Select Add-ons *</label>
-            <div className="addon-dropdown">
-              <button
-                type="button"
-                className="addon-dropdown-toggle"
-                onClick={() => setShowAddonDropdown((prev) => !prev)}
-              >
-                {selectedAddons.length > 0
-                  ? `${selectedAddons.length} selected`
-                  : "Choose add-ons"}{" "}
-                <i
-                  className={`fa fa-chevron-${showAddonDropdown ? "up" : "down"}`}
-                ></i>
-              </button>
+          {/* ADDONS + PAYMENT SIDE-BY-SIDE */}
+          <div className="two-column-section">
+            <div className="addons-box">
+              <label>Select Add-ons *</label>
+              <div className="addon-dropdown">
+                <button
+                  type="button"
+                  className="addon-dropdown-toggle"
+                  onClick={() => setShowAddonDropdown((p) => !p)}
+                >
+                  {selectedAddons.length > 0 ? `${selectedAddons.length} selected` : "Choose add-ons"}
+                  <i className={`fa fa-chevron-${showAddonDropdown ? "up" : "down"}`}></i>
+                </button>
 
-              {showAddonDropdown && (
-                <div className="addon-dropdown-menu">
-                  {addons.length ? (
-                    <div className="addon-scroll">
-                      {addons.map((addon) => {
-                        const isChecked = selectedAddons.some(
-                          (a) => a.id === addon.id
-                        );
-                        return (
-                          <label key={addon.id} className="addon-item">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) =>
-                                handleAddonToggle(addon, e.target.checked)
-                              }
-                            />
-                            <span>{addon.name}</span>
-                            <span className="addon-price">
-                              +KES {addon.price ?? addon.price ?? 0}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="no-addons">No add-ons available</p>
-                  )}
-                </div>
+                {showAddonDropdown && (
+                  <div className="addon-dropdown-menu">
+                    {addons.length ? (
+                      <div className="addon-scroll">
+                        {addons.map((addon) => {
+                          const isChecked = selectedAddons.some((a) => a.id === addon.id);
+                          return (
+                            <label key={addon.id} className="addon-item">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => handleAddonToggle(addon, e.target.checked)}
+                              />
+                              <span>{addon.name}</span>
+                              <span className="addon-price">+KES {addon.price ?? addon.additional_price ?? 0}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="no-addons">No add-ons available</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <label className="notes-label">Additional Notes</label>
+              <textarea
+                rows="3"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any special requirements..."
+              ></textarea>
+            </div>
+
+            <div className="payment-box">
+              <h4>Payment Options</h4>
+
+              <label className="pay-option">
+                <input type="radio" name="pay" checked={paymentOption === "deposit"} onChange={() => setPaymentOption("deposit")} />
+                Pay Deposit (KES {depositKES})
+              </label>
+
+              <label className="pay-option">
+                <input type="radio" name="pay" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} />
+                Pay Full (KES {totalKES})
+              </label>
+
+              <label className="pay-option custom-option">
+                <input type="radio" name="pay" checked={paymentOption === "custom"} onChange={() => setPaymentOption("custom")} />
+                Custom Amount (min KES {depositKES})
+              </label>
+
+              {paymentOption === "custom" && (
+                <input
+                  type="number"
+                  min={depositKES}
+                  step="50"
+                  className="custom-input"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                />
               )}
+
+              <div className="summary-box">
+                <div className="summary-row">
+                  <span>Total Price:</span>
+                  <strong>KES {totalPrice}</strong>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* NOTES */}
-          <div className="form-group full-width">
-            <label>Additional Notes (Optional)</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows="2"
-              maxLength="200"
-              placeholder="Any special requirements..."
-            />
-          </div>
-
+          {/* ACTIONS: Cancel + Pay buttons (PaystackButton components) */}
           <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={processingPayment}>
               Cancel
             </button>
 
-            {selectedDate && selectedTime ? (
-              <PaystackButton className="btn btn-primary" {...paystackProps} />
-            ) : (
-              <button className="btn btn-primary" disabled>
-                Select Date & Time to Pay
-              </button>
-            )}
+            {/* Deposit Paystack button */}
+            <div style={{ display: paymentOption === "deposit" ? "inline-block" : "none" }}>
+              <PaystackButton
+                className="btn btn-primary"
+                {...{
+                  ...depositConfig,
+                  text: processingPayment ? "Processing..." : `Pay Deposit (KES ${depositKES})`,
+                  onSuccess: depositConfig.onSuccess,
+                  onClose: depositConfig.onClose,
+                }}
+                disabled={payDisabled}
+              />
+            </div>
+
+            {/* Full Paystack button */}
+            <div style={{ display: paymentOption === "full" ? "inline-block" : "none" }}>
+              <PaystackButton
+                className="btn btn-primary"
+                {...{
+                  ...fullConfig,
+                  text: processingPayment ? "Processing..." : `Pay Full (KES ${totalKES})`,
+                  onSuccess: fullConfig.onSuccess,
+                  onClose: fullConfig.onClose,
+                }}
+                disabled={payDisabled}
+              />
+            </div>
+
+            {/* Custom Paystack button */}
+            <div style={{ display: paymentOption === "custom" ? "inline-block" : "none" }}>
+              <PaystackButton
+                className="btn btn-primary"
+                {...{
+                  ...customConfig,
+                  text: processingPayment ? "Processing..." : `Pay (KES ${computeSelectedAmountKES()})`,
+                  onSuccess: customConfig.onSuccess,
+                  onClose: customConfig.onClose,
+                }}
+                disabled={payDisabled}
+              />
+            </div>
           </div>
         </form>
       </div>

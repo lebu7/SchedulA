@@ -94,7 +94,12 @@ function PaymentInfoModal({ payment, onClose }) {
           <p><strong>Provider:</strong> {payment.provider_name || payment.provider}</p>
           <p><strong>Appointment Date:</strong> {new Date(payment.appointment_date).toLocaleString("en-KE")}</p>
           <p><strong>Payment Reference:</strong> {payment.payment_reference || "—"}</p>
-          <p><strong>Status:</strong> {payment.payment_status === "paid" ? "✅ Paid" : "❌ Unpaid"}</p>
+          <p><strong>Status:</strong> {payment.payment_status === "paid"
+                                        ? "✅ Fully Paid"
+                                        : payment.payment_status === "deposit-paid"
+                                        ? "🟡 Deposit Paid"
+                                        : "❌ Unpaid"
+                                      }</p>
           <p><strong>Amount Paid:</strong> KES {Number(payment.amount_paid || payment.payment_amount || 0).toLocaleString()}</p>
           <p><strong>Pending Amount:</strong> 
             <span style={{ color: "#b30000" }}>
@@ -311,7 +316,12 @@ function AppointmentManager({ user }) {
                   <div className="payment-details">
                     <p className="payment-line">
                       <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}{' '}
-                      <span className={`payment-status ${apt.payment_status === "paid" ? "paid" : "unpaid"}`} style={{
+                      <span className={`payment-status ${apt.payment_status === "paid"
+                                                          ? "Paid"
+                                                          : apt.payment_status === "deposit-paid"
+                                                          ? "Deposit Paid"
+                                                          : "Unpaid"
+                                                        }`} style={{
                           backgroundColor: apt.payment_status === "paid" ? "#d4edda" : "#f8d7da",
                           color: apt.payment_status === "paid" ? "#155724" : "#721c24",
                           borderRadius: "6px",
@@ -320,7 +330,12 @@ function AppointmentManager({ user }) {
                           fontWeight: "600",
                           cursor: "default",
                         }}>
-                        {apt.payment_status === "paid" ? "Paid" : "Unpaid"}
+                        {apt.payment_status === "paid"
+                          ? "Paid"
+                          : apt.payment_status === "deposit-paid"
+                          ? "Deposit Paid"
+                          : "Unpaid"
+                        }
                       </span>
 
                       {apt.payment_status === "paid" && (

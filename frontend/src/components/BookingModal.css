@@ -1,4 +1,4 @@
-/* BookingModal.css */
+/* === MODAL CORE === */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -11,56 +11,56 @@
   align-items: center;
   z-index: 1000;
   padding: 20px;
-  overflow: visible; /* ✅ allow floating dropdowns */
 }
 
 .modal-content {
   background: #fff;
   border-radius: 12px;
-  padding: 0;
-  max-width: 550px;
   width: 100%;
+  max-width: 780px; /* wider because two-column layout */
   max-height: 90vh;
-  overflow: visible; /* ✅ must be visible */
-  position: relative; /* ensures dropdown positions correctly */
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  animation: slideIn 0.3s ease;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.25);
+  animation: slideIn 0.25s ease-out;
+  padding-bottom: 20px;
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(-15px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
+/* === HEADER === */
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 25px 10px;
+  padding: 18px 24px;
   border-bottom: 1px solid #eee;
 }
 
 .modal-header h3 {
   margin: 0;
-  color: #2c3e50;
-  font-size: 1.25em;
+  font-size: 1.3em;
+  color: #243447;
 }
 
 .close-btn {
   background: none;
   border: none;
-  font-size: 22px;
+  font-size: 24px;
   cursor: pointer;
   color: #666;
-  border-radius: 50%;
-  transition: background-color 0.3s;
+  transition: 0.2s;
 }
 .close-btn:hover {
-  background-color: #f1f1f1;
+  color: #000;
 }
 
+/* === SERVICE INFO === */
 .service-info {
-  padding: 15px 25px;
+  padding: 16px 24px;
   background: #f8f9fa;
   border-bottom: 1px solid #eee;
 }
@@ -68,171 +68,64 @@
 .service-detail {
   display: flex;
   justify-content: space-between;
-  margin: 5px 0;
+  padding: 4px 0;
   font-size: 14px;
   color: #444;
 }
 
-.detail-label {
-  font-weight: 600;
-}
-
+/* === FORM BODY === */
 .booking-form {
-  padding: 25px;
+  padding: 24px;
 }
 
-/* ✅ Force date & time side by side */
-.form-row,
-.datetime-picker-container {
+.form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr !important;
-  gap: 20px !important;
-  align-items: start;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 20px;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group label {
-  margin-bottom: 8px;
+.form-group label,
+.notes-label {
   font-weight: 600;
-  color: #333;
+  margin-bottom: 8px;
+  color: #222;
 }
 
 input, select, textarea {
   border: 2px solid #e1e5e9;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px;
   font-size: 14px;
-  transition: border-color 0.3s ease;
   width: 100%;
+  transition: border-color 0.25s ease;
 }
 
 input:focus, select:focus, textarea:focus {
-  outline: none;
   border-color: #007bff;
+  outline: none;
 }
 
-input:disabled, select:disabled, textarea:disabled {
-  background-color: #f8f9fa;
-  cursor: not-allowed;
+/* === ADDONS & PAYMENT SIDE BY SIDE === */
+.two-column-section {
+  display: grid;
+  grid-template-columns: 1fr 0.85fr;
+  gap: 22px;
+  margin-top: 15px;
 }
 
-.full-width {
-  grid-column: 1 / -1;
-}
-
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 25px;
-}
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.btn-primary {
-  background-color: #007bff;
-  color: #fff;
-}
-.btn-primary:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.btn-secondary {
-  background-color: #6c757d;
-  color: white;
-}
-.btn-secondary:hover:not(:disabled) {
-  background-color: #545b62;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.appointment-preview {
-  background: #f8f9fa;
+/* LEFT COLUMN — ADDONS */
+.addons-box {
+  background: #fafbfc;
   border: 1px solid #e9ecef;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 10px;
 }
 
-.appointment-preview h4 {
-  margin: 0 0 10px 0;
-  color: #2c3e50;
-}
-
-.preview-details {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.preview-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #555;
-}
-
-.preview-item.total {
-  border-top: 2px solid #dee2e6;
-  padding-top: 8px;
-  margin-top: 4px;
-  font-weight: 600;
-  color: #007bff;
-}
-
-.error-message {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  border: 1px solid #f5c6cb;
-}
-
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #fff;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-right: 5px;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-@media (max-width: 500px) {
-  .modal-content {
-    max-width: 95%;
-  }
-  .form-actions {
-    flex-direction: column;
-  }
-  .btn {
-    width: 100%;
-  }
-}
-/* === ADD-ON DROPDOWN STYLING === */
 .addon-dropdown {
   position: relative;
   width: 100%;
-  display: flex;
-  justify-content: flex-start;
+  margin-bottom: 16px;
 }
 
 .addon-dropdown-toggle {
@@ -240,129 +133,181 @@ input:disabled, select:disabled, textarea:disabled {
   border: 2px solid #e1e5e9;
   border-radius: 8px;
   padding: 10px 12px;
-  width: 50%;
+  width: 100%;
   font-size: 14px;
   color: #333;
   text-align: left;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
   cursor: pointer;
+  transition: 0.2s;
 }
 
 .addon-dropdown-toggle:hover {
-  background-color: #e9ecef;
   border-color: #007bff;
-}
-
-.addon-dropdown-toggle i {
-  font-size: 13px;
-  color: #555;
-  transition: transform 0.3s ease;
+  background-color: #e9ecef;
 }
 
 .addon-dropdown-menu {
   position: absolute;
+  width: 100%;
   top: calc(100% + 4px);
-  left: 0;
-  width: 50%; /* ✅ 50% width as you requested */
   background: #fff;
   border: 1px solid #e1e5e9;
   border-radius: 8px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
-  z-index: 2000; /* ✅ above everything */
-  animation: fadeIn 0.25s ease;
+  padding: 6px 0;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+  z-index: 2000;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Scrollable area for many add-ons */
 .addon-scroll {
   max-height: 180px;
   overflow-y: auto;
-  padding: 6px 10px;
 }
 
-.addon-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-.addon-scroll::-webkit-scrollbar-thumb {
-  background: #cfd4da;
-  border-radius: 10px;
-}
-.addon-scroll::-webkit-scrollbar-thumb:hover {
-  background: #adb5bd;
-}
-
-/* Each add-on line */
 .addon-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 6px 8px;
+  padding: 8px 14px;
   font-size: 14px;
   border-bottom: 1px solid #f1f3f5;
-  color: #333;
   cursor: pointer;
-  gap: 10px;
 }
-
-/* This ensures checkbox and text align properly */
-.addon-item label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.addon-item input[type="checkbox"] {
-  margin: 0;
-  accent-color: #007bff;
-  transform: scale(1.1); /* optional: slightly bigger */
-}
-
 .addon-item:last-child {
   border-bottom: none;
 }
-
-.addon-item input[type="checkbox"] {
-  margin-right: 10px;
-  accent-color: #007bff;
-}
-
 .addon-item:hover {
-  background-color: #f8f9fa;
+  background: #f8f9fa;
 }
 
 .addon-price {
+  font-weight: 600;
   color: #007bff;
-  font-weight: 500;
-  margin-left: 8px;
 }
 
-.no-addons {
-  text-align: center;
-  padding: 10px;
-  font-size: 13px;
-  color: #777;
-}
-
-/* Compact booking summary */
-.appointment-preview.compact {
+/* NOTES */
+textarea {
+  resize: none;
   margin-top: 10px;
-  padding: 10px 12px;
 }
 
-.appointment-preview.compact h4 {
+/* === RIGHT COLUMN — PAYMENT BOX === */
+.payment-box {
+  background: #fafbfc;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.payment-box h4 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: #243447;
+}
+
+.pay-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pay-option input {
+  transform: scale(1.2);
+}
+
+.custom-option {
+  margin-top: 6px;
+}
+
+.custom-input {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 2px solid #007bff;
+}
+
+.summary-box {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe4ea;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
   font-size: 15px;
-  margin-bottom: 8px;
+  font-weight: 600;
+  color: #007bff;
 }
 
-.preview-item.addon-line {
-  font-size: 13px;
-  color: #555;
+/* === ACTION BUTTONS === */
+.form-actions {
+  margin-top: 25px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: #fff;
+}
+.btn-secondary:hover {
+  background: #545b62;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* === ERRORS === */
+.error-message {
+  background: #ffe5e7;
+  color: #ac1b2e;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #f3c0c5;
+  margin-bottom: 16px;
+}
+
+/* === MOBILE RESPONSIVE === */
+@media (max-width: 650px) {
+  .two-column-section {
+    grid-template-columns: 1fr;
+  }
+  .modal-content {
+    max-width: 95%;
+  }
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .form-actions {
+    flex-direction: column;
+  }
+  .btn {
+    width: 100%;
+  }
 }

@@ -491,3 +491,39 @@
   color: #005c3a;
   transition: all 0.2s ease-in-out;
 }
+.payment-status {
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: inline-block;
+  text-transform: capitalize;
+}
+
+/* FULL PAYMENT — GREEN */
+.payment-status.paid {
+  background-color: #d4edda;   /* soft green */
+  color: #155724;              /* dark green text */
+  border: 1px solid #c3e6cb;
+}
+
+/* PARTIAL PAYMENT / DEPOSIT PAID — ORANGE */
+.payment-status.deposit-paid {
+  background-color: #fff4e5;   /* soft orange */
+  color: #8a4b00;              /* dark warm orange */
+  border: 1px solid #ffd9b3;
+}
+
+/* NO PAYMENT — RED */
+.payment-status.unpaid {
+  background-color: #fde2e1;   /* soft red */
+  color: #a10000;              /* dark red text */
+  border: 1px solid #f5c6cb;
+}
+
+/* Hover effect */
+.payment-status:hover {
+  opacity: 0.95;
+  transform: scale(1.03);
+  transition: 0.18s ease-in-out;
+}

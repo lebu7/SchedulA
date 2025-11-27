@@ -46,6 +46,35 @@ db.get(
 );
 
 /* ---------------------------------------------
+   Create payment_requests table if not exists
+   (used when provider prompts client for remaining balance)
+--------------------------------------------- */
+db.get(
+  `SELECT name FROM sqlite_master WHERE type='table' AND name='payment_requests'`,
+  [],
+  (err, row) => {
+    if (err) return;
+    if (!row) {
+      db.run(
+        `CREATE TABLE IF NOT EXISTS payment_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          appointment_id INTEGER NOT NULL,
+          provider_id INTEGER NOT NULL,
+          client_id INTEGER NOT NULL,
+          amount_requested REAL NOT NULL,
+          note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+          FOREIGN KEY (provider_id) REFERENCES users(id),
+          FOREIGN KEY (client_id) REFERENCES users(id)
+        )`
+      );
+      console.log('✅ payment_requests table created');
+    }
+  }
+);
+
+/* ---------------------------------------------
    ✅ Fetch appointments (client & provider)
 --------------------------------------------- */
 router.get('/', authenticateToken, (req, res) => {
@@ -108,6 +137,11 @@ router.get('/', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Create appointment (checks closure & hours)
+   NOTE: Strict payment enforcement:
+   - Creation requires payment_reference && payment_amount > 0
+   - If amount >= total_price => payment_status = 'paid'
+   - If 0 < amount < total_price => payment_status = 'deposit-paid'
+   - If payment fails or missing => reject creation (400)
 --------------------------------------------- */
 router.post(
   '/',
@@ -122,7 +156,22 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { service_id, appointment_date, notes, rebook_from, payment_reference, payment_amount, addons } = req.body;
+    const {
+      service_id,
+      appointment_date,
+      notes,
+      rebook_from,
+      payment_reference,
+      payment_amount,
+      addons,
+    } = req.body;
+
+    // Enforce payment provided at creation time (no "pay later")
+    if (!payment_reference || !payment_amount || Number(payment_amount) <= 0) {
+      return res.status(400).json({
+        error: 'Payment required before booking. Provide payment_reference and payment_amount.',
+      });
+    }
 
     const client_id = req.user.userId;
     const appointmentDate = new Date(appointment_date);
@@ -175,7 +224,7 @@ router.post(
               }
 
               // ✅ Create appointment
-              const status = 'pending'; // all new appointments start pending, regardless of payment
+              const status = 'pending'; // all new appointments start pending
 
               // 🧮 Calculate add-on totals
               let addons_total = 0;
@@ -185,18 +234,27 @@ router.post(
                   0
                 );
               }
+
               // 🧾 Compute totals based on service and addons
               const total_price = Number(service.price || 0) + addons_total;
               const deposit_amount = Math.round(total_price * 0.3);
 
-              // 🧠 Insert into database (store addons JSON too)
+              // Payment amount sanity
+              const paymentAmt = Number(payment_amount || 0);
+
+              // Determine payment_status
+              let payment_status = 'unpaid';
+              if (paymentAmt >= total_price) payment_status = 'paid';
+              else if (paymentAmt > 0 && paymentAmt < total_price) payment_status = 'deposit-paid';
+
+              // Insert into database (store addons JSON too)
               db.run(
                 `INSERT INTO appointments (
                   client_id, provider_id, service_id, appointment_date, notes, status,
                   payment_reference, payment_amount, payment_status,
-                  total_price, deposit_amount, addons_total, addons
+                  total_price, deposit_amount, addons_total, addons, amount_paid
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                   client_id,
                   service.provider_id,
@@ -205,12 +263,13 @@ router.post(
                   notes || '',
                   status,
                   payment_reference || null,
-                  payment_amount || 0,
-                  payment_reference ? 'paid' : 'unpaid',
+                  paymentAmt || 0,
+                  payment_status,
                   total_price,
                   deposit_amount,
                   addons_total,
-                  JSON.stringify(Array.isArray(addons) ? addons : [])  // SAVE addons JSON
+                  JSON.stringify(Array.isArray(addons) ? addons : []),
+                  paymentAmt || 0, // amount_paid column (some schemas may already have this)
                 ],
                 function (err4) {
                   if (err4) {
@@ -448,27 +507,172 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update payment details (called after Paystack payment)
+   FIXED: Update payment without doubling
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { payment_reference, amount_paid, payment_status } = req.body;
 
   if (!payment_reference)
-    return res.status(400).json({ error: 'Missing payment reference' });
+    return res.status(400).json({ error: "Missing payment reference" });
 
-  db.run(
-    `UPDATE appointments 
-     SET payment_reference = ?, 
-         amount_paid = ?, 
-         payment_status = ? 
-     WHERE id = ?`,
-    [payment_reference, amount_paid || 0, payment_status || 'paid', id],
-    function (err) {
-      if (err) return res.status(500).json({ error: 'Failed to update payment info' });
-      if (this.changes === 0)
-        return res.status(404).json({ error: 'Appointment not found' });
-      res.json({ message: 'Payment info updated successfully' });
+  const paid = Number(amount_paid || 0);
+
+  // Get total_price (used to decide paid or deposit-paid)
+  db.get(
+    `SELECT total_price FROM appointments WHERE id = ?`,
+    [id],
+    (err, row) => {
+      if (err)
+        return res.status(500).json({ error: "Database error" });
+
+      if (!row)
+        return res.status(404).json({ error: "Appointment not found" });
+
+      const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
+
+      db.run(
+        `
+        UPDATE appointments
+        SET payment_reference = ?,
+            amount_paid = ?, 
+            payment_amount = ?, 
+            payment_status = ?
+        WHERE id = ?
+        `,
+        [payment_reference, paid, paid, finalStatus, id],
+        function (err2) {
+          if (err2)
+            return res
+              .status(500)
+              .json({ error: "Failed to update payment info" });
+
+          return res.json({
+            message: "Payment updated successfully",
+            amount_paid: paid,
+            payment_status: finalStatus,
+          });
+        }
+      );
+    }
+  );
+});
+
+/* ---------------------------------------------
+   ✅ Pay remaining balance
+   - Client pays remaining balance using same payment system
+   - Requires payment_reference and amount_paid
+   - Adds to amount_paid and updates payment_status to 'paid' when fully paid
+--------------------------------------------- */
+router.put('/:id/pay-balance', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const clientId = req.user.userId;
+  const { payment_reference, amount_paid } = req.body;
+
+  if (!payment_reference || !amount_paid || Number(amount_paid) <= 0) {
+    return res.status(400).json({ error: 'payment_reference and positive amount_paid are required' });
+  }
+
+  db.get(`SELECT client_id, total_price, amount_paid FROM appointments WHERE id = ?`, [id], (err, row) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (!row) return res.status(404).json({ error: 'Appointment not found' });
+    if (row.client_id !== clientId) return res.status(403).json({ error: 'Forbidden' });
+
+    const prevPaid = Number(row.amount_paid || 0);
+    const newPaid = prevPaid + Number(amount_paid);
+    const finalStatus = newPaid >= Number(row.total_price || 0) ? 'paid' : 'deposit-paid';
+
+    db.run(
+      `UPDATE appointments
+       SET amount_paid = ?, payment_reference = ?, payment_status = ?
+       WHERE id = ?`,
+      [newPaid, payment_reference, finalStatus, id],
+      function (err2) {
+        if (err2) return res.status(500).json({ error: 'Failed to update balance payment' });
+        res.json({ message: 'Balance payment recorded', amount_paid: newPaid, payment_status: finalStatus });
+      }
+    );
+  });
+});
+
+/* ---------------------------------------------
+   ✅ Provider can prompt client for remaining balance
+   - Adds an entry to payment_requests (provider -> client)
+--------------------------------------------- */
+router.post('/:id/request-balance', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const providerId = req.user.userId;
+  const { amount_requested, note } = req.body;
+
+  if (!amount_requested || Number(amount_requested) <= 0) {
+    return res.status(400).json({ error: 'amount_requested must be a positive number' });
+  }
+
+  db.get(`SELECT provider_id, client_id FROM appointments WHERE id = ?`, [id], (err, row) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (!row) return res.status(404).json({ error: 'Appointment not found' });
+    if (row.provider_id !== providerId) return res.status(403).json({ error: 'Forbidden' });
+
+    db.run(
+      `INSERT INTO payment_requests (appointment_id, provider_id, client_id, amount_requested, note)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, providerId, row.client_id, Number(amount_requested), note || null],
+      function (err2) {
+        if (err2) return res.status(500).json({ error: 'Failed to create payment request' });
+        res.json({ message: 'Payment request created', request_id: this.lastID });
+      }
+    );
+  });
+});
+
+/* ---------------------------------------------
+   FIXED: Update payment without doubling
+--------------------------------------------- */
+router.put('/:id/payment', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { payment_reference, amount_paid, payment_status } = req.body;
+
+  if (!payment_reference)
+    return res.status(400).json({ error: "Missing payment reference" });
+
+  const paid = Number(amount_paid || 0);
+
+  // Get total_price (used to decide paid or deposit-paid)
+  db.get(
+    `SELECT total_price FROM appointments WHERE id = ?`,
+    [id],
+    (err, row) => {
+      if (err)
+        return res.status(500).json({ error: "Database error" });
+
+      if (!row)
+        return res.status(404).json({ error: "Appointment not found" });
+
+      const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
+
+      db.run(
+        `
+        UPDATE appointments
+        SET payment_reference = ?,
+            amount_paid = ?, 
+            payment_amount = ?, 
+            payment_status = ?
+        WHERE id = ?
+        `,
+        [payment_reference, paid, paid, finalStatus, id],
+        function (err2) {
+          if (err2)
+            return res
+              .status(500)
+              .json({ error: "Failed to update payment info" });
+
+          return res.json({
+            message: "Payment updated successfully",
+            amount_paid: paid,
+            payment_status: finalStatus,
+          });
+        }
+      );
     }
   );
 });
