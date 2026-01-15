@@ -492,14 +492,18 @@ function AppointmentManager({ user }) {
                   )}
 
                   {/* Rebook/Delete Past (Including Cancelled) */}
-                  {["cancelled", "no-show", "completed"].includes(apt.status) && (
+                  {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
                     <div className="action-row">
-                      <button
-                        className="btn btn-primary small-btn"
-                        onClick={() => handleRebook(apt)}
-                      >
-                        Rebook
-                      </button>
+                      {/* 🔄 Rebook ONLY for Cancelled */}
+                      {apt.status === 'cancelled' && (
+                        <button
+                          className="btn btn-primary small-btn"
+                          onClick={() => handleRebook(apt)}
+                        >
+                          Rebook
+                        </button>
+                      )}
+                      
                       <button
                         className="btn btn-danger small-btn"
                         onClick={() => handleDeleteAppointment(apt.id)}
