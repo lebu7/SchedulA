@@ -315,35 +315,36 @@ function AppointmentManager({ user }) {
                 return (
                   <div className="payment-details">
                     <p className="payment-line">
-                      <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}{' '}
-                      <span className={`payment-status ${apt.payment_status === "paid"
-                                                          ? "Paid"
-                                                          : apt.payment_status === "deposit-paid"
-                                                          ? "Deposit Paid"
-                                                          : "Unpaid"
-                                                        }`} style={{
-                          backgroundColor: apt.payment_status === "paid" ? "#d4edda" : "#f8d7da",
-                          color: apt.payment_status === "paid" ? "#155724" : "#721c24",
-                          borderRadius: "6px",
-                          padding: "2px 8px",
-                          marginLeft: "8px",
-                          fontWeight: "600",
-                          cursor: "default",
-                        }}>
-                        {apt.payment_status === "paid"
-                          ? "Paid"
-                          : apt.payment_status === "deposit-paid"
-                          ? "Deposit Paid"
-                          : "Unpaid"
-                        }
-                      </span>
-
-                      {apt.payment_status === "paid" && (
-                        <Receipt size={18} className="receipt-icon" onClick={() => setSelectedPayment(apt)} />
-                      )}
+                      <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
                     </p>
 
-                    <p><strong>Amount Paid:</strong> KES {paid.toLocaleString()}</p>
+                    <p className="payment-line">
+                      <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
+
+                      {/* Show Green Receipt Icon if ANY amount has been paid */}
+                      {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid') && (
+                        <span 
+                          className="receipt-wrapper" 
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent card click
+                            setSelectedPayment(apt);
+                          }}
+                          title="View Payment Receipt"
+                          style={{ 
+                            display: "inline-flex", 
+                            alignItems: "center", 
+                            marginLeft: "12px", 
+                            cursor: "pointer",
+                            color: "#16a34a", // Green color
+                            fontWeight: "600",
+                            fontSize: "0.9em"
+                          }}
+                        >
+                          <Receipt size={18} style={{ marginRight: "4px" }} />
+                          Receipt
+                        </span>
+                      )}
+                    </p>
 
                     <div className="info-row"><strong>Total Amount:</strong>
                       <span className="amount">KES {total.toLocaleString()}</span>
