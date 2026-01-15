@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { PaystackButton } from "react-paystack";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
-import { Receipt } from "lucide-react"; // receipt icon
+import { Receipt, CreditCard, Lock } from "lucide-react";
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -117,16 +118,16 @@ function PaymentInfoModal({ payment, onClose }) {
 
             <div class="financials">
               <div class="fin-row">
-                <span class="label">Amount Paid</span>
+                <span class="label">Total Billed</span>
+                <span class="value">KES ${total.toLocaleString()}</span>
+              </div>
+              <div class="fin-row">
+                <span class="label">Total Paid</span>
                 <span class="value">KES ${paid.toLocaleString()}</span>
               </div>
-              <div class="fin-row" style="color: ${pending > 0 ? '#dc2626' : '#15803d'}">
-                <span class="label">Balance Due</span>
-                <span class="value">KES ${pending.toLocaleString()}</span>
-              </div>
-              <div class="fin-row total">
-                <span>Total Amount</span>
-                <span>KES ${total.toLocaleString()}</span>
+              <div class="fin-row total" style="color: ${pending > 0 ? '#dc2626' : '#15803d'}">
+                <span>Balance Due</span>
+                <span>KES ${pending.toLocaleString()}</span>
               </div>
             </div>
 
@@ -158,7 +159,7 @@ function PaymentInfoModal({ payment, onClose }) {
           <p><strong>Service:</strong> {payment.service_name || payment.service}</p>
           <p><strong>Provider:</strong> {payment.provider_name || payment.provider}</p>
           <p><strong>Date:</strong> {new Date(payment.appointment_date).toLocaleString("en-KE")}</p>
-          <p><strong>Reference:</strong> {payment.payment_reference || "—"}</p>
+          <p><strong>Ref:</strong> {payment.payment_reference || "—"}</p>
           
           <p>
             <strong>Status:</strong> 
@@ -173,8 +174,9 @@ function PaymentInfoModal({ payment, onClose }) {
 
           <div style={{ borderTop: "1px dashed #e2e8f0", margin: "8px 0" }}></div>
 
-          <p><strong>Amount Paid:</strong> KES {paid.toLocaleString()}</p>
-          <p><strong>Pending Amount:</strong> 
+          <p><strong>Total Billed:</strong> KES {total.toLocaleString()}</p>
+          <p><strong>Total Paid:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>KES {paid.toLocaleString()}</span></p>
+          <p><strong>Balance:</strong> 
             <span style={{ color: pending > 0 ? "#b91c1c" : "#15803d", fontWeight: "bold" }}>
               {" "}KES {pending.toLocaleString()}
             </span>
@@ -209,6 +211,7 @@ function AppointmentManager({ user }) {
   );
   const [showBooking, setShowBooking] = useState(false);
   const [rebookService, setRebookService] = useState(null);
+  const [processingPayment, setProcessingPayment] = useState(null); // ID of apt being paid
 
   useEffect(() => {
     fetchAppointments();
@@ -218,7 +221,6 @@ function AppointmentManager({ user }) {
     try {
       setLoading(true);
       const response = await api.get("/appointments");
-      console.log("✅ Loaded appointments:", response.data);
       setAppointments(response.data.appointments);
     } catch (error) {
       console.error("Error fetching appointments:", error);
@@ -264,12 +266,11 @@ function AppointmentManager({ user }) {
       minute: "2-digit",
     });
 
-  // ✅ Updated to support Notes (e.g., rejection reason)
   const handleStatusUpdate = async (id, status, notes = null) => {
     setUpdating(id);
     try {
       const payload = { status };
-      if (notes) payload.notes = notes; // Add notes if provided
+      if (notes) payload.notes = notes; 
 
       await api.put(`/appointments/${id}`, payload);
       await fetchAppointments();
@@ -280,7 +281,7 @@ function AppointmentManager({ user }) {
 
   const handleReject = async (id) => {
     const reason = window.prompt("Reason for rejection (optional):");
-    if (reason === null) return; // Cancelled
+    if (reason === null) return; 
     await handleStatusUpdate(id, "cancelled", reason);
   };
 
@@ -310,13 +311,39 @@ function AppointmentManager({ user }) {
     setShowBooking(false);
   };
 
+  // ✅ HANDLER: Paystack Success for Balance Payment
+  const handlePaystackSuccess = async (response, apt, paidAmount) => {
+    setProcessingPayment(apt.id);
+    try {
+      await api.put(`/appointments/${apt.id}/pay-balance`, {
+        payment_reference: response.reference,
+        amount_paid: paidAmount 
+      });
+      alert("✅ Payment processed successfully!");
+      await fetchAppointments();
+    } catch (error) {
+      console.error("Payment update failed:", error);
+      alert("Payment succeeded but failed to update system. Please contact support.");
+    } finally {
+      setProcessingPayment(null);
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'completed': return <span className="status-badge green">✅ Completed</span>;
+      case 'cancelled': return <span className="status-badge red">❌ Cancelled</span>;
+      case 'no-show': return <span className="status-badge orange">🚫 No Show</span>;
+      case 'rebooked': return <span className="status-badge purple">🔄 Rebooked</span>;
+      default: return null;
+    }
+  };
+
   const renderAddons = (apt) => {
     const selectedAddons = parseAddons(apt);
-
     if (!Array.isArray(selectedAddons) || selectedAddons.length === 0) {
       return <p className="no-addons-text">No add-ons selected.</p>;
     }
-
     return (
       <div className="addons-container">
         <h5 className="addons-heading">💅 Add-ons Selected</h5>
@@ -332,17 +359,6 @@ function AppointmentManager({ user }) {
         </ul>
       </div>
     );
-  };
-
-  // ✅ Helper for badges in Past tab
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'completed': return <span className="status-badge green">✅ Completed</span>;
-      case 'cancelled': return <span className="status-badge red">❌ Cancelled</span>;
-      case 'no-show': return <span className="status-badge orange">🚫 No Show</span>;
-      case 'rebooked': return <span className="status-badge purple">🔄 Rebooked</span>;
-      default: return null;
-    }
   };
 
   const renderAppointmentsList = (list, type) => {
@@ -366,210 +382,246 @@ function AppointmentManager({ user }) {
       const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
       const pending = Math.max(total - paid, 0);
 
+      // ✅ RETURN ALL NEEDED VALUES (fixed previous crash)
       return { basePrice, addonsTotal, total, deposit, paid, pending, selectedAddons };
     };
 
     return (
       <div className="appointments-list">
-        {list.map((apt) => (
-          <div
-            key={apt.id}
-            className={`appointment-card ${
-              apt.status === "pending" ? "highlight-pending" : ""
-            }`}
-          >
-            <div className="appointment-info">
-              {/* ✅ Status Indicator for Past Appointments */}
-              {type === 'past' && getStatusBadge(apt.status)}
+        {list.map((apt) => {
+           // ✅ DESTRUCTURE VALUES
+           const { basePrice, addonsTotal, total, deposit, paid, pending } = calculateTotals(apt);
 
-              <h4>{apt.service_name}</h4>
+           // ✅ PAYSTACK CONFIG (Amount in Kobo)
+           const paystackConfig = {
+             reference: (new Date()).getTime().toString(),
+             email: user.email || "client@example.com", // Uses logged-in user email (provider or client)
+             amount: pending * 100, 
+             publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+             currency: "KES",
+             metadata: {
+               appointment_id: apt.id,
+               service: apt.service_name,
+               provider: apt.provider_name
+             }
+           };
 
-              {user.user_type === "client" ? (
-                <p><strong>With:</strong> {apt.provider_name}</p>
-              ) : (
-                <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
-              )}
+           // ✅ Handle Status Change (Provider Block on Unpaid)
+           const handleStatusChange = (e) => {
+             const newStatus = e.target.value;
+             if (newStatus === 'completed' && pending > 0) {
+               alert(`⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`);
+               return; // STOP execution
+             }
+             handleStatusUpdate(apt.id, newStatus);
+           };
 
-              <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
-              <p><strong>Duration:</strong> {apt.duration} minutes</p>
+           return (
+            <div
+              key={apt.id}
+              className={`appointment-card ${
+                apt.status === "pending" ? "highlight-pending" : ""
+              }`}
+            >
+              <div className="appointment-info">
+                {type === 'past' && getStatusBadge(apt.status)}
 
-              {/* ✅ Show Reason if Cancelled (Client view) */}
-              {apt.status === 'cancelled' && apt.notes && (
-                <p className="cancellation-reason" style={{ color: '#dc2626', fontSize: '13px', fontStyle: 'italic', marginTop: '6px' }}>
-                  <strong>Note:</strong> {apt.notes}
-                </p>
-              )}
+                <h4>{apt.service_name}</h4>
 
-              {/* 💳 Payment Details */}
-              {(() => {
-                const { total, deposit, paid, pending } = calculateTotals(apt);
+                {user.user_type === "client" ? (
+                  <p><strong>With:</strong> {apt.provider_name}</p>
+                ) : (
+                  <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                )}
 
-                return (
-                  <div className="payment-details">
-                    <p className="payment-line">
-                      <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
+                <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+                <p><strong>Duration:</strong> {apt.duration} minutes</p>
+
+                {apt.status === 'cancelled' && apt.notes && (
+                  <p className="cancellation-reason" style={{ color: '#dc2626', fontSize: '13px', fontStyle: 'italic', marginTop: '6px' }}>
+                    <strong>Note:</strong> {apt.notes}
+                  </p>
+                )}
+
+                {/* 💳 Payment Details */}
+                <div className="payment-details">
+                  <p className="payment-line">
+                    <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
+                  </p>
+
+                  <p className="payment-line">
+                    <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
+
+                    {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid') && (
+                      <span 
+                        className="receipt-wrapper" 
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          setSelectedPayment(apt);
+                        }}
+                        title="View Payment Receipt"
+                        style={{ 
+                          display: "inline-flex", 
+                          alignItems: "center", 
+                          marginLeft: "12px", 
+                          cursor: "pointer", 
+                          color: "#16a34a", 
+                          fontWeight: "600", 
+                          fontSize: "0.9em" 
+                        }}
+                      >
+                        <Receipt size={18} style={{ marginRight: "4px" }} />
+                        Receipt
+                      </span>
+                    )}
+                  </p>
+
+                  <div className="info-row"><strong>Total Amount:</strong>
+                    <span className="amount">KES {total.toLocaleString()}</span>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                    <p style={{ color: pending > 0 ? "#b30000" : "#007b55", margin: 0 }}>
+                      <strong>Balance:</strong> KES {pending.toLocaleString()}
                     </p>
 
-                    <p className="payment-line">
-                      <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
-
-                      {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid') && (
-                        <span 
-                          className="receipt-wrapper" 
-                          onClick={(e) => {
-                            e.stopPropagation(); 
-                            setSelectedPayment(apt);
-                          }}
-                          title="View Payment Receipt"
-                          style={{ 
-                            display: "inline-flex", 
-                            alignItems: "center", 
-                            marginLeft: "12px", 
+                    {/* ✅ PAYSTACK BUTTONS (Client Pay OR Provider Terminal) */}
+                    {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && (
+                       <PaystackButton
+                         {...paystackConfig}
+                         text={processingPayment === apt.id ? "Processing..." : (user.user_type === 'client' ? "Pay Balance" : "Process Payment")}
+                         className={`small-btn ${user.user_type === 'client' ? 'btn-primary' : 'btn-secondary'}`}
+                         onSuccess={(res) => handlePaystackSuccess(res, apt, pending)}
+                         onClose={() => console.log("Payment cancelled")}
+                         style={{
+                            background: user.user_type === 'client' ? "#16a34a" : "#4f46e5", 
+                            border: "none", 
+                            marginLeft: "10px", 
+                            fontSize: "12px", 
+                            padding: "6px 10px", 
                             cursor: "pointer", 
-                            color: "#16a34a", 
-                            fontWeight: "600", 
-                            fontSize: "0.9em" 
-                          }}
-                        >
-                          <Receipt size={18} style={{ marginRight: "4px" }} />
-                          Receipt
-                        </span>
-                      )}
-                    </p>
-
-                    <div className="info-row"><strong>Total Amount:</strong>
-                      <span className="amount">KES {total.toLocaleString()}</span>
-                    </div>
-
-                    <p style={{ color: pending > 0 ? "#b30000" : "#007b55" }}>
-                      <strong>Pending Amount:</strong> KES {pending.toLocaleString()}
-                    </p>
+                            color: "white", 
+                            borderRadius: "6px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px"
+                         }}
+                       >
+                         {/* Optional Icon inside button if library supports children, usually text prop is safer */}
+                       </PaystackButton>
+                    )}
                   </div>
-                );
-              })()}
+                </div>
 
-              {renderAddons(apt)}
+                {renderAddons(apt)}
 
-              {/* Total Box */}
-              {(() => {
-                const { basePrice, addonsTotal, total } = calculateTotals(apt);
-                return (
-                  <div className="total-cost-box">
-                    <div className="total-row">
-                      <span>Base Price:</span>
-                      <strong>KES {basePrice.toLocaleString()}</strong>
-                    </div>
-
-                    <div className="total-row">
-                      <span>Add-ons:</span>
-                      <strong>+ KES {addonsTotal.toLocaleString()}</strong>
-                    </div>
-
-                    <div className="total-divider" />
-
-                    <div className="total-row total-final">
-                      <span>Total:</span>
-                      <strong>KES {total.toLocaleString()}</strong>
-                    </div>
+                <div className="total-cost-box">
+                  <div className="total-row">
+                    <span>Base Price:</span>
+                    <strong>KES {basePrice.toLocaleString()}</strong>
                   </div>
-                );
-              })()}
-            </div>
+                  <div className="total-row">
+                    <span>Add-ons:</span>
+                    <strong>+ KES {addonsTotal.toLocaleString()}</strong>
+                  </div>
+                  <div className="total-divider" />
+                  <div className="total-row total-final">
+                    <span>Total:</span>
+                    <strong>KES {total.toLocaleString()}</strong>
+                  </div>
+                </div>
+              </div>
 
-            {/* ✅ ACTION BUTTONS */}
-            <div className="appointment-actions">
-              {user.user_type === "client" ? (
-                <>
-                  {/* Cancel Pending */}
-                  {apt.status === "pending" && (
-                    <button
-                      className="btn btn-danger small-btn"
-                      onClick={() => handleCancelAppointment(apt.id)}
-                      disabled={cancelling === apt.id}
-                    >
-                      {cancelling === apt.id ? "Cancelling..." : "Cancel"}
-                    </button>
-                  )}
-
-                  {/* Rebook/Delete Past (Including Cancelled) */}
-                  {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
-                    <div className="action-row">
-                      {/* 🔄 Rebook ONLY for Cancelled */}
-                      {apt.status === 'cancelled' && (
+              {/* ACTIONS */}
+              <div className="appointment-actions">
+                {user.user_type === "client" ? (
+                  <>
+                    {apt.status === "pending" && (
+                      <button
+                        className="btn btn-danger small-btn"
+                        onClick={() => handleCancelAppointment(apt.id)}
+                        disabled={cancelling === apt.id}
+                      >
+                        {cancelling === apt.id ? "Cancelling..." : "Cancel"}
+                      </button>
+                    )}
+                    {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
+                      <div className="action-row">
+                        {apt.status === 'cancelled' && (
+                          <button
+                            className="btn btn-primary small-btn"
+                            onClick={() => handleRebook(apt)}
+                          >
+                            Rebook
+                          </button>
+                        )}
                         <button
-                          className="btn btn-primary small-btn"
-                          onClick={() => handleRebook(apt)}
+                          className="btn btn-danger small-btn"
+                          onClick={() => handleDeleteAppointment(apt.id)}
                         >
-                          Rebook
+                          Delete
                         </button>
-                      )}
-                      
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* Provider: Pending Controls with Reject Reason */}
-                  {apt.status === "pending" && type === "pending" && (
-                    <div className="status-action-row">
-                      <button
-                        className="btn-status confirm"
-                        onClick={() => handleStatusUpdate(apt.id, "scheduled")}
-                        disabled={updating === apt.id}
-                      >
-                        {updating === apt.id ? "Updating..." : "Confirm"}
-                      </button>
-                      <button
-                        className="btn-status reject"
-                        onClick={() => handleReject(apt.id)} 
-                        disabled={updating === apt.id}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Provider Pending Controls */}
+                    {apt.status === "pending" && type === "pending" && (
+                      <div className="status-action-row">
+                        <button
+                          className="btn-status confirm"
+                          onClick={() => handleStatusUpdate(apt.id, "scheduled")}
+                          disabled={updating === apt.id}
+                        >
+                          {updating === apt.id ? "Updating..." : "Confirm"}
+                        </button>
+                        <button
+                          className="btn-status reject"
+                          onClick={() => handleReject(apt.id)} 
+                          disabled={updating === apt.id}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
 
-                  {/* Provider: Update Status */}
-                  {type === "upcoming" && apt.status === "scheduled" && (
-                    <div className="status-dropdown-container">
-                      <select
-                        value={apt.status}
-                        onChange={(e) =>
-                          handleStatusUpdate(apt.id, e.target.value)
-                        }
-                        disabled={updating === apt.id}
-                        className="status-select"
-                      >
-                        <option value="scheduled">Scheduled</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="no-show">No Show</option>
-                      </select>
-                    </div>
-                  )}
+                    {/* Provider Upcoming Controls with COMPLETE LOCK */}
+                    {type === "upcoming" && apt.status === "scheduled" && (
+                      <div className="status-dropdown-container">
+                        <select
+                          value={apt.status}
+                          onChange={handleStatusChange} // ✅ Uses the protected handler
+                          disabled={updating === apt.id}
+                          className="status-select"
+                        >
+                          <option value="scheduled">Scheduled</option>
+                          <option value="completed">
+                            {pending > 0 ? "🔒 Completed (Pay Balance First)" : "Completed"}
+                          </option>
+                          <option value="cancelled">Cancelled</option>
+                          <option value="no-show">No Show</option>
+                        </select>
+                      </div>
+                    )}
 
-                  {/* Provider: Past Controls */}
-                  {type === "past" && (
-                    <div className="action-row">
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
+                    {/* Provider Past Controls */}
+                    {type === "past" && (
+                      <div className="action-row">
+                        <button
+                          className="btn btn-danger small-btn"
+                          onClick={() => handleDeleteAppointment(apt.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+           );
+        })}
       </div>
     );
   };
@@ -623,7 +675,6 @@ function AppointmentManager({ user }) {
           />
         )}
 
-        {/* 💳 Payment Info Modal */}
         {selectedPayment && (
           <PaymentInfoModal
             payment={selectedPayment}
