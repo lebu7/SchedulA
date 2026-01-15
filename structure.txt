@@ -1,0 +1,50 @@
+.
+├── README.md
+├── backend
+│   ├── database
+│   │   └── schedula.db
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── src
+│   │   ├── config
+│   │   │   └── database.js
+│   │   ├── middleware
+│   │   │   └── auth.js
+│   │   ├── routes
+│   │   │   ├── appointments.js
+│   │   │   ├── auth.js
+│   │   │   └── services.js
+│   │   └── server.js
+│   ├── test-api.js
+│   ├── test-endpoints.js
+│   └── test-server.js
+├── frontend
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── src
+│   │   ├── App.css
+│   │   ├── App.jsx
+│   │   ├── components
+│   │   │   ├── AppointmentManager.css
+│   │   │   ├── AppointmentManager.jsx
+│   │   │   ├── BookingModal.css
+│   │   │   ├── BookingModal.jsx
+│   │   │   ├── Dashboard.css
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── Header.css
+│   │   │   ├── Header.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Register.jsx
+│   │   │   ├── ServiceList.css
+│   │   │   ├── ServiceList.jsx
+│   │   │   ├── ServiceManager.css
+│   │   │   └── ServiceManager.jsx
+│   │   ├── index.css
+│   │   ├── main.jsx
+│   │   └── services
+│   │       └── auth.js
+│   └── vite.config.js
+└── structure.txt
+
+11 directories, 37 files

@@ -1,0 +1,151 @@
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 25px;
+  margin-top: 20px;
+}
+
+.service-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid #f0f0f0;
+}
+
+.service-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* === HEADER COLORS (full-width bar) === */
+.service-header-bar {
+  color: white;
+  padding: 15px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.salon-header {
+  background: linear-gradient(135deg, #c2185b, #8e24aa);
+}
+.spa-header {
+  background: linear-gradient(135deg, #2e7d32, #43a047);
+}
+.barber-header {
+  background: linear-gradient(135deg, #1565c0, #1e88e5);
+}
+.default-category {
+  background: linear-gradient(135deg, #37474f, #607d8b);
+}
+
+.service-header-bar .service-name {
+  margin: 0;
+  font-size: 1.25em;
+  font-weight: 700;
+}
+
+.service-header-bar .service-provider {
+  font-size: 14px;
+  margin: 4px 0 0;
+  color: #e0e6f1;
+}
+
+.business-name {
+  color: #cfd8dc;
+  font-style: italic;
+}
+
+/* === MAIN BODY === */
+.service-main {
+  padding: 20px;
+}
+
+.service-category {
+  background: #f1f3f5;
+  color: #444;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: inline-block;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.service-description {
+  color: #555;
+  margin-bottom: 18px;
+  line-height: 1.5;
+  min-height: 40px;
+}
+
+.service-details {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: #333;
+}
+
+.price-text {
+  color: #000000;
+  font-weight: 600;
+}
+
+/* === ADD-ON PREVIEW === */
+.addon-preview {
+  background: #f8f9fa;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 15px;
+}
+
+.addon-preview p {
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #444;
+}
+
+.addon-preview ul {
+  margin: 0;
+  padding-left: 15px;
+  font-size: 13px;
+  color: #555;
+}
+
+.more-addons {
+  color: #007bff;
+  font-style: italic;
+}
+
+/* === BUTTON === */
+.book-btn {
+  width: 100%;
+  padding: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+/* === CLOSED SERVICES === */
+.closed-service {
+  opacity: 0.5;
+  pointer-events: none;
+  position: relative;
+  border: 2px solid #dc3545;
+}
+
+.closed-service::after {
+  content: attr(data-status);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 16px;
+}

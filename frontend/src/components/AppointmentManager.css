@@ -1,0 +1,529 @@
+.appointment-manager {
+  padding: 20px 0;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.tab-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+  box-shadow: 0 3px 10px rgba(0, 123, 255, 0.3);
+}
+
+/* Appointments Grid */
+.appointments-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.appointment-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 25px;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  background: white;
+  transition: 0.3s;
+  min-height: 260px;
+}
+
+.appointment-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: translateY(-3px);
+}
+
+.appointment-info h4 {
+  margin-bottom: 10px;
+  color: #2c3e50;
+  font-size: 1.2em;
+}
+
+.appointment-info p {
+  margin-bottom: 5px;
+  color: #555;
+  font-size: 14px;
+}
+
+/* Buttons & Actions */
+.appointment-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.right-aligned {
+  justify-content: flex-end;
+}
+
+.small-btn {
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  width: fit-content;
+}
+
+.btn-primary.small-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+}
+
+.btn-danger.small-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+}
+
+.small-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
+/* Status */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.status-badge.blue { background-color: #dbeafe; color: #1e40af; }
+.status-badge.green { background-color: #d1fae5; color: #065f46; }
+.status-badge.red { background-color: #fee2e2; color: #b91c1c; }
+.status-badge.orange { background-color: #ffedd5; color: #c2410c; }
+.status-badge.gray { background-color: #f1f5f9; color: #334155; }
+
+/* Empty State */
+.no-appointments {
+  text-align: center;
+  padding: 60px 40px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px dashed #dee2e6;
+  grid-column: span 3;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .appointments-list { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .appointments-list { grid-template-columns: 1fr; }
+  .appointment-card { padding: 20px; }
+  .action-row { justify-content: flex-end; }
+}
+
+@media (max-width: 480px) {
+  .appointment-card { padding: 18px; }
+  .small-btn { width: 100%; }
+  .action-row { flex-direction: column; align-items: stretch; }
+}
+.status-badge.purple {
+  background-color: #ede9fe;
+  color: #6d28d9;
+}
+
+.status-note {
+  font-size: 13px;
+  color: #6d28d9;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #f3f0ff;
+  border-radius: 8px;
+  padding: 5px 10px;
+}
+/* Provider Status Buttons */
+.status-action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-status {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border: none;
+}
+
+.btn-status.confirm {
+  background-color: #16a34a;
+  color: white;
+}
+
+.btn-status.confirm:hover {
+  background-color: #15803d;
+  transform: scale(1.03);
+}
+
+.btn-status.reject {
+  background-color: #dc2626;
+  color: white;
+}
+
+.btn-status.reject:hover {
+  background-color: #b91c1c;
+  transform: scale(1.03);
+}
+
+/* Compact dropdown style */
+.status-dropdown-container {
+  margin-top: 8px;
+}
+
+.status-select {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #f9fafb;
+  transition: 0.3s;
+}
+
+.status-select:hover {
+  border-color: #93c5fd;
+}
+
+.status-select:focus {
+  border-color: #007bff;
+  outline: none;
+}
+
+/* Keep existing layout responsive */
+@media (max-width: 768px) {
+  .status-action-row {
+    flex-direction: column;
+  }
+  .btn-status {
+    width: 100%;
+  }
+}
+/* === ADDONS SECTION === */
+.addons-container {
+  margin-top: 12px;
+  background: #f9fafb;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.addons-container h5 {
+  margin-bottom: 8px;
+  color: #007bff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.addon-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.addon-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.addon-item:last-child {
+  border-bottom: none;
+}
+
+.addon-name {
+  color: #374151;
+  font-weight: 500;
+}
+
+.addon-price {
+  color: #007bff;
+  font-weight: 600;
+}
+
+.no-addons-text {
+  font-size: 13px;
+  color: #6b7280;
+  font-style: italic;
+  margin-top: 6px;
+}
+/* === Add-ons styling === */
+.addons-container {
+  margin-top: 12px;
+  background: #f9fafb;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.addons-container h5 {
+  margin-bottom: 8px;
+  color: #007bff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.addon-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.addon-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.addon-item:last-child {
+  border-bottom: none;
+}
+
+.addon-name {
+  color: #374151;
+  font-weight: 500;
+}
+
+.addon-price {
+  color: #007bff;
+  font-weight: 600;
+}
+
+.no-addons-text {
+  font-size: 13px;
+  color: #6b7280;
+  font-style: italic;
+  margin-top: 6px;
+}
+.total-cost-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(26, 77, 46, 0.05); /* soft green tint */
+  border: 1px solid #1a4d2e33;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  margin-bottom: 14px; /* ✅ gives space before status badge */
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.total-label {
+  color: #1a4d2e;
+  font-weight: 600;
+}
+
+.total-amount {
+  color: #1a4d2e;
+  font-weight: 700;
+}
+
+/* === Pending appointment highlight === */
+.highlight-pending h4 {
+  color: #92400e;
+}
+
+.highlight-pending .status-badge.gray {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+/* 💳 Payment status styles */
+.payment-status {
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.payment-status.paid {
+  color: #0a730a;
+  background-color: #d6f5d6;
+}
+
+.payment-status.unpaid {
+  color: #b30000;
+  background-color: #fcdcdc;
+}
+/* 💳 Deposit + payment line layout */
+.payment-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  margin: 6px 0;
+}
+/* 🧾 Payment Modal Styles */
+.payment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.payment-modal {
+  background: #fff;
+  padding: 24px;
+  border-radius: 12px;
+  width: 360px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  text-align: left;
+  animation: fadeIn 0.25s ease-in-out;
+}
+
+.payment-modal h3 {
+  margin-bottom: 12px;
+  color: #222;
+}
+
+.payment-modal p {
+  margin: 6px 0;
+  font-size: 0.95rem;
+}
+
+.payment-modal .btn {
+  margin-top: 10px;
+  width: 100%;
+}
+
+/* ✨ Clickable badge */
+.payment-status.clickable {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.status-payment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.payment-badge {
+  background-color: #ddd;
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.payment-badge:hover {
+  background-color: #ccc;
+}
+
+.payment-badge.paid {
+  color: #28a745;
+  
+}
+
+.payment-badge.unpaid {
+  background-color: #ffc107;
+  color: black;
+}
+.payment-details {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+.payment-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.receipt-icon:hover {
+  transform: scale(1.1);
+  color: #005c3a;
+  transition: all 0.2s ease-in-out;
+}
+.payment-status {
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: inline-block;
+  text-transform: capitalize;
+}
+
+/* FULL PAYMENT — GREEN */
+.payment-status.paid {
+  background-color: #d4edda;   /* soft green */
+  color: #155724;              /* dark green text */
+  border: 1px solid #c3e6cb;
+}
+
+/* PARTIAL PAYMENT / DEPOSIT PAID — ORANGE */
+.payment-status.deposit-paid {
+  background-color: #fff4e5;   /* soft orange */
+  color: #8a4b00;              /* dark warm orange */
+  border: 1px solid #ffd9b3;
+}
+
+/* NO PAYMENT — RED */
+.payment-status.unpaid {
+  background-color: #fde2e1;   /* soft red */
+  color: #a10000;              /* dark red text */
+  border: 1px solid #f5c6cb;
+}
+
+/* Hover effect */
+.payment-status:hover {
+  opacity: 0.95;
+  transform: scale(1.03);
+  transition: 0.18s ease-in-out;
+}
