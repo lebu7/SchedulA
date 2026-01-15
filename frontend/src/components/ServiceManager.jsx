@@ -37,6 +37,11 @@ function ServiceManager({ user }) {
         (service) => service.provider_id === user.id
       );
       setServices(myServices);
+      
+      // Optional: Check if ALL services are closed on load to sync businessClosed state
+      const allClosed = myServices.length > 0 && myServices.every(s => s.is_closed === 1);
+      setBusinessClosed(allClosed);
+
       myServices.forEach((svc) => fetchSubservices(svc.id));
     } catch (error) {
       console.error("Error fetching services:", error);
@@ -70,7 +75,6 @@ function ServiceManager({ user }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ FIXED: Create / Update services safely
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -99,7 +103,7 @@ function ServiceManager({ user }) {
           await fetchSubservices(res.data.service.id);
         }
       } else {
-        await fetchMyServices(); // fallback
+        await fetchMyServices();
       }
 
       setShowForm(false);
@@ -134,7 +138,6 @@ function ServiceManager({ user }) {
     setShowForm(true);
   };
 
-  // ✅ FIXED: Delete button stuck issue
   const handleDelete = async (serviceId) => {
     if (!window.confirm("Are you sure you want to delete this service?")) return;
 
@@ -153,41 +156,47 @@ function ServiceManager({ user }) {
     }
   };
 
+  // ✅ FIXED: Prevent opening service if Business is Closed
   const handleToggleService = async (service) => {
-  setTogglingId(service.id);
+    // If we are trying to OPEN (currently closed) AND Business is Closed -> BLOCK IT
+    if (service.is_closed && businessClosed) {
+      setGlobalError("❌ Cannot open service while Business is Closed. Please 'Open Business' first.");
+      setTimeout(() => setGlobalError(""), 3000);
+      return;
+    }
 
-  try {
-    // Explicitly send integer to backend
-    const updatedStatus = service.is_closed ? 0 : 1;
-    await api.patch(`/services/${service.id}/closure`, {
-      is_closed: updatedStatus === 1 ? 1 : 0,
-    });
+    setTogglingId(service.id);
 
-    setServices((prev) =>
-      prev.map((s) =>
-        s.id === service.id ? { ...s, is_closed: updatedStatus } : s
-      )
-    );
+    try {
+      const updatedStatus = service.is_closed ? 0 : 1;
+      await api.patch(`/services/${service.id}/closure`, {
+        is_closed: updatedStatus === 1 ? 1 : 0,
+      });
 
-    setGlobalSuccess(
-      updatedStatus
-        ? "✅ Service closed successfully!"
-        : "✅ Service reopened successfully!"
-    );
-  } catch (error) {
-    console.error("Error toggling service:", error);
-    setGlobalError(
-      error.response?.data?.error ||
-        "❌ Failed to toggle service. Please try again."
-    );
-  } finally {
-    setTimeout(() => setGlobalSuccess(""), 2000);
-    setTimeout(() => setGlobalError(""), 2000);
-    setTogglingId(null);
-  }
-};
+      setServices((prev) =>
+        prev.map((s) =>
+          s.id === service.id ? { ...s, is_closed: updatedStatus } : s
+        )
+      );
 
-  // ✅ FIXED: Correct business toggle API
+      setGlobalSuccess(
+        updatedStatus
+          ? "✅ Service closed successfully!"
+          : "✅ Service reopened successfully!"
+      );
+    } catch (error) {
+      console.error("Error toggling service:", error);
+      setGlobalError(
+        error.response?.data?.error ||
+          "❌ Failed to toggle service. Please try again."
+      );
+    } finally {
+      setTimeout(() => setGlobalSuccess(""), 2000);
+      setTimeout(() => setGlobalError(""), 2000);
+      setTogglingId(null);
+    }
+  };
+
   const handleToggleBusiness = async () => {
     try {
       const newStatus = !businessClosed;
@@ -227,14 +236,13 @@ function ServiceManager({ user }) {
       const payload = {
         name: newSub.name,
         description: "",
-        price: formattedPrice,               // backend CREATE may expect this
-        additional_price: formattedPrice,    // backend CREATE may expect this
+        price: formattedPrice,
+        additional_price: formattedPrice,
       };
 
       await api.post(`/services/${serviceId}/sub-services`, payload);
       await fetchSubservices(serviceId);
 
-      // normalize price
       setSubservices(prev => ({
         ...prev,
         [serviceId]: prev[serviceId].map(sub => ({
@@ -291,12 +299,11 @@ function ServiceManager({ user }) {
       const payload = {
         name: editingSub.name,
         description: "",
-        price: formattedPrice,               // backend update validation requires this
-        additional_price: formattedPrice,    // backend create uses this
+        price: formattedPrice,
+        additional_price: formattedPrice,
       };
 
       await api.put(`/services/${serviceId}/sub-services/${subId}`, payload);
-
       await fetchSubservices(serviceId);
 
       setSubservices(prev => ({
@@ -556,11 +563,19 @@ function ServiceManager({ user }) {
                 >
                   {deletingId === service.id ? "Deleting..." : "Delete"}
                 </button>
+                
+                {/* ✅ FIXED: Button behavior when Business is Closed */}
                 <button
                   className={`btn ${
                     service.is_closed ? "btn-success" : "btn-primary"
                   }`}
                   onClick={() => handleToggleService(service)}
+                  disabled={businessClosed && service.is_closed} // Disable "Open" if Business is Closed
+                  style={{
+                    opacity: (businessClosed && service.is_closed) ? 0.6 : 1,
+                    cursor: (businessClosed && service.is_closed) ? 'not-allowed' : 'pointer'
+                  }}
+                  title={businessClosed && service.is_closed ? "Open Business to enable this service" : ""}
                 >
                   {togglingId === service.id
                     ? "Updating..."
