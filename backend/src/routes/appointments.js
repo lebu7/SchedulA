@@ -566,17 +566,22 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const clientId = req.user.userId;
+  const userId = req.user.userId; // Can be client OR provider
   const { payment_reference, amount_paid } = req.body;
 
   if (!payment_reference || !amount_paid || Number(amount_paid) <= 0) {
     return res.status(400).json({ error: 'payment_reference and positive amount_paid are required' });
   }
 
-  db.get(`SELECT client_id, total_price, amount_paid FROM appointments WHERE id = ?`, [id], (err, row) => {
+  // Fetch provider_id as well to check permissions
+  db.get(`SELECT client_id, provider_id, total_price, amount_paid FROM appointments WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!row) return res.status(404).json({ error: 'Appointment not found' });
-    if (row.client_id !== clientId) return res.status(403).json({ error: 'Forbidden' });
+
+    // ✅ FIX: Allow if user is the Client OR the Provider
+    if (row.client_id !== userId && row.provider_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden: You are not authorized to update this appointment.' });
+    }
 
     const prevPaid = Number(row.amount_paid || 0);
     const newPaid = prevPaid + Number(amount_paid);
