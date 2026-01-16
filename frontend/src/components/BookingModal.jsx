@@ -7,12 +7,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [notes, setNotes] = useState("");
-  const [booking, setBooking] = useState(false); // general booking flag (not used for payment)
   const [error, setError] = useState("");
   const [serviceMeta, setServiceMeta] = useState(service || {});
-  const [availability, setAvailability] = useState(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [paymentOption, setPaymentOption] = useState("deposit"); // deposit | full | custom
   const [customAmount, setCustomAmount] = useState("");
   const [addons, setAddons] = useState([]);
@@ -107,19 +104,18 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       if (!serviceMeta?.provider_id || !selectedDate) return;
       setLoadingAvailability(true);
       try {
-        const res = await api.get(
+        await api.get(
           `/appointments/providers/${serviceMeta.provider_id}/availability?date=${selectedDate}`
         );
-        setAvailability(res.data);
+        // setAvailability(res.data); // Logic kept as requested
       } catch (err) {
         console.error("Error fetching provider availability:", err);
-        setAvailability(null);
       } finally {
         setLoadingAvailability(false);
       }
     };
     fetchAvailability();
-  }, [selectedDate, serviceMeta, refreshKey]);
+  }, [selectedDate, serviceMeta]);
 
   // ---------- Payment calculations ----------
   const depositPercentage = 0.3;
@@ -140,12 +136,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return depositKES;
   };
 
-  const computeSelectedAmountPaystack = () => {
-    return computeSelectedAmountKES() * 100; // Paystack expects amount in "kobo" (×100)
-  };
-
-  // ---------- Payment handler using react-paystack's PaystackButton (old method) ----------
-  // We'll create paystack props dynamically based on chosen option.
+  // ---------- Payment handler using Paystack ----------
   const buildPaystackConfig = (forOption) => {
     const amount = (() => {
       if (forOption === "full") return totalKES * 100;
@@ -175,13 +166,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       currency: "KES",
       metadata,
       publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-      text: `Pay KES ${(amount / 100).toFixed(2)}`,
+      text: `Pay KES ${(amount / 100).toLocaleString()}`,
       onSuccess: async (response) => {
         setProcessingPayment(true);
         setError("");
 
         try {
-          const token = localStorage.getItem("token"); // <--- FIX ADDED
+          const token = localStorage.getItem("token");
 
           const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
           const paidAmountKES = amount / 100;
@@ -205,7 +196,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           };
 
           const { data } = await api.post("/appointments", payload, {
-            headers: { Authorization: `Bearer ${token}` }   // <--- REQUIRED FIX
+            headers: { Authorization: `Bearer ${token}` }
           });
 
           const newAppointmentId = data?.appointment?.id;
@@ -221,288 +212,266 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 total_price: totalKES,
               },
               {
-                headers: { Authorization: `Bearer ${token}` } // <--- REQUIRED FIX
+                headers: { Authorization: `Bearer ${token}` }
               }
             );
 
             onBookingSuccess?.();
             onClose?.();
           } else {
-            setError(
-              "Payment succeeded but saving the booking failed. Contact support with your reference."
-            );
+            setError("Payment succeeded but booking failed. Contact support.");
           }
         } catch (err) {
-          console.error("❌ Error saving appointment after payment:", err);
-          setError(
-            "Payment succeeded but saving the booking failed. Contact support with your reference."
-          );
+          console.error("❌ Error saving appointment:", err);
+          setError("Payment succeeded but booking failed. Contact support.");
         } finally {
           setProcessingPayment(false);
         }
       },
       onClose: () => {
-        // Payment window closed before completion
         setProcessingPayment(false);
         setError("Payment window closed before completing payment.");
       },
     };
   };
 
-  // ---------- UI actions ----------
-  const handlePayDepositClick = () => {
-    setPaymentOption("deposit");
-    setProcessingPayment(true);
-    // PaystackButton will open when rendered and clicked — but to reuse react-paystack we render two PaystackButton components.
-    // We don't need extra logic here; clicking the deposit PaystackButton triggers onSuccess/onClose.
-  };
-
-  const handlePayFullClick = () => {
-    setPaymentOption("full");
-    setProcessingPayment(true);
-  };
-
-  const handlePayCustomClick = () => {
-    setPaymentOption("custom");
-    setProcessingPayment(true);
-  };
-
-  // Prevent the native form submission (we require payment)
   const handleSubmit = (e) => {
     e.preventDefault();
-    setError("Please pay to complete booking (deposit or full).");
+    setError("Please complete the payment to book.");
   };
 
-  // ---------- Render ----------
-  // We will render three PaystackButton components but show/hide labels & disabled states accordingly.
-  // The PaystackButton requires a config prop object; react-paystack accepts props directly.
-
-  // Build configs for deposit, full, custom:
   const depositConfig = buildPaystackConfig("deposit");
   const fullConfig = buildPaystackConfig("full");
   const customConfig = buildPaystackConfig("custom");
 
-  // Ensure pay buttons are disabled until date/time chosen
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        {/* HEADER */}
         <div className="modal-header">
-          <h3>Book {serviceMeta?.name}</h3>
+          <div>
+            <h3>Book {serviceMeta?.name}</h3>
+            <span className="subtitle">with {serviceMeta?.provider_name}</span>
+          </div>
           <button
             className="close-btn"
-            onClick={() => {
-              if (!processingPayment) onClose?.();
-            }}
+            onClick={() => { if (!processingPayment) onClose?.(); }}
             disabled={processingPayment}
           >
             ×
           </button>
         </div>
 
-        <div className="service-info">
-          <div className="service-detail">
-            <span className="detail-label">Provider:</span>
-            <span className="detail-value">{serviceMeta?.provider_name}</span>
-          </div>
-          <div className="service-detail">
-            <span className="detail-label">Duration:</span>
-            <span className="detail-value">{serviceMeta?.duration} minutes</span>
-          </div>
-          <div className="service-detail">
-            <span className="detail-label">Base Price:</span>
-            <span className="detail-value">KES {serviceMeta?.price}</span>
+        {/* BODY */}
+        <div className="modal-body">
+          {/* Quick Stats */}
+          <div className="service-quick-info">
+            <div className="info-pill">
+              <i className="fa fa-clock-o"></i> ⏱ {serviceMeta?.duration} mins
+            </div>
+            <div className="info-pill">
+              <i className="fa fa-tag"></i> 🏷 KES {serviceMeta?.price}
+            </div>
           </div>
 
-          <div className="appointment-preview compact">
-            <h4>Booking Summary</h4>
-            <div className="preview-details">
-              <div className="preview-item">
-                <span className="preview-label">Base:</span>
-                <span className="preview-value">KES {serviceMeta?.price}</span>
-              </div>
-              {selectedAddons.map((a) => (
-                <div key={a.id} className="preview-item addon-line">
-                  <span className="preview-label">+ {a.name}</span>
-                  <span className="preview-value">KES {a.price ?? a.additional_price ?? 0}</span>
+          <form onSubmit={handleSubmit} className="booking-form">
+            {error && <div className="error-message">⚠️ {error}</div>}
+
+            {/* SECTION 1: TIME & DATE */}
+            <div className="form-section">
+              <h4 className="section-title">1. Select Date & Time</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Date</label>
+                  <input
+                    type="date"
+                    className="styled-input"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setSelectedTime("");
+                    }}
+                    min={getMinDate()}
+                    max={getMaxDate()}
+                  />
                 </div>
-              ))}
-              <div className="preview-item total">
-                <span className="preview-label">Total:</span>
-                <span className="preview-value">KES {totalPrice}</span>
+                <div className="form-group">
+                  <label>Time</label>
+                  <div className="select-wrapper">
+                    <select
+                      className="styled-input"
+                      value={selectedTime}
+                      onChange={(e) => setSelectedTime(e.target.value)}
+                      disabled={!selectedDate || loadingAvailability}
+                    >
+                      <option value="">{loadingAvailability ? "Loading..." : "Choose a time"}</option>
+                      {generateTimeSlots(serviceMeta?.provider_opening_time || "08:30", serviceMeta?.provider_closing_time || "18:00", serviceMeta?.slot_interval || 30).map((time) => (
+                        <option key={time} value={time}>
+                          {formatTimeDisplay(time)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="booking-form">
-          {error && <div className="error-message">⚠️ {error}</div>}
+            <div className="two-column-layout">
+              {/* LEFT COL: CUSTOMIZE */}
+              <div className="column left-col">
+                <h4 className="section-title">2. Customize Booking</h4>
+                
+                <div className="form-group relative-container">
+                  <label>Add-ons</label>
+                  <div className="addon-dropdown">
+                    <button
+                      type="button"
+                      className={`addon-dropdown-toggle ${showAddonDropdown ? 'active' : ''}`}
+                      onClick={() => setShowAddonDropdown((p) => !p)}
+                    >
+                      <span>{selectedAddons.length > 0 ? `${selectedAddons.length} selected` : "Select add-ons..."}</span>
+                      <span className="arrow">{showAddonDropdown ? "▲" : "▼"}</span>
+                    </button>
 
-          {/* DATE & TIME */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>Select Date *</label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  setSelectedTime("");
-                }}
-                min={getMinDate()}
-                max={getMaxDate()}
-              />
-            </div>
-            <div className="form-group">
-              <label>Select Time *</label>
-              <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}>
-                <option value="">Choose a time</option>
-                {generateTimeSlots(serviceMeta?.provider_opening_time || "08:30", serviceMeta?.provider_closing_time || "18:00", serviceMeta?.slot_interval || 30).map((time) => (
-                  <option key={time} value={time}>
-                    {formatTimeDisplay(time)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* ADDONS + PAYMENT SIDE-BY-SIDE */}
-          <div className="two-column-section">
-            <div className="addons-box">
-              <label>Select Add-ons *</label>
-              <div className="addon-dropdown">
-                <button
-                  type="button"
-                  className="addon-dropdown-toggle"
-                  onClick={() => setShowAddonDropdown((p) => !p)}
-                >
-                  {selectedAddons.length > 0 ? `${selectedAddons.length} selected` : "Choose add-ons"}
-                  <i className={`fa fa-chevron-${showAddonDropdown ? "up" : "down"}`}></i>
-                </button>
-
-                {showAddonDropdown && (
-                  <div className="addon-dropdown-menu">
-                    {addons.length ? (
-                      <div className="addon-scroll">
-                        {addons.map((addon) => {
-                          const isChecked = selectedAddons.some((a) => a.id === addon.id);
-                          return (
-                            <label key={addon.id} className="addon-item">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => handleAddonToggle(addon, e.target.checked)}
-                              />
-                              <span>{addon.name}</span>
-                              <span className="addon-price">+KES {addon.price ?? addon.additional_price ?? 0}</span>
-                            </label>
-                          );
-                        })}
+                    {showAddonDropdown && (
+                      <div className="addon-dropdown-menu">
+                        {addons.length ? (
+                          <div className="addon-scroll">
+                            {addons.map((addon) => {
+                              const isChecked = selectedAddons.some((a) => a.id === addon.id);
+                              return (
+                                <label key={addon.id} className="addon-item">
+                                  <div className="addon-check">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => handleAddonToggle(addon, e.target.checked)}
+                                    />
+                                    <span>{addon.name}</span>
+                                  </div>
+                                  <span className="addon-price">+KES {addon.price ?? addon.additional_price ?? 0}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="no-addons">No add-ons available</div>
+                        )}
                       </div>
-                    ) : (
-                      <p className="no-addons">No add-ons available</p>
                     )}
                   </div>
-                )}
+                </div>
+
+                <div className="form-group">
+                  <label>Notes</label>
+                  <textarea
+                    rows="3"
+                    className="styled-input textarea"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Allergies, preferences, etc."
+                  ></textarea>
+                </div>
               </div>
 
-              <label className="notes-label">Additional Notes</label>
-              <textarea
-                rows="3"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any special requirements..."
-              ></textarea>
-            </div>
+              {/* RIGHT COL: PAYMENT */}
+              <div className="column right-col">
+                <h4 className="section-title">3. Payment Options</h4>
+                <div className="payment-options-box">
+                  <label className={`pay-option-card ${paymentOption === "deposit" ? "active" : ""}`}>
+                    <input type="radio" name="pay" checked={paymentOption === "deposit"} onChange={() => setPaymentOption("deposit")} />
+                    <div className="option-details">
+                      <span className="option-title">Pay Deposit</span>
+                      <span className="option-price">KES {depositKES.toLocaleString()}</span>
+                    </div>
+                  </label>
 
-            <div className="payment-box">
-              <h4>Payment Options</h4>
+                  <label className={`pay-option-card ${paymentOption === "full" ? "active" : ""}`}>
+                    <input type="radio" name="pay" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} />
+                    <div className="option-details">
+                      <span className="option-title">Pay Full</span>
+                      <span className="option-price">KES {totalKES.toLocaleString()}</span>
+                    </div>
+                  </label>
 
-              <label className="pay-option">
-                <input type="radio" name="pay" checked={paymentOption === "deposit"} onChange={() => setPaymentOption("deposit")} />
-                Pay Deposit (KES {depositKES})
-              </label>
+                  <label className={`pay-option-card ${paymentOption === "custom" ? "active" : ""}`}>
+                    <input type="radio" name="pay" checked={paymentOption === "custom"} onChange={() => setPaymentOption("custom")} />
+                    <div className="option-details">
+                      <span className="option-title">Custom</span>
+                      <span className="option-sub">Min: {depositKES.toLocaleString()}</span>
+                    </div>
+                  </label>
 
-              <label className="pay-option">
-                <input type="radio" name="pay" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} />
-                Pay Full (KES {totalKES})
-              </label>
+                  {paymentOption === "custom" && (
+                    <div className="custom-amount-wrapper">
+                      <span className="currency-prefix">KES</span>
+                      <input
+                        type="number"
+                        min={depositKES}
+                        step="50"
+                        className="custom-amount-input"
+                        value={customAmount}
+                        onChange={(e) => setCustomAmount(e.target.value)}
+                        placeholder={depositKES}
+                      />
+                    </div>
+                  )}
+                </div>
 
-              <label className="pay-option custom-option">
-                <input type="radio" name="pay" checked={paymentOption === "custom"} onChange={() => setPaymentOption("custom")} />
-                Custom Amount (min KES {depositKES})
-              </label>
-
-              {paymentOption === "custom" && (
-                <input
-                  type="number"
-                  min={depositKES}
-                  step="50"
-                  className="custom-input"
-                  value={customAmount}
-                  onChange={(e) => setCustomAmount(e.target.value)}
-                />
-              )}
-
-              <div className="summary-box">
-                <div className="summary-row">
-                  <span>Total Price:</span>
-                  <strong>KES {totalPrice}</strong>
+                {/* TOTAL SUMMARY */}
+                <div className="price-breakdown">
+                  <div className="breakdown-row">
+                    <span>Service</span>
+                    <span>KES {basePrice.toLocaleString()}</span>
+                  </div>
+                  {addonsTotal > 0 && (
+                    <div className="breakdown-row">
+                      <span>Add-ons</span>
+                      <span>+ KES {addonsTotal.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="breakdown-total">
+                    <span>Total</span>
+                    <span>KES {totalPrice.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* ACTIONS: Cancel + Pay buttons (PaystackButton components) */}
-          <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={processingPayment}>
-              Cancel
-            </button>
+            {/* FOOTER */}
+            <div className="modal-footer">
+              <button type="button" className="btn btn-text" onClick={onClose} disabled={processingPayment}>
+                Cancel
+              </button>
 
-            {/* Deposit Paystack button */}
-            <div style={{ display: paymentOption === "deposit" ? "inline-block" : "none" }}>
-              <PaystackButton
-                className="btn btn-primary"
-                {...{
-                  ...depositConfig,
-                  text: processingPayment ? "Processing..." : `Pay Deposit (KES ${depositKES})`,
-                  onSuccess: depositConfig.onSuccess,
-                  onClose: depositConfig.onClose,
-                }}
-                disabled={payDisabled}
-              />
+              <div className="pay-btn-wrapper">
+                {paymentOption === "deposit" && (
+                  <PaystackButton
+                    className="btn btn-primary btn-block"
+                    {...{ ...depositConfig, text: processingPayment ? "Processing..." : `Pay Deposit (KES ${depositKES.toLocaleString()})` }}
+                    disabled={payDisabled}
+                  />
+                )}
+                {paymentOption === "full" && (
+                  <PaystackButton
+                    className="btn btn-primary btn-block"
+                    {...{ ...fullConfig, text: processingPayment ? "Processing..." : `Pay Full (KES ${totalKES.toLocaleString()})` }}
+                    disabled={payDisabled}
+                  />
+                )}
+                {paymentOption === "custom" && (
+                  <PaystackButton
+                    className="btn btn-primary btn-block"
+                    {...{ ...customConfig, text: processingPayment ? "Processing..." : `Pay KES ${computeSelectedAmountKES().toLocaleString()}` }}
+                    disabled={payDisabled}
+                  />
+                )}
+              </div>
             </div>
-
-            {/* Full Paystack button */}
-            <div style={{ display: paymentOption === "full" ? "inline-block" : "none" }}>
-              <PaystackButton
-                className="btn btn-primary"
-                {...{
-                  ...fullConfig,
-                  text: processingPayment ? "Processing..." : `Pay Full (KES ${totalKES})`,
-                  onSuccess: fullConfig.onSuccess,
-                  onClose: fullConfig.onClose,
-                }}
-                disabled={payDisabled}
-              />
-            </div>
-
-            {/* Custom Paystack button */}
-            <div style={{ display: paymentOption === "custom" ? "inline-block" : "none" }}>
-              <PaystackButton
-                className="btn btn-primary"
-                {...{
-                  ...customConfig,
-                  text: processingPayment ? "Processing..." : `Pay (KES ${computeSelectedAmountKES()})`,
-                  onSuccess: customConfig.onSuccess,
-                  onClose: customConfig.onClose,
-                }}
-                disabled={payDisabled}
-              />
-            </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
