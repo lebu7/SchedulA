@@ -1,9 +1,7 @@
-// backend/routes/appointments.js
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { db } from '../config/database.js';
 import { authenticateToken } from '../middleware/auth.js';
-// ✅ Import SMS Service
 import smsService from '../services/smsService.js';
 
 const router = express.Router();
@@ -138,7 +136,6 @@ router.get('/', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    📊 GET SMS Statistics (Provider only)
-   ✅ NEW FEATURE: SMS Monitoring
 --------------------------------------------- */
 router.get('/sms-stats', authenticateToken, async (req, res) => {
   try {
@@ -335,7 +332,9 @@ router.post(
                       // 📱 Send SMS: Confirmation to Client
                       if (fullAppointment.client_phone) {
                         await smsService.sendBookingConfirmation(
+                          // ✅ CRITICAL FIX: Explicitly passing 'id' here
                           {
+                            id: newId, 
                             appointment_date: fullAppointment.appointment_date,
                             total_price: fullAppointment.total_price,
                             amount_paid: fullAppointment.amount_paid
@@ -350,12 +349,16 @@ router.post(
                             business_name: fullAppointment.business_name
                           }
                         );
+                      } else {
+                        console.warn(`⚠️ SMS Skipped: Client (ID ${fullAppointment.client_id}) has no phone number.`);
                       }
 
                       // 📱 Send SMS: Notification to Provider
                       if (fullAppointment.provider_phone) {
                         await smsService.sendProviderNotification(
+                          // ✅ CRITICAL FIX: Explicitly passing 'id' here
                           {
+                            id: newId, 
                             appointment_date: fullAppointment.appointment_date,
                             total_price: fullAppointment.total_price,
                             amount_paid: fullAppointment.amount_paid
@@ -370,6 +373,8 @@ router.post(
                           },
                           { name: fullAppointment.service_name }
                         );
+                      } else {
+                        console.warn(`⚠️ SMS Skipped: Provider (ID ${fullAppointment.provider_id}) has no phone number.`);
                       }
 
                       console.log('✅ Appointment created successfully:', { id: newId });
@@ -483,8 +488,10 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update appointment
-   (Includes SMS Cancellation Logic)
+   ✅ Update appointment (Accept/Cancel/Reschedule)
+   Includes SMS for:
+   - Acceptance (Pending -> Scheduled)
+   - Cancellation
 --------------------------------------------- */
 router.put('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -501,55 +508,68 @@ router.put('/:id', authenticateToken, (req, res) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
-    if (
-      userType === 'provider' &&
-      ['completed', 'cancelled', 'no-show', 'rebooked'].includes(apt.status)
-    ) {
+    if (userType === 'provider' && ['completed', 'cancelled', 'no-show', 'rebooked'].includes(apt.status)) {
       return res.status(400).json({ error: 'Appointment status locked.' });
     }
 
     const updates = [];
     const params = [];
-    if (status) {
-      updates.push('status = ?');
-      params.push(status);
-    }
-    if (appointment_date) {
-      updates.push('appointment_date = ?');
-      params.push(appointment_date);
-    }
-    if (notes) {
-      updates.push('notes = ?');
-      params.push(notes);
-    }
+    if (status) { updates.push('status = ?'); params.push(status); }
+    if (appointment_date) { updates.push('appointment_date = ?'); params.push(appointment_date); }
+    if (notes) { updates.push('notes = ?'); params.push(notes); }
     if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
+    
     params.push(id, userId);
 
-    const q =
-      userType === 'client'
-        ? `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND client_id = ?`
-        : `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND provider_id = ?`;
+    const q = userType === 'client'
+      ? `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND client_id = ?`
+      : `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND provider_id = ?`;
 
     db.run(q, params, (err2) => {
       if (err2) return res.status(500).json({ error: 'Failed to update appointment' });
 
-      // 📱 Check for Cancellation to send SMS
-      if (status === 'cancelled') {
+      // 4. 🚀 SMS TRIGGER LOGIC
+      if (status === 'scheduled' || status === 'cancelled') {
         db.get(
-          `SELECT c.name, c.phone, s.name AS service_name 
+          `SELECT a.*, 
+                  c.name AS client_name, c.phone AS client_phone,
+                  s.name AS service_name,
+                  p.name AS provider_name, p.business_name
            FROM appointments a
            JOIN users c ON a.client_id = c.id
            JOIN services s ON a.service_id = s.id
+           JOIN users p ON a.provider_id = p.id
            WHERE a.id = ?`,
           [id],
           async (err3, fullApt) => {
-            if (!err3 && fullApt && fullApt.phone) {
-              await smsService.sendCancellationNotice(
-                {},
-                { name: fullApt.name, phone: fullApt.phone },
-                { name: fullApt.service_name },
-                notes // rejection reason
-              );
+            if (!err3 && fullApt) {
+              
+              if (!fullApt.client_phone) {
+                 console.warn(`⚠️ SMS Skipped: Client (ID ${fullApt.client_id}) has no phone number.`);
+                 return;
+              }
+
+              // A) Provider ACCEPTED (Pending -> Scheduled)
+              if (status === 'scheduled' && apt.status === 'pending') {
+                console.log(`✅ Sending Acceptance SMS for Appt #${id}`);
+                await smsService.sendBookingAccepted(
+                  { ...fullApt, id: id }, // ✅ CRITICAL FIX: Ensuring ID is passed
+                  { name: fullApt.client_name, phone: fullApt.client_phone },
+                  { name: fullApt.service_name },
+                  { name: fullApt.provider_name, business_name: fullApt.business_name }
+                );
+              }
+
+              // B) Cancelled
+              if (status === 'cancelled') {
+                console.log(`✅ Sending Cancellation SMS for Appt #${id}`);
+                await smsService.sendCancellationNotice(
+                  { ...fullApt, id: id }, // ✅ CRITICAL FIX: Ensuring ID is passed
+                  { name: fullApt.client_name, phone: fullApt.client_phone },
+                  { name: fullApt.service_name },
+                  notes // Reason for cancellation
+                );
+              }
             }
           }
         );
@@ -680,6 +700,7 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
             if (!err3 && fullApt && fullApt.phone) {
               await smsService.sendPaymentReceipt(
                 {
+                  id: id, 
                   amount_paid: amount_paid,
                   total_price: fullApt.total_price,
                   payment_reference: payment_reference

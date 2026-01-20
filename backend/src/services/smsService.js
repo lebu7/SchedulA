@@ -7,22 +7,20 @@ import { fileURLToPath } from 'url';
 // 🔧 INITIALIZATION & CONFIG
 // ---------------------------------------------------------
 
-// Force load .env from the backend root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const credentials = {
   apiKey: process.env.AFRICAS_TALKING_API_KEY,
-  username: process.env.AFRICAS_TALKING_USERNAME || 'sandbox', 
+  username: process.env.AFRICAS_TALKING_USERNAME || 'sandbox',
 };
 
 // Diagnostics
 if (!credentials.apiKey) {
-  console.error("❌ FATAL: Africa's Talking API Key is missing. Check your .env file.");
+  console.error("❌ FATAL: Africa's Talking API Key is missing.");
 }
 
-// Initialize Library
 const africastalking = AfricasTalking({
   apiKey: credentials.apiKey,
   username: credentials.username
@@ -46,16 +44,28 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
+// Format Date: "Mon, 21 Jan at 10:00 AM"
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-KE', { 
+        weekday: 'short', 
+        day: 'numeric', 
+        month: 'short', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+}
+
 async function logSMS(phone, message, status, details) {
   try {
     const { db } = await import('../config/database.js');
     let messageType = 'general';
-    if (message.toLowerCase().includes('confirmed')) messageType = 'confirmation';
-    else if (message.toLowerCase().includes('reminder')) messageType = 'reminder';
-    else if (message.toLowerCase().includes('payment received')) messageType = 'receipt';
-    else if (message.toLowerCase().includes('cancelled')) messageType = 'cancellation';
     
-    // Safety check: Ensure db is ready
+    if (message.includes('Confirmed') || message.includes('Received')) messageType = 'confirmation';
+    else if (message.includes('Accepted')) messageType = 'acceptance';
+    else if (message.includes('Reminder')) messageType = 'reminder';
+    else if (message.includes('CANCELLED')) messageType = 'cancellation';
+    
     if (db) {
         db.run(
         `INSERT INTO sms_logs (recipient_phone, message_type, message_content, status, details, sent_at)
@@ -64,7 +74,7 @@ async function logSMS(phone, message, status, details) {
         );
     }
   } catch (error) {
-    console.error('⚠️ Failed to log SMS (DB Error):', error.message);
+    console.error('⚠️ Failed to log SMS:', error.message);
   }
 }
 
@@ -77,32 +87,23 @@ async function sendSMS(phoneNumber, message) {
     const formattedPhone = formatPhoneNumber(phoneNumber);
     if (!formattedPhone) return { success: false, error: 'Invalid phone number' };
 
-    console.log(`📱 Sending SMS to ${formattedPhone} (User: ${credentials.username})...`);
+    console.log(`📱 Sending SMS to ${formattedPhone}...`);
+    // console.log(`   📝 Message: "${message}"`); // Uncomment to debug text content
 
     const options = {
       to: [formattedPhone],
       message: message
-      // ⚠️ 'from' parameter is intentionally OMITTED.
-      // Sandbox: Defaults to 'AFRICASTKNG'
-      // Live: Defaults to Shared Shortcode (e.g. 20414)
     };
 
     const result = await sms.send(options);
     const recipient = result.SMSMessageData.Recipients[0];
 
-    // Handle "Success", "Queued", or "Sent" as success states
     if (['Success', 'Queued', 'Sent'].includes(recipient.status)) {
       console.log('✅ SMS Sent Successfully');
       await logSMS(formattedPhone, message, 'sent', result);
-      return { success: true, data: result, messageId: recipient.messageId };
+      return { success: true, data: result };
     } else {
       console.error('❌ SMS Failed:', recipient.status);
-      
-      // Specific error help
-      if (recipient.status === 'PBUserInsufficientBalance') {
-          console.error('   👉 ACTION: Top up your Airtime wallet on the Africa\'s Talking Dashboard.');
-      }
-
       await logSMS(formattedPhone, message, 'failed', result);
       return { success: false, error: recipient.status };
     }
@@ -114,50 +115,76 @@ async function sendSMS(phoneNumber, message) {
 }
 
 // ---------------------------------------------------------
-// 📤 EXPORTS (Business Logic Preserved)
+// 📤 EXPORTS (BUSINESS LOGIC)
 // ---------------------------------------------------------
 
+// 1. Booking Request (Sent when client first books)
 export async function sendBookingConfirmation(appointment, client, service, provider) {
   if (!client.phone) return { success: false, error: 'No phone number' };
-  const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
-  const msg = `Confirmed! ${service.name} with ${provider.business_name || provider.name} on ${date}. Total: KES ${appointment.total_price}. Paid: KES ${appointment.amount_paid}.`;
+  const date = formatDate(appointment.appointment_date);
+  
+  const msg = `Booking Received! (Appt #${appointment.id}) for ${service.name} with ${provider.business_name || provider.name} on ${date}. Status: Pending Approval.`;
+  
   return await sendSMS(client.phone, msg);
 }
 
+// 2. Booking Accepted (Sent when provider clicks Accept)
+export async function sendBookingAccepted(appointment, client, service, provider) {
+    if (!client.phone) return { success: false, error: 'No phone number' };
+    const date = formatDate(appointment.appointment_date);
+
+    // ✅ FIXED: Includes Service Name
+    const msg = `Good News! Your booking for ${service.name} (Appt #${appointment.id}) with ${provider.business_name || provider.name} on ${date} is ACCEPTED.`;
+
+    return await sendSMS(client.phone, msg);
+}
+
+// 3. Reminder (Sent 24h before)
 export async function sendAppointmentReminder(appointment, client, service, provider) {
   if (!client.phone) return { success: false, error: 'No phone number' };
-  const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { timeStyle: 'short' });
-  const msg = `Reminder: Appointment tomorrow at ${date} for ${service.name} with ${provider.business_name || provider.name}.`;
+  const date = formatDate(appointment.appointment_date);
+  
+  const msg = `Reminder: Appointment tomorrow (Appt #${appointment.id}) at ${date} for ${service.name} with ${provider.business_name || provider.name}.`;
+  
   return await sendSMS(client.phone, msg);
 }
 
+// 4. Payment Receipt
 export async function sendPaymentReceipt(appointment, client, service) {
   if (!client.phone) return { success: false, error: 'No phone number' };
-  const msg = `Payment Received: KES ${appointment.amount_paid} for ${service.name}. Ref: ${appointment.payment_reference}. Thanks!`;
+  
+  const msg = `Payment Received: KES ${appointment.amount_paid} for Appt #${appointment.id} (${service.name}). Ref: ${appointment.payment_reference}. Thanks!`;
+  
   return await sendSMS(client.phone, msg);
 }
 
+// 5. Cancellation
 export async function sendCancellationNotice(appointment, client, service, reason) {
   if (!client.phone) return { success: false, error: 'No phone number' };
-  const msg = `Update: Your appointment for ${service.name} has been cancelled.${reason ? ' Reason: ' + reason : ''}`;
+  const date = formatDate(appointment.appointment_date);
+  
+  const msg = `Update: Appt #${appointment.id} for ${service.name} on ${date} has been CANCELLED.${reason ? ' Reason: ' + reason : ''}`;
+  
   return await sendSMS(client.phone, msg);
 }
 
+// 6. Provider Notification (Sent when client books)
 export async function sendProviderNotification(appointment, provider, client, service) {
   if (!provider.phone) return { success: false, error: 'No phone number' };
-  const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' });
-  const msg = `New Booking: ${client.name} for ${service.name} on ${date}. Paid: KES ${appointment.amount_paid}.`;
+  const date = formatDate(appointment.appointment_date);
+  
+  const msg = `New Booking Request (Appt #${appointment.id}): ${client.name} for ${service.name} on ${date}. Log in to Accept/Reject.`;
+  
   return await sendSMS(provider.phone, msg);
 }
 
+// Scheduled Reminders
 export async function sendScheduledReminders() {
   try {
     const { db } = await import('../config/database.js');
     const now = new Date();
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
     const windowEnd = new Date(now.getTime() + 26 * 60 * 60 * 1000).toISOString();
-
-    console.log(`🔍 Checking reminders for: ${tomorrow}`);
 
     db.all(
       `SELECT a.*, c.phone as client_phone, c.name as client_name, s.name as service_name, p.business_name, p.name as provider_name
@@ -188,10 +215,11 @@ export async function getSMSStats() {
 export default { 
     sendSMS, 
     sendBookingConfirmation, 
+    sendBookingAccepted, 
     sendAppointmentReminder, 
     sendPaymentReceipt, 
     sendCancellationNotice, 
     sendProviderNotification, 
-    sendScheduledReminders, 
+    sendScheduledReminders,
     getSMSStats 
 };
