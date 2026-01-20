@@ -104,7 +104,7 @@ db.get(
 );
 
 /* ---------------------------------------------
-   ✅ Fetch appointments (UPDATED FILTER LOGIC)
+   ✅ Fetch appointments (client & provider)
 --------------------------------------------- */
 router.get('/', authenticateToken, (req, res) => {
   const userId = req.user.userId;
@@ -144,7 +144,6 @@ router.get('/', authenticateToken, (req, res) => {
         a.status === 'scheduled' && a.appointment_date > now
     );
 
-    // ✅ LOGIC UPDATE: Past list excludes those waiting for refund
     const pastList = appointments.filter(a => 
         (a.status === 'completed' || 
          a.status === 'no-show' || 
@@ -497,7 +496,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Provider toggles
+   ✅ Provider can toggle open/closed status
 --------------------------------------------- */
 router.put('/providers/:id/closed', authenticateToken, (req, res) => {
   const providerId = req.params.id;
@@ -514,6 +513,9 @@ router.put('/providers/:id/closed', authenticateToken, (req, res) => {
   );
 });
 
+/* ---------------------------------------------
+   ✅ Provider sets global business hours
+--------------------------------------------- */
 router.put(
   '/providers/:id/hours',
   authenticateToken,
@@ -651,7 +653,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
     function performUpdate() {
         const updates = [];
         const params = [];
-        if (status) { updates.push('status = ?'); params.push(status); }
+        
+        // ✅ NEW: LOGIC TO FORCE STATUS 'PENDING' IF CLIENT RESCHEDULES
+        let effectiveStatus = status;
+        const isReschedule = appointment_date && appointment_date !== apt.appointment_date;
+
+        if (isReschedule && userType === 'client') {
+            effectiveStatus = 'pending';
+        }
+
+        if (effectiveStatus) { updates.push('status = ?'); params.push(effectiveStatus); }
         if (appointment_date) { updates.push('appointment_date = ?'); params.push(appointment_date); }
         if (notes) { updates.push('notes = ?'); params.push(notes); }
 
@@ -713,7 +724,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
                           clientObj, 
                           { name: fullApt.service_name }, 
                           providerObj, 
-                          apt.appointment_date // Old date
+                          apt.appointment_date, // Old date
+                          effectiveStatus // Pass pending status if applicable
                       );
                   }
                 }
@@ -757,6 +769,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Update payment (Initial or partial)
+   FIXED: Removed payment_amount
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -801,6 +814,7 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Pay remaining balance
+   (Includes SMS Receipt)
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -862,7 +876,7 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider request balance
+   ✅ Provider can prompt client for remaining balance
 --------------------------------------------- */
 router.post('/:id/request-balance', authenticateToken, (req, res) => {
   const { id } = req.params;

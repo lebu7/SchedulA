@@ -12,6 +12,7 @@ const credentials = {
   username: process.env.AFRICAS_TALKING_USERNAME || 'sandbox',
 };
 
+// Diagnostics
 if (!credentials.apiKey) {
   console.error("❌ FATAL: Africa's Talking API Key is missing.");
 }
@@ -35,11 +36,14 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
+// ✅ CHECK PREFERENCES HELPER
 function shouldSend(user, type) {
     if (!user || !user.phone) return false;
     
+    // Critical messages are ALWAYS sent
     if (type === 'confirmation' || type === 'refund' || type === 'refund_request' || type === 'cancellation' || type === 'reschedule') return true;
 
+    // Default to true if no preferences set
     if (!user.notification_preferences) return true;
 
     let prefs = {};
@@ -62,7 +66,7 @@ async function logSMS(phone, message, status, details) {
     else if (message.includes('Reminder')) messageType = 'reminder';
     else if (message.includes('CANCELLED')) messageType = 'cancellation';
     else if (message.includes('REFUND')) messageType = 'refund'; 
-    else if (message.includes('RESCHEDULED')) messageType = 'notification';
+    else if (message.includes('RESCHEDULE')) messageType = 'notification';
     
     if (db) {
         db.run(
@@ -186,21 +190,29 @@ export async function sendRefundRequest(appointment, provider, client, amount) {
   return await sendSMS(provider.phone, msg);
 }
 
-// ✅ NEW: Send Reschedule Notification
-export async function sendRescheduleNotification(appointment, client, service, provider, oldDateISO) {
+// ✅ UPDATED: Send Reschedule Notification (Handles Pending Status)
+export async function sendRescheduleNotification(appointment, client, service, provider, oldDateISO, status) {
     if (!shouldSend(client, 'reschedule')) return;
 
     const newDate = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
     const oldDate = new Date(oldDateISO).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
 
-    const msg = `📅 RESCHEDULED: Your booking (Appt #${appointment.id}) for ${service.name} has been moved from ${oldDate} to ${newDate}.`;
+    let msg = `📅 RESCHEDULED: Your booking (Appt #${appointment.id}) for ${service.name} has been moved from ${oldDate} to ${newDate}.`;
+    
+    // Customize message if it's back to pending
+    if (status === 'pending') {
+        msg = `📅 RESCHEDULE REQUEST: You moved Appt #${appointment.id} to ${newDate}. This is waiting provider approval.`;
+    }
     
     // Send to Client
     await sendSMS(client.phone, msg);
 
-    // Send to Provider (Simple alert)
+    // Send to Provider
     if (provider && provider.phone) {
-        const provMsg = `📅 APPT RESCHEDULED: ${client.name} moved Appt #${appointment.id} to ${newDate}.`;
+        let provMsg = `📅 APPT RESCHEDULED: ${client.name} moved Appt #${appointment.id} to ${newDate}.`;
+        if (status === 'pending') {
+            provMsg = `📅 RESCHEDULE REQUEST: ${client.name} wants to move Appt #${appointment.id} to ${newDate}. Log in to Accept/Reject.`;
+        }
         await sendSMS(provider.phone, provMsg);
     }
 }
