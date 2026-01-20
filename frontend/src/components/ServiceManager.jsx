@@ -6,13 +6,17 @@ function ServiceManager({ user }) {
   const [services, setServices] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState(null);
+  
+  // ✅ ADDED: capacity field initialized to "1"
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     category: "",
     duration: "",
     price: "",
+    capacity: "1", 
   });
+  
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -38,7 +42,6 @@ function ServiceManager({ user }) {
       );
       setServices(myServices);
       
-      // Optional: Check if ALL services are closed on load to sync businessClosed state
       const allClosed = myServices.length > 0 && myServices.every(s => s.is_closed === 1);
       setBusinessClosed(allClosed);
 
@@ -71,6 +74,11 @@ function ServiceManager({ user }) {
       newErrors.duration = "Duration must be at least 15 minutes";
     if (!formData.price || formData.price < 0)
       newErrors.price = "Price must be a positive number";
+    
+    // ✅ ADDED: Validation for capacity
+    if (!formData.capacity || parseInt(formData.capacity) < 1)
+      newErrors.capacity = "Capacity must be at least 1";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -85,6 +93,7 @@ function ServiceManager({ user }) {
         ...formData,
         duration: parseInt(formData.duration),
         price: parseFloat(formData.price),
+        capacity: parseInt(formData.capacity), // ✅ ADDED: Send capacity to API
       };
 
       const res = editingService
@@ -133,6 +142,7 @@ function ServiceManager({ user }) {
       category: service.category,
       duration: service.duration.toString(),
       price: service.price ? service.price.toString() : "",
+      capacity: service.capacity ? service.capacity.toString() : "1", // ✅ ADDED: Load existing capacity
     });
     setErrors({});
     setShowForm(true);
@@ -156,9 +166,7 @@ function ServiceManager({ user }) {
     }
   };
 
-  // ✅ FIXED: Prevent opening service if Business is Closed
   const handleToggleService = async (service) => {
-    // If we are trying to OPEN (currently closed) AND Business is Closed -> BLOCK IT
     if (service.is_closed && businessClosed) {
       setGlobalError("❌ Cannot open service while Business is Closed. Please 'Open Business' first.");
       setTimeout(() => setGlobalError(""), 3000);
@@ -333,6 +341,7 @@ function ServiceManager({ user }) {
       category: "",
       duration: "",
       price: "",
+      capacity: "1", // ✅ ADDED: Reset capacity
     });
     setErrors({});
   };
@@ -437,6 +446,21 @@ function ServiceManager({ user }) {
                       step="50"
                     />
                   </div>
+
+                  {/* ✅ ADDED: Capacity Input Field */}
+                  <div className="form-group">
+                    <label>Capacity (Staff/Slots) *</label>
+                    <input
+                      type="number"
+                      name="capacity"
+                      value={formData.capacity}
+                      onChange={handleInputChange}
+                      placeholder="1"
+                      min="1"
+                      title="Number of people who can perform this service simultaneously"
+                    />
+                    <small style={{fontSize: '0.8em', color: '#666'}}>Max simultaneous bookings</small>
+                  </div>
                 </div>
 
                 <div className="form-actions">
@@ -477,10 +501,10 @@ function ServiceManager({ user }) {
                 <p className="service-category">{service.category}</p>
                 <p className="service-description">{service.description}</p>
                 <div className="service-meta">
-                  <span>Duration: {service.duration} mins</span>
-                  <span>
-                    Price: {service.price ? `KES ${service.price}` : "Free"}
-                  </span>
+                  <span>⏱ {service.duration} mins</span>
+                  <span>🏷 KES {service.price ? service.price : "Free"}</span>
+                  {/* ✅ ADDED: Display Capacity */}
+                  <span>👥 Capacity: {service.capacity || 1}</span>
                 </div>
               </div>
 
@@ -564,13 +588,12 @@ function ServiceManager({ user }) {
                   {deletingId === service.id ? "Deleting..." : "Delete"}
                 </button>
                 
-                {/* ✅ FIXED: Button behavior when Business is Closed */}
                 <button
                   className={`btn ${
                     service.is_closed ? "btn-success" : "btn-primary"
                   }`}
                   onClick={() => handleToggleService(service)}
-                  disabled={businessClosed && service.is_closed} // Disable "Open" if Business is Closed
+                  disabled={businessClosed && service.is_closed}
                   style={{
                     opacity: (businessClosed && service.is_closed) ? 0.6 : 1,
                     cursor: (businessClosed && service.is_closed) ? 'not-allowed' : 'pointer'

@@ -115,20 +115,22 @@ router.post(
     body("category").notEmpty(),
     body("duration").isInt({ min: 1 }),
     body("price").optional().isFloat({ min: 0 }),
+    body("capacity").optional().isInt({ min: 1 }), // ✅ Added validation
   ],
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty())
       return res.status(400).json({ errors: errors.array() });
 
-    const { name, description, category, duration, price } = req.body;
+    const { name, description, category, duration, price, capacity } = req.body;
     const provider_id = req.user.userId;
+    const slots = capacity || 1; // Default to 1
 
     db.run(
       `INSERT INTO services (
-        provider_id, name, description, category, duration, price, slot_interval
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [provider_id, name, description, category, duration, price, duration],
+        provider_id, name, description, category, duration, price, slot_interval, capacity
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [provider_id, name, description, category, duration, price, duration, slots],
       function (err) {
         if (err) {
           console.error("❌ Error inserting service:", err);
@@ -154,7 +156,6 @@ router.post(
               return res.status(500).json({ error: "Failed to fetch service" });
             }
 
-            // ✅ Ensure ID always included and numeric
             res.status(201).json({
               message: "Service created successfully",
               service: { ...service, id: newServiceId },
@@ -176,16 +177,18 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
   const params = [];
 
   for (const [key, val] of Object.entries(req.body)) {
-    if (val !== undefined) {
+    // Only allow specific fields
+    if (['name', 'description', 'category', 'duration', 'price', 'capacity'].includes(key) && val !== undefined) {
       updates.push(`${key} = ?`);
       params.push(val);
     }
   }
+  
   // 🔄 Automatically sync slot_interval with duration if provided
-    if (req.body.duration !== undefined) {
-      updates.push(`slot_interval = ?`);
-      params.push(req.body.duration);
-    }
+  if (req.body.duration !== undefined) {
+    updates.push(`slot_interval = ?`);
+    params.push(req.body.duration);
+  }
 
   if (!updates.length)
     return res.status(400).json({ error: "No fields to update" });
@@ -199,7 +202,11 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
         return res.status(500).json({ error: "Failed to update service" });
       if (this.changes === 0)
         return res.status(404).json({ error: "Service not found" });
-      res.json({ message: "Service updated successfully" });
+      
+      // Return updated object
+      db.get('SELECT * FROM services WHERE id = ?', [serviceId], (e, row) => {
+          res.json({ message: "Service updated successfully", service: row });
+      });
     }
   );
 });
@@ -216,12 +223,10 @@ router.patch(
     const providerId = req.user.userId;
     const { is_closed } = req.body;
 
-    // Validate ID
     if (!serviceId || isNaN(serviceId)) {
       return res.status(400).json({ error: "Invalid service ID" });
     }
 
-    // Validate is_closed field
     const closedValue =
       is_closed === true || is_closed === 1 || is_closed === "1" ? 1 : 0;
 
@@ -252,8 +257,6 @@ router.patch(
 
 /* ---------------------------------------------
    ✅ PATCH toggle all services for a provider
-   - Close: closes all open services
-   - Open: only reopens those closed by business
 --------------------------------------------- */
 router.patch(
   "/provider/:providerId/closure",
@@ -269,7 +272,6 @@ router.patch(
     let query, params;
 
     if (is_closed) {
-      // ✅ Close business: mark open services as closed & tag them
       query = `
         UPDATE services
         SET is_closed = 1, closed_by_business = 1
@@ -277,7 +279,6 @@ router.patch(
       `;
       params = [providerId];
     } else {
-      // ✅ Reopen business: only open services that were closed by business
       query = `
         UPDATE services
         SET is_closed = 0, closed_by_business = 0
@@ -331,10 +332,9 @@ router.delete(
 );
 
 /* =====================================================
-   🧩 SUB-SERVICES (Add-ons under each main service)
+   🧩 SUB-SERVICES
 ===================================================== */
 
-/* ✅ Create sub-service */
 router.post(
   "/:id/sub-services",
   authenticateToken,
@@ -383,7 +383,6 @@ router.post(
   }
 );
 
-/* ✅ Get sub-services for one service */
 router.get("/:id/sub-services", (req, res) => {
   const serviceId = req.params.id;
   db.all(
@@ -397,7 +396,6 @@ router.get("/:id/sub-services", (req, res) => {
   );
 });
 
-/* ✅ Delete a sub-service */
 router.delete(
   "/:serviceId/sub-services/:subId",
   authenticateToken,
@@ -418,7 +416,6 @@ router.delete(
   }
 );
 
-/* ✅ Update a sub-service */
 router.put(
   "/:serviceId/sub-services/:subId",
   authenticateToken,

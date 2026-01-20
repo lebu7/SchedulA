@@ -49,7 +49,7 @@ function initializeDatabase() {
   });
 
   /* ---------------------------------------------
-     💈 SERVICES TABLE
+     💈 SERVICES TABLE (with capacity)
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS services (
@@ -60,10 +60,12 @@ function initializeDatabase() {
       category TEXT NOT NULL,
       duration INTEGER NOT NULL,
       price DECIMAL(10,2),
+      capacity INTEGER DEFAULT 1, -- ✅ NEW: Slots per time
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
       slot_interval INTEGER DEFAULT 30,
       is_closed INTEGER DEFAULT 0,
+      closed_by_business INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (provider_id) REFERENCES users (id)
     )
@@ -125,13 +127,15 @@ function initializeDatabase() {
   // users
   tryAddColumn('users', 'opening_time', "TEXT DEFAULT '08:00'");
   tryAddColumn('users', 'closing_time', "TEXT DEFAULT '18:00'");
-  tryAddColumn('users', 'notification_preferences', "TEXT"); // ✅ Added Migration
+  tryAddColumn('users', 'notification_preferences', "TEXT");
 
   // services
   tryAddColumn('services', 'opening_time', "TEXT DEFAULT '08:00'");
   tryAddColumn('services', 'closing_time', "TEXT DEFAULT '18:00'");
   tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
   tryAddColumn('services', 'is_closed', "INTEGER DEFAULT 0");
+  tryAddColumn('services', 'closed_by_business', "INTEGER DEFAULT 0");
+  tryAddColumn('services', 'capacity', "INTEGER DEFAULT 1"); // ✅ Added Migration
 
   // appointments
   tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0");

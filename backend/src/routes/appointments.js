@@ -176,7 +176,7 @@ router.get('/sms-stats', authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Check provider availability (Updated for Overlap)
+   ✅ Check provider availability (Frontend uses this for grid)
 --------------------------------------------- */
 router.get('/providers/:id/availability', (req, res) => {
   const providerId = req.params.id;
@@ -199,7 +199,7 @@ router.get('/providers/:id/availability', (req, res) => {
         (err2, closedDay) => {
           if (err2) return res.status(500).json({ error: 'Database error' });
 
-          // 3. 🛡️ NEW: Fetch Booked Slots for this Date
+          // 3. Fetch Booked Slots
           // We need start time AND duration to calculate the full booked range
           db.all(
             `SELECT a.appointment_date, s.duration 
@@ -214,7 +214,7 @@ router.get('/providers/:id/availability', (req, res) => {
 
               const bookedSlots = bookedRows.map(row => {
                 const start = new Date(row.appointment_date);
-                const end = new Date(start.getTime() + row.duration * 60000); // Add duration in ms
+                const end = new Date(start.getTime() + row.duration * 60000); 
                 
                 return {
                   start: start.toTimeString().slice(0, 5), // "10:00"
@@ -229,7 +229,7 @@ router.get('/providers/:id/availability', (req, res) => {
                 closed_reason: closedDay?.reason || null,
                 opening_time: provider.opening_time || '08:00',
                 closing_time: provider.closing_time || '18:00',
-                booked_slots: bookedSlots // ✅ Frontend will use this to grey out buttons
+                booked_slots: bookedSlots // Frontend logic calculates remaining capacity
               });
             }
           );
@@ -240,7 +240,7 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (With Overlap Protection)
+   ✅ Create appointment (With Capacity Check)
 --------------------------------------------- */
 router.post(
   '/',
@@ -276,7 +276,7 @@ router.post(
     if (appointmentDate <= new Date())
       return res.status(400).json({ error: 'Appointment date must be in the future' });
 
-    // 1. Get Service Details (needed for duration)
+    // 1. Get Service Details (needed for duration & capacity)
     db.get('SELECT * FROM services WHERE id = ?', [service_id], (err, service) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!service) return res.status(404).json({ error: 'Service not found' });
@@ -289,7 +289,7 @@ router.post(
         (err2, closedDay) => {
           if (closedDay)
             return res.status(400).json({
-              error: `Provider is closed on ${day}. Please select another date.`,
+              error: `Provider is closed on ${day}.`,
             });
 
           // 3. Check Provider Business Hours
@@ -320,28 +320,32 @@ router.post(
                 });
               }
 
-              // 4. 🛡️ CHECK FOR OVERLAPPING APPOINTMENTS
+              // 4. 🛡️ CHECK CAPACITY (Count Overlaps)
               const newStartISO = appointmentDate.toISOString();
               // Calculate End Time based on duration
               const newEndISO = new Date(appointmentDate.getTime() + service.duration * 60000).toISOString();
 
-              db.get(
+              // Fetch ALL overlapping appointments for this provider
+              db.all(
                 `SELECT a.id 
                  FROM appointments a
                  JOIN services s ON a.service_id = s.id
                  WHERE a.provider_id = ? 
                  AND a.status IN ('pending', 'scheduled', 'paid') 
                  AND (
-                    a.appointment_date < ? AND 
-                    datetime(a.appointment_date, '+' || s.duration || ' minutes') > ?
+                    -- Check overlaps
+                    (a.appointment_date < ? AND datetime(a.appointment_date, '+' || s.duration || ' minutes') > ?)
                  )`,
                 [service.provider_id, newEndISO, newStartISO],
-                (errOverlap, conflict) => {
+                (errOverlap, existingBookings) => {
                     if (errOverlap) return res.status(500).json({ error: 'Error checking availability' });
                     
-                    if (conflict) {
+                    // ✅ CRITICAL UPDATE: Count overlaps against Capacity
+                    const maxCapacity = service.capacity || 1; // Default to 1 if not set
+                    
+                    if (existingBookings.length >= maxCapacity) {
                         return res.status(400).json({ 
-                            error: 'This time slot is already booked. Please choose another time.' 
+                            error: `This time slot is fully booked (Max ${maxCapacity} people). Please choose another time.` 
                         });
                     }
 
@@ -417,7 +421,7 @@ router.post(
                             const providerObj = { 
                                 name: fullApt.provider_name, 
                                 business_name: fullApt.business_name, 
-                                phone: fullApt.provider_phone,
+                                phone: fullApt.provider_phone, 
                                 notification_preferences: fullApt.provider_prefs
                             };
 
@@ -519,9 +523,6 @@ router.put(
 
 /* ---------------------------------------------
    ✅ Update appointment (Accept/Cancel/Reschedule)
-   Includes SMS for:
-   - Acceptance (Pending -> Scheduled)
-   - Cancellation
 --------------------------------------------- */
 router.put('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -604,7 +605,7 @@ router.put('/:id', authenticateToken, (req, res) => {
               if (status === 'scheduled' && apt.status === 'pending') {
                 console.log(`✅ Sending Acceptance SMS for Appt #${id}`);
                 await smsService.sendBookingAccepted(
-                  { ...fullApt, id: id },
+                  { ...fullApt, id: id }, // ✅ CRITICAL FIX: Ensuring ID is passed
                   clientObj,
                   { name: fullApt.service_name },
                   providerObj
@@ -615,7 +616,7 @@ router.put('/:id', authenticateToken, (req, res) => {
               if (status === 'cancelled') {
                 console.log(`✅ Sending Cancellation SMS for Appt #${id}`);
                 await smsService.sendCancellationNotice(
-                  { ...fullApt, id: id },
+                  { ...fullApt, id: id }, // ✅ CRITICAL FIX: Ensuring ID is passed
                   clientObj,
                   { name: fullApt.service_name },
                   notes // Reason for cancellation
@@ -672,6 +673,7 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
   const paid = Number(amount_paid || 0);
 
+  // Get total_price (used to decide paid or deposit-paid)
   db.get(
     `SELECT total_price FROM appointments WHERE id = ?`,
     [id],
@@ -707,6 +709,7 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Pay remaining balance
+   (Includes SMS Receipt)
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -749,16 +752,12 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
             if (!err3 && fullApt && fullApt.phone) {
               await smsService.sendPaymentReceipt(
                 {
-                  id: id, // Pass ID
+                  id: id, 
                   amount_paid: amount_paid,
                   total_price: fullApt.total_price,
                   payment_reference: payment_reference
                 },
-                { 
-                    name: fullApt.name, 
-                    phone: fullApt.phone,
-                    notification_preferences: fullApt.notification_preferences 
-                },
+                { name: fullApt.name, phone: fullApt.phone, notification_preferences: fullApt.notification_preferences },
                 { name: fullApt.service_name }
               );
             }
