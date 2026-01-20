@@ -176,8 +176,71 @@ router.get('/sms-stats', authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment
-   (Includes SMS Confirmation & Notification)
+   ✅ Check provider availability (Updated for Overlap)
+--------------------------------------------- */
+router.get('/providers/:id/availability', (req, res) => {
+  const providerId = req.params.id;
+  const { date } = req.query; // YYYY-MM-DD
+
+  if (!date) return res.status(400).json({ error: 'Date required' });
+
+  // 1. Get Business Hours
+  db.get(
+    `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
+    [providerId],
+    (err, provider) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!provider) return res.status(404).json({ error: 'Provider not found' });
+
+      // 2. Check if Day is Closed
+      db.get(
+        `SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?`,
+        [providerId, date],
+        (err2, closedDay) => {
+          if (err2) return res.status(500).json({ error: 'Database error' });
+
+          // 3. 🛡️ NEW: Fetch Booked Slots for this Date
+          // We need start time AND duration to calculate the full booked range
+          db.all(
+            `SELECT a.appointment_date, s.duration 
+             FROM appointments a
+             JOIN services s ON a.service_id = s.id
+             WHERE a.provider_id = ? 
+             AND date(a.appointment_date) = ?
+             AND a.status IN ('pending', 'scheduled', 'paid')`, // Ignore cancelled
+            [providerId, date],
+            (err3, bookedRows) => {
+              if (err3) return res.status(500).json({ error: 'Failed to fetch booked slots' });
+
+              const bookedSlots = bookedRows.map(row => {
+                const start = new Date(row.appointment_date);
+                const end = new Date(start.getTime() + row.duration * 60000); // Add duration in ms
+                
+                return {
+                  start: start.toTimeString().slice(0, 5), // "10:00"
+                  end: end.toTimeString().slice(0, 5)      // "11:00"
+                };
+              });
+
+              res.json({
+                provider_id: providerId,
+                date,
+                is_closed: !!closedDay,
+                closed_reason: closedDay?.reason || null,
+                opening_time: provider.opening_time || '08:00',
+                closing_time: provider.closing_time || '18:00',
+                booked_slots: bookedSlots // ✅ Frontend will use this to grey out buttons
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+/* ---------------------------------------------
+   ✅ Create appointment (With Overlap Protection)
 --------------------------------------------- */
 router.post(
   '/',
@@ -213,10 +276,12 @@ router.post(
     if (appointmentDate <= new Date())
       return res.status(400).json({ error: 'Appointment date must be in the future' });
 
+    // 1. Get Service Details (needed for duration)
     db.get('SELECT * FROM services WHERE id = ?', [service_id], (err, service) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!service) return res.status(404).json({ error: 'Service not found' });
 
+      // 2. Check Provider Closed Days
       const day = appointmentDate.toISOString().split('T')[0];
       db.get(
         'SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?',
@@ -227,7 +292,7 @@ router.post(
               error: `Provider is closed on ${day}. Please select another date.`,
             });
 
-          // Check provider hours
+          // 3. Check Provider Business Hours
           db.get(
             `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
             [service.provider_id],
@@ -238,157 +303,158 @@ router.post(
               const open = provider?.opening_time || '08:00';
               const close = provider?.closing_time || '18:00';
 
+              // Convert times to minutes for easier comparison
               const nairobiTime = new Date(
                 appointmentDate.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' })
               );
-
-              const bookingHour = nairobiTime.getHours();
-              const bookingMinute = nairobiTime.getMinutes();
-              const bookingTotalMinutes = bookingHour * 60 + bookingMinute;
-
+              const bookingMinutes = nairobiTime.getHours() * 60 + nairobiTime.getMinutes();
+              
               const [openH, openM] = open.split(':').map(Number);
               const [closeH, closeM] = close.split(':').map(Number);
-              const openMinutes = openH * 60 + openM;
-              const closeMinutes = closeH * 60 + closeM;
+              const openTotal = openH * 60 + openM;
+              const closeTotal = closeH * 60 + closeM;
 
-              if (bookingTotalMinutes < openMinutes || bookingTotalMinutes >= closeMinutes) {
+              if (bookingMinutes < openTotal || bookingMinutes >= closeTotal) {
                 return res.status(400).json({
                   error: `Bookings are only allowed between ${open} and ${close}.`,
                 });
               }
 
-              const status = 'pending';
-              let addons_total = 0;
-              if (Array.isArray(addons) && addons.length > 0) {
-                addons_total = addons.reduce(
-                  (sum, addon) => sum + Number(addon.price ?? addon.price ?? 0),
-                  0
-                );
-              }
+              // 4. 🛡️ CHECK FOR OVERLAPPING APPOINTMENTS
+              const newStartISO = appointmentDate.toISOString();
+              // Calculate End Time based on duration
+              const newEndISO = new Date(appointmentDate.getTime() + service.duration * 60000).toISOString();
 
-              const total_price = Number(service.price || 0) + addons_total;
-              const deposit_amount = Math.round(total_price * 0.3);
-              const paymentAmt = Number(payment_amount || 0);
-
-              let payment_status = 'unpaid';
-              if (paymentAmt >= total_price) payment_status = 'paid';
-              else if (paymentAmt > 0 && paymentAmt < total_price) payment_status = 'deposit-paid';
-
-              db.run(
-                `INSERT INTO appointments (
-                  client_id, provider_id, service_id, appointment_date, notes, status,
-                  payment_reference, payment_amount, payment_status,
-                  total_price, deposit_amount, addons_total, addons, amount_paid
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                  client_id,
-                  service.provider_id,
-                  service_id,
-                  appointment_date,
-                  notes || '',
-                  status,
-                  payment_reference || null,
-                  paymentAmt || 0,
-                  payment_status,
-                  total_price,
-                  deposit_amount,
-                  addons_total,
-                  JSON.stringify(Array.isArray(addons) ? addons : []),
-                  paymentAmt || 0,
-                ],
-                function (err4) {
-                  if (err4) {
-                    console.error('❌ SQL Insert Error:', err4.message);
-                    return res
-                      .status(500)
-                      .json({ error: 'Failed to create appointment', details: err4.message });
-                  }
-
-                  const newId = this.lastID;
-
-                  if (rebook_from) {
-                    db.run(
-                      `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
-                      [rebook_from, client_id],
-                      (e) => e && console.error('Failed to mark rebooked:', e)
-                    );
-                  }
-
-                  // ✅ Updated Fetch: Get Client & Provider phones for SMS
-                  db.get(
-                    `SELECT a.*, 
-                            c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
-                            s.name AS service_name,
-                            p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
-                     FROM appointments a
-                     JOIN users c ON a.client_id = c.id
-                     JOIN services s ON a.service_id = s.id
-                     JOIN users p ON a.provider_id = p.id
-                     WHERE a.id = ?`,
-                    [newId],
-                    async (e, fullApt) => {
-                      if (e) {
-                        console.error('❌ Fetch after insert failed:', e);
-                        return res.status(500).json({ error: 'Appointment created but fetch failed' });
-                      }
-
-                      const clientObj = { 
-                          name: fullApt.client_name, 
-                          phone: fullApt.client_phone, 
-                          notification_preferences: fullApt.client_prefs 
-                      };
-                      const providerObj = { 
-                          name: fullApt.provider_name, 
-                          business_name: fullApt.business_name, 
-                          phone: fullApt.provider_phone,
-                          notification_preferences: fullApt.provider_prefs
-                      };
-
-                      // 📱 Send SMS: Confirmation to Client
-                      if (fullApt.client_phone) {
-                        await smsService.sendBookingConfirmation(
-                          // ✅ CRITICAL FIX: Explicitly passing 'id' here
-                          {
-                            id: newId, 
-                            appointment_date: fullApt.appointment_date,
-                            total_price: fullApt.total_price,
-                            amount_paid: fullApt.amount_paid
-                          },
-                          clientObj,
-                          { name: fullApt.service_name },
-                          providerObj
-                        );
-                      } else {
-                        console.warn(`⚠️ SMS Skipped: Client (ID ${fullApt.client_id}) has no phone number.`);
-                      }
-
-                      // 📱 Send SMS: Notification to Provider
-                      if (fullApt.provider_phone) {
-                        await smsService.sendProviderNotification(
-                          // ✅ CRITICAL FIX: Explicitly passing 'id' here
-                          {
-                            id: newId, 
-                            appointment_date: fullApt.appointment_date,
-                            total_price: fullApt.total_price,
-                            amount_paid: fullApt.amount_paid
-                          },
-                          providerObj,
-                          clientObj,
-                          { name: fullApt.service_name }
-                        );
-                      } else {
-                        console.warn(`⚠️ SMS Skipped: Provider (ID ${fullApt.provider_id}) has no phone number.`);
-                      }
-
-                      console.log('✅ Appointment created successfully:', { id: newId });
-
-                      res.status(201).json({
-                        message: 'Appointment booked successfully (pending provider confirmation)',
-                        appointment: fullApt,
-                      });
+              db.get(
+                `SELECT a.id 
+                 FROM appointments a
+                 JOIN services s ON a.service_id = s.id
+                 WHERE a.provider_id = ? 
+                 AND a.status IN ('pending', 'scheduled', 'paid') 
+                 AND (
+                    a.appointment_date < ? AND 
+                    datetime(a.appointment_date, '+' || s.duration || ' minutes') > ?
+                 )`,
+                [service.provider_id, newEndISO, newStartISO],
+                (errOverlap, conflict) => {
+                    if (errOverlap) return res.status(500).json({ error: 'Error checking availability' });
+                    
+                    if (conflict) {
+                        return res.status(400).json({ 
+                            error: 'This time slot is already booked. Please choose another time.' 
+                        });
                     }
-                  );
+
+                    // 5. Proceed to Create Appointment
+                    const status = 'pending';
+                    const total_price = Number(service.price || 0);
+                    const deposit_amount = Math.round(total_price * 0.3);
+                    const paymentAmt = Number(payment_amount || 0);
+                    let payment_status = paymentAmt >= total_price ? 'paid' : 'deposit-paid';
+
+                    db.run(
+                        `INSERT INTO appointments (
+                        client_id, provider_id, service_id, appointment_date, notes, status,
+                        payment_reference, payment_amount, payment_status,
+                        total_price, deposit_amount, addons_total, addons, amount_paid
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [
+                        client_id,
+                        service.provider_id,
+                        service_id,
+                        appointment_date,
+                        notes || '',
+                        status,
+                        payment_reference || null,
+                        paymentAmt || 0,
+                        payment_status,
+                        total_price,
+                        deposit_amount,
+                        0, // addons_total placeholder
+                        JSON.stringify([]), // addons placeholder
+                        paymentAmt || 0,
+                        ],
+                        function (err4) {
+                        if (err4) {
+                            console.error('❌ SQL Insert Error:', err4.message);
+                            return res.status(500).json({ error: 'Failed to create appointment' });
+                        }
+
+                        const newId = this.lastID;
+
+                        if (rebook_from) {
+                            db.run(
+                            `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
+                            [rebook_from, client_id],
+                            (e) => e && console.error('Failed to mark rebooked:', e)
+                            );
+                        }
+
+                        // ✅ Fetch & Send SMS Notifications
+                        db.get(
+                            `SELECT a.*, 
+                                    c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
+                                    s.name AS service_name,
+                                    p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
+                            FROM appointments a
+                            JOIN users c ON a.client_id = c.id
+                            JOIN services s ON a.service_id = s.id
+                            JOIN users p ON a.provider_id = p.id
+                            WHERE a.id = ?`,
+                            [newId],
+                            async (e, fullApt) => {
+                            if (e) {
+                                console.error('❌ Fetch after insert failed:', e);
+                                return;
+                            }
+
+                            const clientObj = { 
+                                name: fullApt.client_name, 
+                                phone: fullApt.client_phone, 
+                                notification_preferences: fullApt.client_prefs 
+                            };
+                            const providerObj = { 
+                                name: fullApt.provider_name, 
+                                business_name: fullApt.business_name, 
+                                phone: fullApt.provider_phone,
+                                notification_preferences: fullApt.provider_prefs
+                            };
+
+                            // SMS to Client
+                            await smsService.sendBookingConfirmation(
+                                {
+                                    id: newId, 
+                                    appointment_date: fullApt.appointment_date,
+                                    total_price: fullApt.total_price,
+                                    amount_paid: fullApt.amount_paid
+                                },
+                                clientObj,
+                                { name: fullApt.service_name },
+                                providerObj
+                            );
+
+                            // SMS to Provider
+                            await smsService.sendProviderNotification(
+                                {
+                                    id: newId, 
+                                    appointment_date: fullApt.appointment_date,
+                                    total_price: fullApt.total_price,
+                                    amount_paid: fullApt.amount_paid
+                                },
+                                providerObj,
+                                clientObj,
+                                { name: fullApt.service_name }
+                            );
+                            }
+                        );
+
+                        res.status(201).json({
+                            message: 'Appointment booked successfully (pending provider confirmation)',
+                            appointmentId: newId,
+                        });
+                        }
+                    );
                 }
               );
             }
@@ -452,46 +518,6 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ Check provider availability
---------------------------------------------- */
-router.get('/providers/:id/availability', (req, res) => {
-  const providerId = req.params.id;
-  const { date } = req.query;
-  if (!date)
-    return res.status(400).json({ error: 'Date query parameter is required (YYYY-MM-DD)' });
-
-  db.get(
-    `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
-    [providerId],
-    (err, provider) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      if (!provider) return res.status(404).json({ error: 'Provider not found' });
-
-      const opening_time = provider.opening_time || '08:00';
-      const closing_time = provider.closing_time || '18:00';
-
-      db.get(
-        `SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?`,
-        [providerId, date],
-        (err2, closedDay) => {
-          if (err2) return res.status(500).json({ error: 'Database error' });
-
-          const is_closed = !!closedDay;
-          res.json({
-            provider_id: providerId,
-            date,
-            is_closed,
-            closed_reason: closedDay?.reason || null,
-            opening_time,
-            closing_time,
-          });
-        }
-      );
-    }
-  );
-});
-
-/* ---------------------------------------------
    ✅ Update appointment (Accept/Cancel/Reschedule)
    Includes SMS for:
    - Acceptance (Pending -> Scheduled)
@@ -503,7 +529,6 @@ router.put('/:id', authenticateToken, (req, res) => {
   const userType = req.user.user_type;
   const { status, appointment_date, notes } = req.body;
 
-  // 1. Check if appointment exists and user has permission
   const accessQuery =
     userType === 'client'
       ? 'SELECT * FROM appointments WHERE id = ? AND client_id = ?'
@@ -513,7 +538,6 @@ router.put('/:id', authenticateToken, (req, res) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
-    // Lock completed/cancelled appointments for providers
     if (
       userType === 'provider' &&
       ['completed', 'cancelled', 'no-show', 'rebooked'].includes(apt.status)
@@ -521,7 +545,6 @@ router.put('/:id', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Appointment status locked.' });
     }
 
-    // 2. Prepare SQL Update
     const updates = [];
     const params = [];
     if (status) {
@@ -546,15 +569,11 @@ router.put('/:id', authenticateToken, (req, res) => {
         ? `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND client_id = ?`
         : `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND provider_id = ?`;
 
-    // 3. Execute Update
     db.run(q, params, (err2) => {
       if (err2) return res.status(500).json({ error: 'Failed to update appointment' });
 
       // 4. 🚀 SMS TRIGGER LOGIC
-      // We check if the status changed to 'scheduled' (Accepted) or 'cancelled'
       if (status === 'scheduled' || status === 'cancelled') {
-        
-        // Fetch FULL details needed for the SMS (Names, Dates, Service)
         db.get(
           `SELECT a.*, 
                   c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
@@ -585,7 +604,7 @@ router.put('/:id', authenticateToken, (req, res) => {
               if (status === 'scheduled' && apt.status === 'pending') {
                 console.log(`✅ Sending Acceptance SMS for Appt #${id}`);
                 await smsService.sendBookingAccepted(
-                  { ...fullApt, id: id }, // ✅ CRITICAL FIX: Ensuring ID is passed
+                  { ...fullApt, id: id },
                   clientObj,
                   { name: fullApt.service_name },
                   providerObj
@@ -596,7 +615,7 @@ router.put('/:id', authenticateToken, (req, res) => {
               if (status === 'cancelled') {
                 console.log(`✅ Sending Cancellation SMS for Appt #${id}`);
                 await smsService.sendCancellationNotice(
-                  { ...fullApt, id: id }, // ✅ CRITICAL FIX: Ensuring ID is passed
+                  { ...fullApt, id: id },
                   clientObj,
                   { name: fullApt.service_name },
                   notes // Reason for cancellation
@@ -653,7 +672,6 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
   const paid = Number(amount_paid || 0);
 
-  // Get total_price (used to decide paid or deposit-paid)
   db.get(
     `SELECT total_price FROM appointments WHERE id = ?`,
     [id],
@@ -689,7 +707,6 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Pay remaining balance
-   (Includes SMS Receipt)
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;

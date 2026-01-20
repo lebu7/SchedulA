@@ -4,60 +4,108 @@ import { PaystackButton } from "react-paystack";
 import "./BookingModal.css";
 
 function BookingModal({ service, user, onClose, onBookingSuccess }) {
+  const [step, setStep] = useState(1);
+  
+  // Data States
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
+  const [slots, setSlots] = useState([]); // Array of { time, available } objects
   const [notes, setNotes] = useState("");
+  
+  // UI States
   const [error, setError] = useState("");
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [serviceMeta, setServiceMeta] = useState(service || {});
-  const [loadingAvailability, setLoadingAvailability] = useState(false);
-  const [paymentOption, setPaymentOption] = useState("deposit"); // deposit | full | custom
+  const [showAddonDropdown, setShowAddonDropdown] = useState(false);
+  
+  // Payment & Addon States
+  const [paymentOption, setPaymentOption] = useState("deposit");
   const [customAmount, setCustomAmount] = useState("");
   const [addons, setAddons] = useState([]);
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
-  const [showAddonDropdown, setShowAddonDropdown] = useState(false);
-  const [processingPayment, setProcessingPayment] = useState(false); // disables pay buttons
+  const [processingPayment, setProcessingPayment] = useState(false);
 
-  // ---------- Helpers ----------
-  const getMinDate = () => {
-    const today = new Date();
-    today.setDate(today.getDate() + 1);
-    return today.toISOString().split("T")[0];
-  };
+  // ---------- 1. Availability Logic (The New Part) ----------
 
-  const getMaxDate = () => {
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 30);
-    return maxDate.toISOString().split("T")[0];
-  };
-
-  const formatTimeDisplay = (timeStr) => {
-    if (!timeStr) return "";
-    const [h, m] = timeStr.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const displayHours = h % 12 || 12;
-    return `${displayHours}:${m.toString().padStart(2, "0")} ${period}`;
-  };
-
-  const generateTimeSlots = (openingTime = "08:30", closingTime = "18:00", interval = 30) => {
-    const slots = [];
-    const [openH, openM] = openingTime.split(":").map(Number);
-    const [closeH, closeM] = closingTime.split(":").map(Number);
-
-    const openDate = new Date();
-    openDate.setHours(openH, openM, 0, 0);
-    const closeDate = new Date();
-    closeDate.setHours(closeH, closeM, 0, 0);
-
-    for (let time = new Date(openDate); time < closeDate; time.setMinutes(time.getMinutes() + interval)) {
-      const hh = time.getHours().toString().padStart(2, "0");
-      const mm = time.getMinutes().toString().padStart(2, "0");
-      slots.push(`${hh}:${mm}`);
+  // Fetch availability when date changes
+  useEffect(() => {
+    if (selectedDate && serviceMeta?.provider_id) {
+      fetchAvailability();
     }
-    return slots;
+  }, [selectedDate, serviceMeta]);
+
+  const fetchAvailability = async () => {
+    setLoadingSlots(true);
+    setSlots([]);
+    setSelectedTime("");
+    setError("");
+
+    try {
+      const res = await api.get(`/appointments/providers/${serviceMeta.provider_id}/availability`, {
+        params: { date: selectedDate }
+      });
+
+      if (res.data.is_closed) {
+        setError(`Provider is closed on this day: ${res.data.closed_reason || 'Day off'}`);
+      } else {
+        // Generate grid using the booked_slots from backend
+        generateTimeSlots(
+          res.data.opening_time, 
+          res.data.closing_time, 
+          res.data.booked_slots || [] // Ensure array
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Could not load availability.");
+    }
+    setLoadingSlots(false);
   };
 
-  // ---------- Init / fetch addons ----------
+  const generateTimeSlots = (openTime, closeTime, bookedRanges) => {
+    const generated = [];
+    const [openH, openM] = openTime.split(':').map(Number);
+    const [closeH, closeM] = closeTime.split(':').map(Number);
+    
+    let current = new Date();
+    current.setHours(openH, openM, 0, 0);
+    
+    const end = new Date();
+    end.setHours(closeH, closeM, 0, 0);
+
+    const now = new Date(); 
+
+    while (current < end) {
+      const timeString = current.toTimeString().slice(0, 5); // "08:00"
+      
+      // Calculate when this specific service would END if started now
+      const slotEndTime = new Date(current.getTime() + (serviceMeta.duration || 30) * 60000);
+      const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
+
+      // Check Collision with booked slots
+      const isBooked = bookedRanges.some(booking => {
+        return (timeString >= booking.start && timeString < booking.end) || // Starts inside another
+               (timeStringEnd > booking.start && timeStringEnd <= booking.end) || // Ends inside another
+               (timeString <= booking.start && timeStringEnd >= booking.end); // Envelops another
+      });
+
+      // Check if it's in the past (only relevant for today)
+      const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
+
+      generated.push({
+        time: timeString,
+        available: !isBooked && !isPast
+      });
+
+      // Increment by 30 mins (standard slot interval)
+      current.setMinutes(current.getMinutes() + 30);
+    }
+    setSlots(generated);
+  };
+
+  // ---------- 2. Addons & Helpers (Your Existing Features) ----------
+
   useEffect(() => {
     if (service) setServiceMeta(service);
     if (service?.id) fetchAddons(service.id);
@@ -67,63 +115,30 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     try {
       const res = await api.get(`/services/${serviceId}/sub-services`);
       setAddons(res.data.sub_services || []);
-    } catch (err) {
-      console.error("Error fetching add-ons:", err);
-    }
+    } catch (err) { console.error("Error fetching add-ons:", err); }
   };
 
-  // Close addon dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (!event.target.closest(".addon-dropdown")) {
-        setShowAddonDropdown(false);
-      }
+      if (!event.target.closest(".addon-dropdown")) setShowAddonDropdown(false);
     };
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  // Update total when addons change
   useEffect(() => {
-    const addonTotal = selectedAddons.reduce(
-      (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
-      0
-    );
+    const addonTotal = selectedAddons.reduce((sum, a) => sum + Number(a.price ?? a.additional_price ?? 0), 0);
     setTotalPrice(Number(service?.price || 0) + addonTotal);
   }, [selectedAddons, service?.price]);
 
   const handleAddonToggle = (addon, checked) => {
-    setSelectedAddons((prev) =>
-      checked ? [...prev, addon] : prev.filter((a) => a.id !== addon.id)
-    );
+    setSelectedAddons((prev) => checked ? [...prev, addon] : prev.filter((a) => a.id !== addon.id));
   };
 
-  // Fetch provider availability when date selected
-  useEffect(() => {
-    const fetchAvailability = async () => {
-      if (!serviceMeta?.provider_id || !selectedDate) return;
-      setLoadingAvailability(true);
-      try {
-        await api.get(
-          `/appointments/providers/${serviceMeta.provider_id}/availability?date=${selectedDate}`
-        );
-        // setAvailability(res.data); // Logic kept as requested
-      } catch (err) {
-        console.error("Error fetching provider availability:", err);
-      } finally {
-        setLoadingAvailability(false);
-      }
-    };
-    fetchAvailability();
-  }, [selectedDate, serviceMeta]);
-
-  // ---------- Payment calculations ----------
+  // ---------- 3. Payment Calculations ----------
   const depositPercentage = 0.3;
   const basePrice = Number(serviceMeta?.price || 0);
-  const addonsTotal = selectedAddons.reduce(
-    (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
-    0
-  );
+  const addonsTotal = selectedAddons.reduce((sum, a) => sum + Number(a.price ?? a.additional_price ?? 0), 0);
   const totalKES = basePrice + addonsTotal;
   const depositKES = Math.round(totalKES * depositPercentage);
 
@@ -136,14 +151,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return depositKES;
   };
 
-  // ---------- Payment handler using Paystack ----------
+  // ---------- 4. Paystack Config ----------
   const buildPaystackConfig = (forOption) => {
     const amount = (() => {
       if (forOption === "full") return totalKES * 100;
       if (forOption === "custom") {
         const n = Number(customAmount || 0);
-        const resolved = n >= depositKES ? Math.round(n * 100) : depositKES * 100;
-        return resolved;
+        return (n >= depositKES ? Math.round(n * 100) : depositKES * 100);
       }
       return depositKES * 100;
     })();
@@ -173,12 +187,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
 
         try {
           const token = localStorage.getItem("token");
-
           const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
           const paidAmountKES = amount / 100;
-
-          let payment_status =
-            paidAmountKES >= totalKES ? "paid" : "deposit-paid";
+          let payment_status = paidAmountKES >= totalKES ? "paid" : "deposit-paid";
 
           const payload = {
             service_id: serviceMeta.id,
@@ -188,7 +199,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             addons_total: addonsTotal,
             total_price: totalKES,
             deposit_amount: depositKES,
-
             payment_reference: response.reference,
             payment_amount: paidAmountKES,
             amount_paid: paidAmountKES,
@@ -199,23 +209,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             headers: { Authorization: `Bearer ${token}` }
           });
 
-          const newAppointmentId = data?.appointment?.id;
-
-          if (newAppointmentId) {
-            await api.put(
-              `/appointments/${newAppointmentId}/payment`,
-              {
+          if (data?.appointmentId) {
+            await api.put(`/appointments/${data.appointmentId}/payment`, {
                 payment_reference: response.reference,
                 payment_amount: paidAmountKES,
                 amount_paid: paidAmountKES,
                 payment_status: payment_status,
                 total_price: totalKES,
-              },
-              {
-                headers: { Authorization: `Bearer ${token}` }
-              }
+              }, { headers: { Authorization: `Bearer ${token}` } }
             );
-
             onBookingSuccess?.();
             onClose?.();
           } else {
@@ -223,7 +225,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           }
         } catch (err) {
           console.error("❌ Error saving appointment:", err);
-          setError("Payment succeeded but booking failed. Contact support.");
+          setError(err.response?.data?.error || "Booking failed.");
         } finally {
           setProcessingPayment(false);
         }
@@ -235,241 +237,155 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     };
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setError("Please complete the payment to book.");
-  };
-
+  const handleSubmit = (e) => { e.preventDefault(); setError("Please complete the payment to book."); };
+  
   const depositConfig = buildPaystackConfig("deposit");
   const fullConfig = buildPaystackConfig("full");
   const customConfig = buildPaystackConfig("custom");
-
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
+
+  const getMinDate = () => {
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+    return today.toISOString().split("T")[0];
+  };
+
+  const getMaxDate = () => {
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 30);
+    return maxDate.toISOString().split("T")[0];
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content booking-modal" onClick={(e) => e.stopPropagation()}>
         {/* HEADER */}
         <div className="modal-header">
           <div>
             <h3>Book {serviceMeta?.name}</h3>
             <span className="subtitle">with {serviceMeta?.provider_name}</span>
           </div>
-          <button
-            className="close-btn"
-            onClick={() => { if (!processingPayment) onClose?.(); }}
-            disabled={processingPayment}
-          >
-            ×
-          </button>
+          <button className="close-btn" onClick={() => { if (!processingPayment) onClose?.(); }} disabled={processingPayment}>×</button>
         </div>
 
         {/* BODY */}
         <div className="modal-body">
-          {/* Quick Stats */}
           <div className="service-quick-info">
-            <div className="info-pill">
-              <i className="fa fa-clock-o"></i> ⏱ {serviceMeta?.duration} mins
-            </div>
-            <div className="info-pill">
-              <i className="fa fa-tag"></i> 🏷 KES {serviceMeta?.price}
-            </div>
+            <div className="info-pill"><i className="fa fa-clock-o"></i> ⏱ {serviceMeta?.duration} mins</div>
+            <div className="info-pill"><i className="fa fa-tag"></i> 🏷 KES {serviceMeta?.price}</div>
           </div>
 
           <form onSubmit={handleSubmit} className="booking-form">
             {error && <div className="error-message">⚠️ {error}</div>}
 
-            {/* SECTION 1: TIME & DATE */}
-            <div className="form-section">
-              <h4 className="section-title">1. Select Date & Time</h4>
-              <div className="form-row">
+            {/* STEP 1: DATE & TIME */}
+            {step === 1 ? (
+              <div className="step-1">
                 <div className="form-group">
-                  <label>Date</label>
-                  <input
-                    type="date"
-                    className="styled-input"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      setSelectedDate(e.target.value);
-                      setSelectedTime("");
-                    }}
-                    min={getMinDate()}
-                    max={getMaxDate()}
-                  />
+                  <label>Select Date</label>
+                  <input type="date" className="styled-input" value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(""); }} min={getMinDate()} max={getMaxDate()} />
                 </div>
+
                 <div className="form-group">
-                  <label>Time</label>
-                  <div className="select-wrapper">
-                    <select
-                      className="styled-input"
-                      value={selectedTime}
-                      onChange={(e) => setSelectedTime(e.target.value)}
-                      disabled={!selectedDate || loadingAvailability}
-                    >
-                      <option value="">{loadingAvailability ? "Loading..." : "Choose a time"}</option>
-                      {generateTimeSlots(serviceMeta?.provider_opening_time || "08:30", serviceMeta?.provider_closing_time || "18:00", serviceMeta?.slot_interval || 30).map((time) => (
-                        <option key={time} value={time}>
-                          {formatTimeDisplay(time)}
-                        </option>
+                  <label>Select Time</label>
+                  {!selectedDate ? <p className="hint">Please select a date first.</p> : loadingSlots ? <p className="hint">Loading availability...</p> : slots.length === 0 ? <p className="hint error">No slots available on this date.</p> : (
+                    <div className="time-grid">
+                      {slots.map((slot) => (
+                        <button 
+                          key={slot.time} 
+                          type="button" 
+                          className={`time-slot ${selectedTime === slot.time ? 'selected' : ''}`} 
+                          disabled={!slot.available} 
+                          onClick={() => setSelectedTime(slot.time)}
+                        >
+                          {slot.time}
+                        </button>
                       ))}
-                    </select>
-                  </div>
+                    </div>
+                  )}
                 </div>
+
+                <div className="form-group">
+                  <label>Notes (Optional)</label>
+                  <textarea rows="2" className="styled-input textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Special requests..." />
+                </div>
+
+                <button type="button" className="btn btn-primary btn-block" disabled={!selectedTime} onClick={() => setStep(2)}>Next: Customize & Pay</button>
               </div>
-            </div>
-
-            <div className="two-column-layout">
-              {/* LEFT COL: CUSTOMIZE */}
-              <div className="column left-col">
-                <h4 className="section-title">2. Customize Booking</h4>
-                
-                <div className="form-group relative-container">
-                  <label>Add-ons</label>
-                  <div className="addon-dropdown">
-                    <button
-                      type="button"
-                      className={`addon-dropdown-toggle ${showAddonDropdown ? 'active' : ''}`}
-                      onClick={() => setShowAddonDropdown((p) => !p)}
-                    >
-                      <span>{selectedAddons.length > 0 ? `${selectedAddons.length} selected` : "Select add-ons..."}</span>
-                      <span className="arrow">{showAddonDropdown ? "▲" : "▼"}</span>
-                    </button>
-
-                    {showAddonDropdown && (
-                      <div className="addon-dropdown-menu">
-                        {addons.length ? (
-                          <div className="addon-scroll">
-                            {addons.map((addon) => {
-                              const isChecked = selectedAddons.some((a) => a.id === addon.id);
-                              return (
-                                <label key={addon.id} className="addon-item">
-                                  <div className="addon-check">
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={(e) => handleAddonToggle(addon, e.target.checked)}
-                                    />
-                                    <span>{addon.name}</span>
-                                  </div>
-                                  <span className="addon-price">+KES {addon.price ?? addon.additional_price ?? 0}</span>
-                                </label>
-                              );
-                            })}
+            ) : (
+              // STEP 2: ADDONS & PAYMENT
+              <div className="step-2">
+                <div className="two-column-layout">
+                  
+                  {/* LEFT: ADDONS */}
+                  <div className="column left-col">
+                    <h4 className="section-title">2. Add-ons</h4>
+                    <div className="form-group relative-container">
+                      <div className="addon-dropdown">
+                        <button type="button" className={`addon-dropdown-toggle ${showAddonDropdown ? 'active' : ''}`} onClick={() => setShowAddonDropdown((p) => !p)}>
+                          <span>{selectedAddons.length > 0 ? `${selectedAddons.length} selected` : "Select add-ons..."}</span>
+                          <span className="arrow">{showAddonDropdown ? "▲" : "▼"}</span>
+                        </button>
+                        {showAddonDropdown && (
+                          <div className="addon-dropdown-menu">
+                            {addons.length ? (
+                              <div className="addon-scroll">
+                                {addons.map((addon) => (
+                                  <label key={addon.id} className="addon-item">
+                                    <div className="addon-check">
+                                      <input type="checkbox" checked={selectedAddons.some((a) => a.id === addon.id)} onChange={(e) => handleAddonToggle(addon, e.target.checked)} />
+                                      <span>{addon.name}</span>
+                                    </div>
+                                    <span className="addon-price">+KES {addon.price ?? addon.additional_price ?? 0}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : <div className="no-addons">No add-ons available</div>}
                           </div>
-                        ) : (
-                          <div className="no-addons">No add-ons available</div>
                         )}
                       </div>
-                    )}
+                    </div>
+                  </div>
+
+                  {/* RIGHT: PAYMENT */}
+                  <div className="column right-col">
+                    <h4 className="section-title">3. Payment</h4>
+                    <div className="payment-options-box">
+                      <label className={`pay-option-card ${paymentOption === "deposit" ? "active" : ""}`}>
+                        <input type="radio" name="pay" checked={paymentOption === "deposit"} onChange={() => setPaymentOption("deposit")} />
+                        <div className="option-details"><span className="option-title">Deposit</span><span className="option-price">KES {depositKES.toLocaleString()}</span></div>
+                      </label>
+                      <label className={`pay-option-card ${paymentOption === "full" ? "active" : ""}`}>
+                        <input type="radio" name="pay" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} />
+                        <div className="option-details"><span className="option-title">Full</span><span className="option-price">KES {totalKES.toLocaleString()}</span></div>
+                      </label>
+                      <label className={`pay-option-card ${paymentOption === "custom" ? "active" : ""}`}>
+                        <input type="radio" name="pay" checked={paymentOption === "custom"} onChange={() => setPaymentOption("custom")} />
+                        <div className="option-details"><span className="option-title">Custom</span><span className="option-sub">Min: {depositKES.toLocaleString()}</span></div>
+                      </label>
+                      {paymentOption === "custom" && (
+                        <div className="custom-amount-wrapper">
+                          <span className="currency-prefix">KES</span>
+                          <input type="number" min={depositKES} step="50" className="custom-amount-input" value={customAmount} onChange={(e) => setCustomAmount(e.target.value)} placeholder={depositKES} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="price-breakdown">
+                      <div className="breakdown-total"><span>Total</span><span>KES {totalPrice.toLocaleString()}</span></div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Notes</label>
-                  <textarea
-                    rows="3"
-                    className="styled-input textarea"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Allergies, preferences, etc."
-                  ></textarea>
-                </div>
-              </div>
-
-              {/* RIGHT COL: PAYMENT */}
-              <div className="column right-col">
-                <h4 className="section-title">3. Payment Options</h4>
-                <div className="payment-options-box">
-                  <label className={`pay-option-card ${paymentOption === "deposit" ? "active" : ""}`}>
-                    <input type="radio" name="pay" checked={paymentOption === "deposit"} onChange={() => setPaymentOption("deposit")} />
-                    <div className="option-details">
-                      <span className="option-title">Pay Deposit</span>
-                      <span className="option-price">KES {depositKES.toLocaleString()}</span>
-                    </div>
-                  </label>
-
-                  <label className={`pay-option-card ${paymentOption === "full" ? "active" : ""}`}>
-                    <input type="radio" name="pay" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} />
-                    <div className="option-details">
-                      <span className="option-title">Pay Full</span>
-                      <span className="option-price">KES {totalKES.toLocaleString()}</span>
-                    </div>
-                  </label>
-
-                  <label className={`pay-option-card ${paymentOption === "custom" ? "active" : ""}`}>
-                    <input type="radio" name="pay" checked={paymentOption === "custom"} onChange={() => setPaymentOption("custom")} />
-                    <div className="option-details">
-                      <span className="option-title">Custom</span>
-                      <span className="option-sub">Min: {depositKES.toLocaleString()}</span>
-                    </div>
-                  </label>
-
-                  {paymentOption === "custom" && (
-                    <div className="custom-amount-wrapper">
-                      <span className="currency-prefix">KES</span>
-                      <input
-                        type="number"
-                        min={depositKES}
-                        step="50"
-                        className="custom-amount-input"
-                        value={customAmount}
-                        onChange={(e) => setCustomAmount(e.target.value)}
-                        placeholder={depositKES}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* TOTAL SUMMARY */}
-                <div className="price-breakdown">
-                  <div className="breakdown-row">
-                    <span>Service</span>
-                    <span>KES {basePrice.toLocaleString()}</span>
-                  </div>
-                  {addonsTotal > 0 && (
-                    <div className="breakdown-row">
-                      <span>Add-ons</span>
-                      <span>+ KES {addonsTotal.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="breakdown-total">
-                    <span>Total</span>
-                    <span>KES {totalPrice.toLocaleString()}</span>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-text" onClick={() => setStep(1)} disabled={processingPayment}>Back</button>
+                  <div className="pay-btn-wrapper">
+                    {paymentOption === "deposit" && <PaystackButton className="btn btn-primary btn-block" {...{ ...depositConfig, text: processingPayment ? "Processing..." : `Pay KES ${depositKES.toLocaleString()}` }} disabled={payDisabled} />}
+                    {paymentOption === "full" && <PaystackButton className="btn btn-primary btn-block" {...{ ...fullConfig, text: processingPayment ? "Processing..." : `Pay KES ${totalKES.toLocaleString()}` }} disabled={payDisabled} />}
+                    {paymentOption === "custom" && <PaystackButton className="btn btn-primary btn-block" {...{ ...customConfig, text: processingPayment ? "Processing..." : `Pay KES ${computeSelectedAmountKES().toLocaleString()}` }} disabled={payDisabled} />}
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* FOOTER */}
-            <div className="modal-footer">
-              <button type="button" className="btn btn-text" onClick={onClose} disabled={processingPayment}>
-                Cancel
-              </button>
-
-              <div className="pay-btn-wrapper">
-                {paymentOption === "deposit" && (
-                  <PaystackButton
-                    className="btn btn-primary btn-block"
-                    {...{ ...depositConfig, text: processingPayment ? "Processing..." : `Pay Deposit (KES ${depositKES.toLocaleString()})` }}
-                    disabled={payDisabled}
-                  />
-                )}
-                {paymentOption === "full" && (
-                  <PaystackButton
-                    className="btn btn-primary btn-block"
-                    {...{ ...fullConfig, text: processingPayment ? "Processing..." : `Pay Full (KES ${totalKES.toLocaleString()})` }}
-                    disabled={payDisabled}
-                  />
-                )}
-                {paymentOption === "custom" && (
-                  <PaystackButton
-                    className="btn btn-primary btn-block"
-                    {...{ ...customConfig, text: processingPayment ? "Processing..." : `Pay KES ${computeSelectedAmountKES().toLocaleString()}` }}
-                    disabled={payDisabled}
-                  />
-                )}
-              </div>
-            </div>
+            )}
           </form>
         </div>
       </div>
