@@ -36,7 +36,7 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
-// ✅ CHECK PREFERENCES HELPER
+// Check Preferences Helper
 function shouldSend(user, type) {
     if (!user || !user.phone) return false;
     
@@ -104,16 +104,18 @@ async function sendSMS(phoneNumber, message) {
 
 // --- Exports ---
 
-// ✅ UPDATED: Includes Amount Paid & Pending Balance
+// ✅ UPDATED: Fixes negative pending balance issue
 export async function sendBookingConfirmation(appointment, client, service, provider) {
   if (!shouldSend(client, 'confirmation')) return; 
 
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
   const paid = Number(appointment.amount_paid || 0);
   const total = Number(appointment.total_price || 0);
-  const pending = total - paid;
+  
+  // Logic: If Paid >= Total, Pending is 0. Otherwise Total - Paid.
+  const pending = Math.max(0, total - paid);
 
-  const msg = `Booking Received! (Appt #${appointment.id}) for ${service.name} on ${date}. Paid: KES ${paid}. Pending: KES ${pending}. Status: Waiting Approval.`;
+  const msg = `Booking Received! (Appt #${appointment.id}) for ${service.name} on ${date}. Paid: KES ${paid.toLocaleString()}. Balance: KES ${pending.toLocaleString()}. Status: Waiting Approval.`;
   
   return await sendSMS(client.phone, msg);
 }
@@ -137,7 +139,8 @@ export async function sendAppointmentReminder(appointment, client, service, prov
 export async function sendPaymentReceipt(appointment, client, service) {
   if (!shouldSend(client, 'receipt')) return;
   
-  const msg = `Payment Received: KES ${appointment.amount_paid} for Appt #${appointment.id} (${service.name}). Ref: ${appointment.payment_reference}. Thanks!`;
+  const paid = Number(appointment.amount_paid || 0);
+  const msg = `Payment Received: KES ${paid.toLocaleString()} for Appt #${appointment.id} (${service.name}). Ref: ${appointment.payment_reference}. Thanks!`;
   return await sendSMS(client.phone, msg);
 }
 

@@ -26,7 +26,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // ---------- 1. Availability Logic (The New Part) ----------
+  // ---------- 1. Availability Logic (Fixed) ----------
 
   // Fetch availability when date changes
   useEffect(() => {
@@ -104,7 +104,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setSlots(generated);
   };
 
-  // ---------- 2. Addons & Helpers (Your Existing Features) ----------
+  // ---------- 2. Addons & Helpers ----------
 
   useEffect(() => {
     if (service) setServiceMeta(service);
