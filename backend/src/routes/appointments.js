@@ -3,6 +3,8 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { db } from '../config/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+// ✅ Import SMS Service
+import smsService from '../services/smsService.js';
 
 const router = express.Router();
 
@@ -47,7 +49,6 @@ db.get(
 
 /* ---------------------------------------------
    Create payment_requests table if not exists
-   (used when provider prompts client for remaining balance)
 --------------------------------------------- */
 db.get(
   `SELECT name FROM sqlite_master WHERE type='table' AND name='payment_requests'`,
@@ -136,12 +137,45 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (checks closure & hours)
-   NOTE: Strict payment enforcement:
-   - Creation requires payment_reference && payment_amount > 0
-   - If amount >= total_price => payment_status = 'paid'
-   - If 0 < amount < total_price => payment_status = 'deposit-paid'
-   - If payment fails or missing => reject creation (400)
+   📊 GET SMS Statistics (Provider only)
+   ✅ NEW FEATURE: SMS Monitoring
+--------------------------------------------- */
+router.get('/sms-stats', authenticateToken, async (req, res) => {
+  try {
+    const { getSMSStats } = smsService;
+    const stats = await getSMSStats();
+    
+    // Calculate summary
+    const summary = {
+      total_sent: 0,
+      total_failed: 0,
+      by_type: {}
+    };
+    
+    stats.forEach(row => {
+      if (row.status === 'sent') summary.total_sent += row.count;
+      if (row.status === 'failed') summary.total_failed += row.count;
+      
+      if (!summary.by_type[row.message_type]) {
+        summary.by_type[row.message_type] = { sent: 0, failed: 0 };
+      }
+      
+      summary.by_type[row.message_type][row.status] = row.count;
+    });
+    
+    res.json({
+      summary,
+      detailed_logs: stats
+    });
+  } catch (error) {
+    console.error('Error fetching SMS stats:', error);
+    res.status(500).json({ error: 'Failed to fetch SMS statistics' });
+  }
+});
+
+/* ---------------------------------------------
+   ✅ Create appointment
+   (Includes SMS Confirmation & Notification)
 --------------------------------------------- */
 router.post(
   '/',
@@ -166,7 +200,7 @@ router.post(
       addons,
     } = req.body;
 
-    // Enforce payment provided at creation time (no "pay later")
+    // Enforce payment provided at creation time
     if (!payment_reference || !payment_amount || Number(payment_amount) <= 0) {
       return res.status(400).json({
         error: 'Payment required before booking. Provide payment_reference and payment_amount.',
@@ -192,7 +226,7 @@ router.post(
               error: `Provider is closed on ${day}. Please select another date.`,
             });
 
-          // ✅ Use provider hours from users table
+          // Check provider hours
           db.get(
             `SELECT opening_time, closing_time FROM users WHERE id = ? AND user_type = 'provider'`,
             [service.provider_id],
@@ -203,7 +237,6 @@ router.post(
               const open = provider?.opening_time || '08:00';
               const close = provider?.closing_time || '18:00';
 
-              // Convert appointment time to Nairobi local time
               const nairobiTime = new Date(
                 appointmentDate.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' })
               );
@@ -223,10 +256,7 @@ router.post(
                 });
               }
 
-              // ✅ Create appointment
-              const status = 'pending'; // all new appointments start pending
-
-              // 🧮 Calculate add-on totals
+              const status = 'pending';
               let addons_total = 0;
               if (Array.isArray(addons) && addons.length > 0) {
                 addons_total = addons.reduce(
@@ -235,19 +265,14 @@ router.post(
                 );
               }
 
-              // 🧾 Compute totals based on service and addons
               const total_price = Number(service.price || 0) + addons_total;
               const deposit_amount = Math.round(total_price * 0.3);
-
-              // Payment amount sanity
               const paymentAmt = Number(payment_amount || 0);
 
-              // Determine payment_status
               let payment_status = 'unpaid';
               if (paymentAmt >= total_price) payment_status = 'paid';
               else if (paymentAmt > 0 && paymentAmt < total_price) payment_status = 'deposit-paid';
 
-              // Insert into database (store addons JSON too)
               db.run(
                 `INSERT INTO appointments (
                   client_id, provider_id, service_id, appointment_date, notes, status,
@@ -269,7 +294,7 @@ router.post(
                   deposit_amount,
                   addons_total,
                   JSON.stringify(Array.isArray(addons) ? addons : []),
-                  paymentAmt || 0, // amount_paid column (some schemas may already have this)
+                  paymentAmt || 0,
                 ],
                 function (err4) {
                   if (err4) {
@@ -281,7 +306,6 @@ router.post(
 
                   const newId = this.lastID;
 
-                  // existing rebook logic...
                   if (rebook_from) {
                     db.run(
                       `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
@@ -290,34 +314,69 @@ router.post(
                     );
                   }
 
-                  // fetch created appointment (a.* includes addons now)
+                  // ✅ Updated Fetch: Get Client & Provider phones for SMS
                   db.get(
-                    `SELECT a.*, s.name AS service_name, s.duration, s.price,
-                            u.name AS provider_name, u.business_name
-                    FROM appointments a
-                    JOIN services s ON a.service_id = s.id
-                    JOIN users u ON a.provider_id = u.id
-                    WHERE a.id = ?`,
+                    `SELECT a.*, 
+                            c.name AS client_name, c.phone AS client_phone,
+                            s.name AS service_name,
+                            p.name AS provider_name, p.business_name, p.phone AS provider_phone
+                     FROM appointments a
+                     JOIN users c ON a.client_id = c.id
+                     JOIN services s ON a.service_id = s.id
+                     JOIN users p ON a.provider_id = p.id
+                     WHERE a.id = ?`,
                     [newId],
-                    (e, appointment) => {
+                    async (e, fullAppointment) => {
                       if (e) {
                         console.error('❌ Fetch after insert failed:', e);
-                        return res
-                          .status(500)
-                          .json({ error: 'Appointment created but fetch failed' });
+                        return res.status(500).json({ error: 'Appointment created but fetch failed' });
                       }
 
-                      console.log('✅ Appointment created successfully:', {
-                        id: newId,
-                        total_price,
-                        deposit_amount,
-                        addons_total,
-                      });
+                      // 📱 Send SMS: Confirmation to Client
+                      if (fullAppointment.client_phone) {
+                        await smsService.sendBookingConfirmation(
+                          {
+                            appointment_date: fullAppointment.appointment_date,
+                            total_price: fullAppointment.total_price,
+                            amount_paid: fullAppointment.amount_paid
+                          },
+                          {
+                            name: fullAppointment.client_name,
+                            phone: fullAppointment.client_phone
+                          },
+                          { name: fullAppointment.service_name },
+                          {
+                            name: fullAppointment.provider_name,
+                            business_name: fullAppointment.business_name
+                          }
+                        );
+                      }
+
+                      // 📱 Send SMS: Notification to Provider
+                      if (fullAppointment.provider_phone) {
+                        await smsService.sendProviderNotification(
+                          {
+                            appointment_date: fullAppointment.appointment_date,
+                            total_price: fullAppointment.total_price,
+                            amount_paid: fullAppointment.amount_paid
+                          },
+                          {
+                            name: fullAppointment.provider_name,
+                            phone: fullAppointment.provider_phone
+                          },
+                          {
+                            name: fullAppointment.client_name,
+                            phone: fullAppointment.client_phone
+                          },
+                          { name: fullAppointment.service_name }
+                        );
+                      }
+
+                      console.log('✅ Appointment created successfully:', { id: newId });
 
                       res.status(201).json({
-                        message:
-                          'Appointment booked successfully (pending provider confirmation)',
-                        appointment,
+                        message: 'Appointment booked successfully (pending provider confirmation)',
+                        appointment: fullAppointment,
                       });
                     }
                   );
@@ -425,6 +484,7 @@ router.get('/providers/:id/availability', (req, res) => {
 
 /* ---------------------------------------------
    ✅ Update appointment
+   (Includes SMS Cancellation Logic)
 --------------------------------------------- */
 router.put('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -472,6 +532,29 @@ router.put('/:id', authenticateToken, (req, res) => {
 
     db.run(q, params, (err2) => {
       if (err2) return res.status(500).json({ error: 'Failed to update appointment' });
+
+      // 📱 Check for Cancellation to send SMS
+      if (status === 'cancelled') {
+        db.get(
+          `SELECT c.name, c.phone, s.name AS service_name 
+           FROM appointments a
+           JOIN users c ON a.client_id = c.id
+           JOIN services s ON a.service_id = s.id
+           WHERE a.id = ?`,
+          [id],
+          async (err3, fullApt) => {
+            if (!err3 && fullApt && fullApt.phone) {
+              await smsService.sendCancellationNotice(
+                {},
+                { name: fullApt.name, phone: fullApt.phone },
+                { name: fullApt.service_name },
+                notes // rejection reason
+              );
+            }
+          }
+        );
+      }
+
       res.json({ message: 'Appointment updated successfully' });
     });
   });
@@ -507,7 +590,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   FIXED: Update payment without doubling
+   ✅ Update payment (Initial or partial)
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -523,11 +606,8 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
     `SELECT total_price FROM appointments WHERE id = ?`,
     [id],
     (err, row) => {
-      if (err)
-        return res.status(500).json({ error: "Database error" });
-
-      if (!row)
-        return res.status(404).json({ error: "Appointment not found" });
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (!row) return res.status(404).json({ error: "Appointment not found" });
 
       const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
 
@@ -542,10 +622,7 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
         `,
         [payment_reference, paid, paid, finalStatus, id],
         function (err2) {
-          if (err2)
-            return res
-              .status(500)
-              .json({ error: "Failed to update payment info" });
+          if (err2) return res.status(500).json({ error: "Failed to update payment info" });
 
           return res.json({
             message: "Payment updated successfully",
@@ -560,25 +637,21 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Pay remaining balance
-   - Client pays remaining balance using same payment system
-   - Requires payment_reference and amount_paid
-   - Adds to amount_paid and updates payment_status to 'paid' when fully paid
+   (Includes SMS Receipt)
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const userId = req.user.userId; // Can be client OR provider
+  const userId = req.user.userId;
   const { payment_reference, amount_paid } = req.body;
 
   if (!payment_reference || !amount_paid || Number(amount_paid) <= 0) {
     return res.status(400).json({ error: 'payment_reference and positive amount_paid are required' });
   }
 
-  // Fetch provider_id as well to check permissions
   db.get(`SELECT client_id, provider_id, total_price, amount_paid FROM appointments WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!row) return res.status(404).json({ error: 'Appointment not found' });
 
-    // ✅ FIX: Allow if user is the Client OR the Provider
     if (row.client_id !== userId && row.provider_id !== userId) {
       return res.status(403).json({ error: 'Forbidden: You are not authorized to update this appointment.' });
     }
@@ -594,6 +667,30 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
       [newPaid, payment_reference, finalStatus, id],
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to update balance payment' });
+
+        // 📱 Send Payment Receipt SMS
+        db.get(
+          `SELECT c.name, c.phone, s.name AS service_name, a.*
+           FROM appointments a
+           JOIN users c ON a.client_id = c.id
+           JOIN services s ON a.service_id = s.id
+           WHERE a.id = ?`,
+          [id],
+          async (err3, fullApt) => {
+            if (!err3 && fullApt && fullApt.phone) {
+              await smsService.sendPaymentReceipt(
+                {
+                  amount_paid: amount_paid,
+                  total_price: fullApt.total_price,
+                  payment_reference: payment_reference
+                },
+                { name: fullApt.name, phone: fullApt.phone },
+                { name: fullApt.service_name }
+              );
+            }
+          }
+        );
+
         res.json({ message: 'Balance payment recorded', amount_paid: newPaid, payment_status: finalStatus });
       }
     );
@@ -602,7 +699,6 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Provider can prompt client for remaining balance
-   - Adds an entry to payment_requests (provider -> client)
 --------------------------------------------- */
 router.post('/:id/request-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -628,58 +724,6 @@ router.post('/:id/request-balance', authenticateToken, (req, res) => {
       }
     );
   });
-});
-
-/* ---------------------------------------------
-   FIXED: Update payment without doubling
---------------------------------------------- */
-router.put('/:id/payment', authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const { payment_reference, amount_paid, payment_status } = req.body;
-
-  if (!payment_reference)
-    return res.status(400).json({ error: "Missing payment reference" });
-
-  const paid = Number(amount_paid || 0);
-
-  // Get total_price (used to decide paid or deposit-paid)
-  db.get(
-    `SELECT total_price FROM appointments WHERE id = ?`,
-    [id],
-    (err, row) => {
-      if (err)
-        return res.status(500).json({ error: "Database error" });
-
-      if (!row)
-        return res.status(404).json({ error: "Appointment not found" });
-
-      const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
-
-      db.run(
-        `
-        UPDATE appointments
-        SET payment_reference = ?,
-            amount_paid = ?, 
-            payment_amount = ?, 
-            payment_status = ?
-        WHERE id = ?
-        `,
-        [payment_reference, paid, paid, finalStatus, id],
-        function (err2) {
-          if (err2)
-            return res
-              .status(500)
-              .json({ error: "Failed to update payment info" });
-
-          return res.json({
-            message: "Payment updated successfully",
-            amount_paid: paid,
-            payment_status: finalStatus,
-          });
-        }
-      );
-    }
-  );
 });
 
 export default router;

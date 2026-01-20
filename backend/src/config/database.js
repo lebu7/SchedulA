@@ -38,8 +38,8 @@ function initializeDatabase() {
       phone TEXT,
       user_type TEXT CHECK(user_type IN ('client', 'provider')) NOT NULL,
       business_name TEXT,
-      opening_time TEXT DEFAULT '08:00', -- new
-      closing_time TEXT DEFAULT '18:00', -- new
+      opening_time TEXT DEFAULT '08:00',
+      closing_time TEXT DEFAULT '18:00',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
@@ -81,7 +81,7 @@ function initializeDatabase() {
       provider_id INTEGER NOT NULL,
       service_id INTEGER NOT NULL,
       appointment_date DATETIME NOT NULL,
-      status TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled','completed','cancelled','no-show')),
+      status TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled','completed','cancelled','no-show','rebooked')),
       notes TEXT,
       client_deleted BOOLEAN DEFAULT 0,
       provider_deleted BOOLEAN DEFAULT 0,
@@ -96,6 +96,24 @@ function initializeDatabase() {
   });
 
   /* ---------------------------------------------
+     📱 SMS LOGS TABLE (NEW for SMS Integration)
+  --------------------------------------------- */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sms_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipient_phone TEXT NOT NULL,
+      message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general')),
+      message_content TEXT,
+      status TEXT CHECK(status IN ('sent', 'failed', 'error')),
+      details TEXT, -- JSON string with API response
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (err) => {
+    if (err) console.error('❌ Error creating sms_logs table:', err.message);
+    else console.log('✅ SMS logs table ready');
+  });
+
+  /* ---------------------------------------------
      🔍 Ensure missing columns exist
   --------------------------------------------- */
   // users
@@ -107,6 +125,16 @@ function initializeDatabase() {
   tryAddColumn('services', 'closing_time', "TEXT DEFAULT '18:00'");
   tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
   tryAddColumn('services', 'is_closed', "INTEGER DEFAULT 0");
+
+  // appointments (New columns for SMS & Payment features)
+  tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0"); // 👈 Added for SMS reminders
+  
+  // Note: These payment columns are often handled by migration logic in routes, 
+  // but adding them here ensures safety if the table is fresh.
+  tryAddColumn('appointments', 'payment_status', "TEXT DEFAULT 'unpaid'");
+  tryAddColumn('appointments', 'payment_reference', "TEXT");
+  tryAddColumn('appointments', 'amount_paid', "REAL DEFAULT 0");
+  tryAddColumn('appointments', 'total_price', "REAL DEFAULT 0");
 
   console.log('🎯 Database initialization completed');
 }

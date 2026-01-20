@@ -9,6 +9,9 @@ import authRoutes from './routes/auth.js';
 import serviceRoutes from './routes/services.js';
 import appointmentRoutes from './routes/appointments.js';
 
+// ✅ Import SMS Scheduled Reminders
+import { sendScheduledReminders } from './services/smsService.js';
+
 dotenv.config();
 
 const app = express();
@@ -62,13 +65,33 @@ const autoCancelPastAppointments = async () => {
   }
 };
 
-// Run once when server starts
+/* =====================================================
+   📱 SMS REMINDER SCHEDULER
+   Runs every hour to check for appointments
+   happening in 24-26 hours and sends reminders
+===================================================== */
+const checkAndSendReminders = async () => {
+  try {
+    console.log('🔔 Checking for appointments needing reminders...');
+    await sendScheduledReminders();
+  } catch (error) {
+    console.error('❌ Error in reminder scheduler:', error);
+  }
+};
+
+// Run tasks once when server starts
 autoCancelPastAppointments();
+console.log('📱 Initializing SMS reminder scheduler...');
+checkAndSendReminders();
 
 // Schedule to run every hour
-setInterval(autoCancelPastAppointments, 60 * 60 * 1000); // every 1 hour
+setInterval(() => {
+  autoCancelPastAppointments();
+  checkAndSendReminders();
+}, 60 * 60 * 1000); // every 1 hour
 
 app.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+  console.log(`📱 SMS notifications: ENABLED`);
 });
