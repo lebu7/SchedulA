@@ -26,7 +26,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // ---------- 1. Availability Logic (Fixed) ----------
+  // ---------- 1. Availability Logic (Updated for Capacity) ----------
 
   // Fetch availability when date changes
   useEffect(() => {
@@ -75,6 +75,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     end.setHours(closeH, closeM, 0, 0);
 
     const now = new Date(); 
+    
+    // ✅ Get Capacity from service meta (default to 1 if not set)
+    const serviceCapacity = serviceMeta.capacity || 1;
 
     while (current < end) {
       const timeString = current.toTimeString().slice(0, 5); // "08:00"
@@ -83,19 +86,22 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       const slotEndTime = new Date(current.getTime() + (serviceMeta.duration || 30) * 60000);
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
-      // Check Collision with booked slots
-      const isBooked = bookedRanges.some(booking => {
+      // ✅ Count overlapping bookings for this slot
+      const overlapCount = bookedRanges.filter(booking => {
         return (timeString >= booking.start && timeString < booking.end) || // Starts inside another
                (timeStringEnd > booking.start && timeStringEnd <= booking.end) || // Ends inside another
                (timeString <= booking.start && timeStringEnd >= booking.end); // Envelops another
-      });
+      }).length;
+
+      // ✅ Disable only if overlaps >= capacity
+      const isFull = overlapCount >= serviceCapacity;
 
       // Check if it's in the past (only relevant for today)
       const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
 
       generated.push({
         time: timeString,
-        available: !isBooked && !isPast
+        available: !isFull && !isPast
       });
 
       // Increment by 30 mins (standard slot interval)
@@ -104,7 +110,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setSlots(generated);
   };
 
-  // ---------- 2. Addons & Helpers ----------
+  // ---------- 2. Addons & Helpers (unchanged) ----------
 
   useEffect(() => {
     if (service) setServiceMeta(service);
@@ -135,7 +141,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setSelectedAddons((prev) => checked ? [...prev, addon] : prev.filter((a) => a.id !== addon.id));
   };
 
-  // ---------- 3. Payment Calculations ----------
+  // ---------- 3. Payment Calculations (unchanged) ----------
   const depositPercentage = 0.3;
   const basePrice = Number(serviceMeta?.price || 0);
   const addonsTotal = selectedAddons.reduce((sum, a) => sum + Number(a.price ?? a.additional_price ?? 0), 0);
@@ -151,7 +157,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return depositKES;
   };
 
-  // ---------- 4. Paystack Config ----------
+  // ---------- 4. Paystack Config (unchanged) ----------
   const buildPaystackConfig = (forOption) => {
     const amount = (() => {
       if (forOption === "full") return totalKES * 100;
