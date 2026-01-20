@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { PaystackButton } from "react-paystack";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
-import RescheduleModal from "./RescheduleModal"; // ✅ Import new component
+import RescheduleModal from "./RescheduleModal";
 import { Receipt } from "lucide-react";
 import "./AppointmentManager.css";
 
@@ -29,23 +29,21 @@ function PaymentInfoModal({ payment, onClose }) {
   if (!payment) return null;
 
   const printReceipt = () => {
-    // 1. Calculate correct values for the receipt
     const total = Number(payment.total_price ?? payment.price ?? 0);
     const paid = Number(payment.amount_paid ?? payment.payment_amount ?? 0);
     const pending = Math.max(total - paid, 0);
 
-    // 2. Determine Status Label & Colors for the PDF
     let statusLabel = "Balance Due";
-    let statusColor = "#475569"; // Slate Gray
-    let statusBg = "#f1f5f9";    // Slate 100
+    let statusColor = "#475569"; 
+    let statusBg = "#f1f5f9";    
 
     if (payment.payment_status === "paid" || pending === 0) {
       statusLabel = "Fully Paid";
-      statusColor = "#15803d";   // Green
+      statusColor = "#15803d";   
       statusBg = "#dcfce7";
     } else if (payment.payment_status === "deposit-paid") {
       statusLabel = "Deposit Paid";
-      statusColor = "#9a3412";   // Orange
+      statusColor = "#9a3412";   
       statusBg = "#fff7ed";
     } else if (payment.payment_status === "refunded") {
       statusLabel = "Refunded";
@@ -53,7 +51,6 @@ function PaymentInfoModal({ payment, onClose }) {
       statusBg = "#fee2e2";
     }
 
-    // 3. Generate Professional HTML
     const newWindow = window.open("", "_blank");
     newWindow.document.write(`
       <html>
@@ -62,34 +59,17 @@ function PaymentInfoModal({ payment, onClose }) {
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; background-color: #f8fafc; color: #333; }
             .receipt-box { background: white; border: 1px solid #e2e8f0; padding: 40px; border-radius: 16px; max-width: 500px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-            
             .header { text-align: center; margin-bottom: 30px; }
             .header h1 { margin: 0; color: #0f172a; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
             .header p { margin: 8px 0 0; color: #64748b; font-size: 14px; }
-            
-            .status-banner { 
-              background: ${statusBg}; 
-              color: ${statusColor}; 
-              padding: 12px; 
-              text-align: center; 
-              font-weight: 700; 
-              border-radius: 8px; 
-              margin-bottom: 30px; 
-              text-transform: uppercase; 
-              font-size: 13px;
-              letter-spacing: 0.5px;
-            }
-
+            .status-banner { background: ${statusBg}; color: ${statusColor}; padding: 12px; text-align: center; font-weight: 700; border-radius: 8px; margin-bottom: 30px; text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px; }
             .row { display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 14px; }
             .label { color: #64748b; font-weight: 500; }
             .value { color: #0f172a; font-weight: 600; text-align: right; }
-            
             .divider { border-bottom: 2px dashed #e2e8f0; margin: 25px 0; }
-            
             .financials { background: #f8fafc; padding: 20px; border-radius: 12px; }
             .fin-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
             .fin-row.total { margin-top: 15px; border-top: 1px solid #cbd5e1; padding-top: 15px; font-size: 16px; font-weight: 700; }
-            
             .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #94a3b8; line-height: 1.6; }
           </style>
         </head>
@@ -99,47 +79,18 @@ function PaymentInfoModal({ payment, onClose }) {
               <h1>Payment Receipt</h1>
               <p>${new Date().toLocaleString("en-KE", { dateStyle: "full", timeStyle: "short" })}</p>
             </div>
-
             <div class="status-banner">${statusLabel}</div>
-
-            <div class="row">
-              <span class="label">Service</span>
-              <span class="value">${payment.service_name || payment.service}</span>
-            </div>
-            <div class="row">
-              <span class="label">Provider</span>
-              <span class="value">${payment.provider_name || payment.provider}</span>
-            </div>
-            <div class="row">
-              <span class="label">Date</span>
-              <span class="value">${new Date(payment.appointment_date).toLocaleString("en-KE")}</span>
-            </div>
-            <div class="row">
-              <span class="label">Reference</span>
-              <span class="value">${payment.payment_reference || "N/A"}</span>
-            </div>
-
+            <div class="row"><span class="label">Service</span><span class="value">${payment.service_name || payment.service}</span></div>
+            <div class="row"><span class="label">Provider</span><span class="value">${payment.provider_name || payment.provider}</span></div>
+            <div class="row"><span class="label">Date</span><span class="value">${new Date(payment.appointment_date).toLocaleString("en-KE")}</span></div>
+            <div class="row"><span class="label">Reference</span><span class="value">${payment.payment_reference || "N/A"}</span></div>
             <div class="divider"></div>
-
             <div class="financials">
-              <div class="fin-row">
-                <span class="label">Total Billed</span>
-                <span class="value">KES ${total.toLocaleString()}</span>
-              </div>
-              <div class="fin-row">
-                <span class="label">Total Paid</span>
-                <span class="value">KES ${paid.toLocaleString()}</span>
-              </div>
-              <div class="fin-row total" style="color: ${pending > 0 ? '#dc2626' : '#15803d'}">
-                <span>Balance Due</span>
-                <span>KES ${pending.toLocaleString()}</span>
-              </div>
+              <div class="fin-row"><span class="label">Total Billed</span><span class="value">KES ${total.toLocaleString()}</span></div>
+              <div class="fin-row"><span class="label">Total Paid</span><span class="value">KES ${paid.toLocaleString()}</span></div>
+              <div class="fin-row total" style="color: ${pending > 0 ? '#dc2626' : '#15803d'}"><span>Balance Due</span><span>KES ${pending.toLocaleString()}</span></div>
             </div>
-
-            <div class="footer">
-              Thank you for choosing <strong>${payment.provider_name || "SchedulA"}</strong>.<br/>
-              Please retain this receipt for your records.
-            </div>
+            <div class="footer">Thank you for choosing <strong>${payment.provider_name || "SchedulA"}</strong>.<br/>Please retain this receipt for your records.</div>
           </div>
         </body>
       </html>
@@ -159,37 +110,21 @@ function PaymentInfoModal({ payment, onClose }) {
           <h3>💳 Payment Receipt</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
-
         <div id="receipt-content" className="receipt-body">
           <p><strong>Service:</strong> {payment.service_name || payment.service}</p>
           <p><strong>Provider:</strong> {payment.provider_name || payment.provider}</p>
           <p><strong>Date:</strong> {new Date(payment.appointment_date).toLocaleString("en-KE")}</p>
           <p><strong>Ref:</strong> {payment.payment_reference || "—"}</p>
-          
-          <p>
-            <strong>Status:</strong> 
-            <span className={`payment-status ${
-              payment.payment_status === 'paid' ? 'paid' : 
-              payment.payment_status === 'deposit-paid' ? 'deposit-paid' : 
-              payment.payment_status === 'refunded' ? 'refunded' : 'unpaid'
-            }`}>
-              {payment.payment_status === 'paid' ? 'Fully Paid' : 
-               payment.payment_status === 'deposit-paid' ? 'Deposit Paid' :
-               payment.payment_status === 'refunded' ? 'Refunded' : 'Unpaid'}
+          <p><strong>Status:</strong> 
+            <span className={`payment-status ${payment.payment_status === 'paid' ? 'paid' : payment.payment_status === 'deposit-paid' ? 'deposit-paid' : payment.payment_status === 'refunded' ? 'refunded' : 'unpaid'}`}>
+              {payment.payment_status === 'paid' ? 'Fully Paid' : payment.payment_status === 'deposit-paid' ? 'Deposit Paid' : payment.payment_status === 'refunded' ? 'Refunded' : 'Unpaid'}
             </span>
           </p>
-
           <div style={{ borderTop: "1px dashed #e2e8f0", margin: "8px 0" }}></div>
-
           <p><strong>Total Billed:</strong> KES {total.toLocaleString()}</p>
           <p><strong>Total Paid:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>KES {paid.toLocaleString()}</span></p>
-          <p><strong>Balance:</strong> 
-            <span style={{ color: pending > 0 ? "#b91c1c" : "#15803d", fontWeight: "bold" }}>
-              {" "}KES {pending.toLocaleString()}
-            </span>
-          </p>
+          <p><strong>Balance:</strong> <span style={{ color: pending > 0 ? "#b91c1c" : "#15803d", fontWeight: "bold" }}> KES {pending.toLocaleString()}</span></p>
         </div>
-
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
           <button className="btn btn-primary" onClick={printReceipt}>🖨️ Print Receipt</button>
@@ -216,11 +151,15 @@ function AppointmentManager({ user }) {
   const [activeTab, setActiveTab] = useState(
     user.user_type === "provider" ? "upcoming" : "pending"
   );
+  
+  // ✅ History Filters
+  const [historyFilter, setHistoryFilter] = useState("all"); // 'all', 'completed', 'cancelled'
+
   const [showBooking, setShowBooking] = useState(false);
-  const [showReschedule, setShowReschedule] = useState(false); // ✅ Reschedule Modal State
+  const [showReschedule, setShowReschedule] = useState(false); 
   const [rebookService, setRebookService] = useState(null);
-  const [rescheduleApt, setRescheduleApt] = useState(null); // ✅ Reschedule Target
-  const [processingPayment, setProcessingPayment] = useState(null); // ID of apt being paid
+  const [rescheduleApt, setRescheduleApt] = useState(null); 
+  const [processingPayment, setProcessingPayment] = useState(null); 
 
   useEffect(() => {
     fetchAppointments();
@@ -265,7 +204,6 @@ function AppointmentManager({ user }) {
     setShowBooking(true);
   };
 
-  // ✅ Open Reschedule Modal
   const handleReschedule = (apt) => {
     setRescheduleApt(apt);
     setShowReschedule(true);
@@ -286,7 +224,6 @@ function AppointmentManager({ user }) {
     try {
       const payload = { status };
       if (notes) payload.notes = notes; 
-
       await api.put(`/appointments/${id}`, payload);
       await fetchAppointments();
     } finally {
@@ -313,7 +250,6 @@ function AppointmentManager({ user }) {
     }
   };
 
-  // ✅ PROVIDER: Manual Refund Handler
   const handleProviderRefund = async (appointmentId) => {
     if (!window.confirm("Process refund for this cancelled appointment?")) return;
     setUpdating(appointmentId);
@@ -347,7 +283,6 @@ function AppointmentManager({ user }) {
       setShowReschedule(false);
   };
 
-  // ✅ HANDLER: Paystack Success for Balance Payment
   const handlePaystackSuccess = async (response, apt, paidAmount) => {
     setProcessingPayment(apt.id);
     try {
@@ -397,14 +332,25 @@ function AppointmentManager({ user }) {
     );
   };
 
+  // ✅ Updated Render Logic with Filters
   const renderAppointmentsList = (list, type) => {
-    if (type === "past") {
-      const pastStatuses = ["completed", "cancelled", "no-show", "rebooked"];
-      list = list.filter((apt) => pastStatuses.includes(apt.status));
+    let displayList = list || [];
+
+    // History Logic (formerly 'past')
+    if (type === 'history') {
+      // Use the 'past' array from state
+      displayList = appointments.past || [];
+      
+      // Filter Logic
+      if (historyFilter === 'completed') {
+        displayList = displayList.filter(apt => apt.status === 'completed');
+      } else if (historyFilter === 'cancelled') {
+        displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
+      }
     }
 
-    if (!list || list.length === 0)
-      return <div className="no-appointments">No {type} appointments.</div>;
+    if (!displayList || displayList.length === 0)
+      return <div className="no-appointments">No {type === 'history' ? historyFilter : type} appointments found.</div>;
 
     const calculateTotals = (apt) => {
       const selectedAddons = parseAddons(apt);
@@ -418,13 +364,12 @@ function AppointmentManager({ user }) {
       const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
       const pending = Math.max(total - paid, 0);
 
-      // ✅ RETURN ALL NEEDED VALUES
       return { basePrice, addonsTotal, total, deposit, paid, pending, selectedAddons };
     };
 
     return (
       <div className="appointments-list">
-        {list.map((apt) => {
+        {displayList.map((apt) => {
            const { basePrice, addonsTotal, total, deposit, paid, pending } = calculateTotals(apt);
 
            const paystackConfig = {
@@ -440,12 +385,11 @@ function AppointmentManager({ user }) {
              }
            };
 
-           // ✅ Handle Status Change (Provider Block on Unpaid)
            const handleStatusChange = (e) => {
              const newStatus = e.target.value;
              if (newStatus === 'completed' && pending > 0) {
                alert(`⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`);
-               return; // STOP execution
+               return; 
              }
              handleStatusUpdate(apt.id, newStatus);
            };
@@ -458,9 +402,8 @@ function AppointmentManager({ user }) {
               }`}
             >
               <div className="appointment-info">
-                {type === 'past' && getStatusBadge(apt.status)}
+                {type === 'history' && getStatusBadge(apt.status)}
 
-                {/* ✅ REFUND STATUS BADGE */}
                 {apt.refund_status && (
                   <div className={`refund-status-badge ${apt.refund_status}`}>
                     {apt.refund_status === 'completed' && '✅ Refunded'}
@@ -487,7 +430,6 @@ function AppointmentManager({ user }) {
                   </p>
                 )}
 
-                {/* 💳 Payment Details */}
                 <div className="payment-details">
                   <p className="payment-line">
                     <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
@@ -529,7 +471,6 @@ function AppointmentManager({ user }) {
                       <strong>Balance:</strong> KES {pending.toLocaleString()}
                     </p>
 
-                    {/* ✅ PAYSTACK BUTTONS (Only if not cancelled/refunded) */}
                     {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && apt.payment_status !== 'refunded' && (
                        <PaystackButton
                          {...paystackConfig}
@@ -575,11 +516,9 @@ function AppointmentManager({ user }) {
                 </div>
               </div>
 
-              {/* ACTIONS */}
               <div className="appointment-actions">
                 {user.user_type === "client" ? (
                   <>
-                    {/* ✅ CLIENT RESCHEDULE BUTTONS */}
                     {apt.status === "pending" && (
                         <>
                             <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
@@ -614,27 +553,13 @@ function AppointmentManager({ user }) {
                   </>
                 ) : (
                   <>
-                    {/* Provider Pending Controls */}
                     {apt.status === "pending" && type === "pending" && (
                       <div className="status-action-row">
-                        <button
-                          className="btn-status confirm"
-                          onClick={() => handleStatusUpdate(apt.id, "scheduled")}
-                          disabled={updating === apt.id}
-                        >
-                          {updating === apt.id ? "Updating..." : "Confirm"}
-                        </button>
-                        <button
-                          className="btn-status reject"
-                          onClick={() => handleReject(apt.id)} 
-                          disabled={updating === apt.id}
-                        >
-                          Reject
-                        </button>
+                        <button className="btn-status confirm" onClick={() => handleStatusUpdate(apt.id, "scheduled")} disabled={updating === apt.id}>{updating === apt.id ? "..." : "Confirm"}</button>
+                        <button className="btn-status reject" onClick={() => handleReject(apt.id)} disabled={updating === apt.id}>Reject</button>
                       </div>
                     )}
 
-                    {/* ✅ PROVIDER REFUND BUTTON (For Client Cancellations) */}
                     {apt.status === 'cancelled' && apt.refund_status === 'pending' && (
                       <button
                         className="btn btn-success small-btn"
@@ -646,27 +571,24 @@ function AppointmentManager({ user }) {
                       </button>
                     )}
 
-                    {/* Provider Upcoming Controls with COMPLETE LOCK */}
                     {type === "upcoming" && apt.status === "scheduled" && (
                       <div className="status-dropdown-container">
                         <select
                           value={apt.status}
-                          onChange={handleStatusChange} // ✅ Uses the protected handler
+                          onChange={handleStatusChange} 
                           disabled={updating === apt.id}
                           className="status-select"
                         >
                           <option value="scheduled">Scheduled</option>
-                          <option value="completed">
-                            {pending > 0 ? "🔒 Completed (Pay Balance First)" : "Completed"}
-                          </option>
+                          <option value="completed">{pending > 0 ? "🔒 Completed (Pay Balance First)" : "Completed"}</option>
                           <option value="cancelled">Cancelled</option>
                           <option value="no-show">No Show</option>
                         </select>
                       </div>
                     )}
 
-                    {/* Provider Past Controls */}
-                    {type === "past" && (
+                    {/* History Actions */}
+                    {type === "history" && (
                       <div className="action-row">
                         <button
                           className="btn btn-danger small-btn"
@@ -686,41 +608,59 @@ function AppointmentManager({ user }) {
     );
   };
 
-  if (loading)
-    return (
-      <div className="appointment-manager">
-        <div className="container">
-          <div className="loading">Loading appointments...</div>
-        </div>
-      </div>
-    );
+  if (loading) return <div className="loading">Loading appointments...</div>;
 
-  const tabs =
-    user.user_type === "client"
-      ? ["pending", "scheduled", "past"]
-      : ["pending", "upcoming", "past"];
+  // ✅ Tabs Configuration
+  const tabs = user.user_type === "client" 
+    ? ["pending", "scheduled", "history"] // Renamed 'past' to 'history'
+    : ["pending", "upcoming", "history"];
 
   return (
     <div className="appointment-manager">
       <div className="container">
         <h2>
-          {user.user_type === "provider"
-            ? "Manage Appointments"
-            : "My Appointments"}
+          {user.user_type === "provider" ? "Manage Appointments" : "My Appointments"}
         </h2>
 
+        {/* ✅ Main Tabs */}
         <div className="tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)} (
-              {appointments[tab]?.length || 0})
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            const count = tab === 'history' ? appointments.past?.length : appointments[tab]?.length;
+            return (
+                <button
+                key={tab}
+                className={`tab-btn ${activeTab === tab ? "active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+                >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count || 0})
+                </button>
+            )
+          })}
         </div>
+
+        {/* ✅ History Filters (Only shown when History tab is active) */}
+        {activeTab === 'history' && (
+          <div className="history-filters">
+            <button 
+              className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} 
+              onClick={() => setHistoryFilter('all')}
+            >
+              All
+            </button>
+            <button 
+              className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} 
+              onClick={() => setHistoryFilter('completed')}
+            >
+              Completed
+            </button>
+            <button 
+              className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} 
+              onClick={() => setHistoryFilter('cancelled')}
+            >
+              Cancelled
+            </button>
+          </div>
+        )}
 
         <div className="tab-content">
           {renderAppointmentsList(appointments[activeTab], activeTab)}
@@ -735,7 +675,6 @@ function AppointmentManager({ user }) {
           />
         )}
 
-        {/* ✅ Reschedule Modal Integration */}
         {showReschedule && (
           <RescheduleModal 
             appointment={rescheduleApt} 

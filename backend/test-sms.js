@@ -9,7 +9,7 @@ import {
 // ---------------------------------------------------------
 const mockClient = {
     name: "Lebu Tester",
-    phone: "+254719307452" // 👈 Ensure this matches your Simulator number
+    phone: "+254719307452" // 👈 Ensure this matchber
 };
 
 const mockProvider = {
