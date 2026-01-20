@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { db } from '../config/database.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { createNotification } from '../services/notificationService.js'; // ✅ IMPORTED
 
 const router = express.Router();
 
@@ -51,8 +52,13 @@ router.post(
           function (err) {
             if (err) return res.status(500).json({ error: 'Failed to create user' });
 
+            const newUserId = this.lastID;
+
+            // 🔔 Welcome Notification
+            createNotification(newUserId, 'system', 'Welcome to Schedula!', `Hello ${name}, your account has been successfully created.`);
+
             const token = jwt.sign(
-              { userId: this.lastID, email, user_type },
+              { userId: newUserId, email, user_type },
               process.env.JWT_SECRET,
               { expiresIn: '24h' }
             );
@@ -61,7 +67,7 @@ router.post(
               message: 'User created successfully',
               token,
               user: {
-                id: this.lastID,
+                id: newUserId,
                 email,
                 name,
                 user_type,
@@ -173,6 +179,10 @@ router.put('/profile', authenticateToken, [
         [name, phone, business_name || null, req.user.userId],
         function(err) {
             if (err) return res.status(500).json({ error: "Failed to update profile" });
+            
+            // 🔔 Notification
+            createNotification(req.user.userId, 'system', 'Profile Updated', 'Your profile details have been successfully updated.');
+
             res.json({ message: "Profile updated", user: { name, phone, business_name } });
         }
     );
@@ -200,6 +210,10 @@ router.put('/password', authenticateToken, [
         const hashed = await bcrypt.hash(newPassword, 12);
         db.run('UPDATE users SET password = ? WHERE id = ?', [hashed, userId], (err2) => {
             if (err2) return res.status(500).json({ error: "Failed to update password" });
+            
+            // 🔔 Notification
+            createNotification(userId, 'system', 'Password Changed', 'Your account password was recently changed.');
+
             res.json({ message: "Password changed successfully" });
         });
     });
@@ -217,6 +231,10 @@ router.put('/notifications', authenticateToken, (req, res) => {
         [JSON.stringify(safePrefs), req.user.userId],
         function(err) {
             if (err) return res.status(500).json({ error: "Failed to save preferences" });
+            
+            // 🔔 Notification
+            createNotification(req.user.userId, 'system', 'Settings Updated', 'Your notification preferences have been saved.');
+
             res.json({ message: "Settings saved", preferences: safePrefs });
         }
     );
@@ -245,6 +263,10 @@ router.put(
       [opening_time, closing_time, req.user.userId],
       function (err) {
         if (err) return res.status(500).json({ error: 'Failed to update hours' });
+        
+        // 🔔 Notification
+        createNotification(req.user.userId, 'system', 'Schedule Update', `Your business hours are now ${opening_time} - ${closing_time}.`);
+
         res.json({ message: 'Business hours updated' });
       }
     );

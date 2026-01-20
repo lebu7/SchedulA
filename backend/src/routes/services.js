@@ -2,6 +2,7 @@ import express from "express";
 import { body, validationResult } from "express-validator";
 import { db } from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
+import { createNotification } from '../services/notificationService.js'; // ✅ IMPORTED
 
 const router = express.Router();
 
@@ -140,6 +141,9 @@ router.post(
         const newServiceId = this.lastID;
         console.log("✅ New service created with ID:", newServiceId);
 
+        // 🔔 Notification
+        createNotification(provider_id, 'system', 'Service Created', `You have successfully added '${name}' to your services.`);
+
         db.get(
           `SELECT s.*, 
                   u.name AS provider_name, 
@@ -203,6 +207,9 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
       if (this.changes === 0)
         return res.status(404).json({ error: "Service not found" });
       
+      // 🔔 Notification
+      createNotification(provider_id, 'system', 'Service Updated', `You updated details for service ID #${serviceId}.`);
+
       // Return updated object
       db.get('SELECT * FROM services WHERE id = ?', [serviceId], (e, row) => {
           res.json({ message: "Service updated successfully", service: row });
@@ -243,6 +250,11 @@ router.patch(
         if (this.changes === 0) {
           return res.status(404).json({ error: "Service not found or not owned by you" });
         }
+
+        // 🔔 Notification
+        const statusText = closedValue ? "Closed" : "Opened";
+        createNotification(providerId, 'system', 'Service Status Changed', `Service ID #${serviceId} is now ${statusText}.`);
+
         res.json({
           message: closedValue
             ? "✅ Service closed successfully."
@@ -295,6 +307,10 @@ router.patch(
           .json({ error: "Failed to toggle business closure" });
       }
 
+      // 🔔 Notification
+      const statusText = is_closed ? "Closed" : "Reopened";
+      createNotification(req.user.userId, 'system', 'Business Status Updated', `You have ${statusText} your business. Services updated accordingly.`);
+
       res.json({
         message: is_closed
           ? "✅ Business closed — all active services have been temporarily closed."
@@ -325,6 +341,10 @@ router.delete(
           return res.status(500).json({ error: "Failed to delete service" });
         if (this.changes === 0)
           return res.status(404).json({ error: "Service not found" });
+        
+        // 🔔 Notification
+        createNotification(provider_id, 'system', 'Service Deleted', `Service ID #${serviceId} has been removed.`);
+
         res.json({ message: "Service deleted successfully" });
       }
     );
@@ -367,6 +387,10 @@ router.post(
                 .status(500)
                 .json({ error: "Failed to add sub-service" });
             }
+            
+            // 🔔 Notification
+            createNotification(providerId, 'system', 'Sub-service Added', `Added '${name}' to Service ID #${serviceId}.`);
+
             res.status(201).json({
               message: "Sub-service created",
               sub_service: {
@@ -402,6 +426,8 @@ router.delete(
   requireRole("provider"),
   (req, res) => {
     const { serviceId, subId } = req.params;
+    const providerId = req.user.userId;
+
     db.run(
       "DELETE FROM sub_services WHERE id = ? AND service_id = ?",
       [subId, serviceId],
@@ -410,6 +436,10 @@ router.delete(
           return res.status(500).json({ error: "Failed to delete sub-service" });
         if (this.changes === 0)
           return res.status(404).json({ error: "Sub-service not found" });
+        
+        // 🔔 Notification
+        createNotification(providerId, 'system', 'Sub-service Deleted', `Sub-service ID #${subId} removed.`);
+
         res.json({ message: "Sub-service deleted successfully" });
       }
     );
@@ -423,6 +453,7 @@ router.put(
   (req, res) => {
     const { serviceId, subId } = req.params;
     const { name, description, price } = req.body;
+    const providerId = req.user.userId;
 
     if (!name || price === undefined) {
       return res.status(400).json({ error: "Name and price are required" });
@@ -441,6 +472,10 @@ router.put(
         if (this.changes === 0) {
           return res.status(404).json({ error: "Sub-service not found" });
         }
+
+        // 🔔 Notification
+        createNotification(providerId, 'system', 'Sub-service Updated', `Updated sub-service: ${name}.`);
+
         res.json({
           message: "Sub-service updated successfully",
           sub_service: { id: subId, name, description, price: price },
