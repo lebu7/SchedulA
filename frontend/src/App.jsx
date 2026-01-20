@@ -64,12 +64,15 @@ function App() {
                 !user ? <Register onLogin={handleLogin} /> : <Navigate to="/dashboard" />
               } 
             />
+            
+            {/* ✅ FIX: Pass 'setUser' here so Dashboard can update the profile */}
             <Route 
               path="/dashboard" 
               element={
-                user ? <Dashboard user={user} /> : <Navigate to="/login" />
+                user ? <Dashboard user={user} setUser={setUser} /> : <Navigate to="/login" />
               } 
             />
+            
             <Route 
               path="/" 
               element={<Navigate to={user ? "/dashboard" : "/login"} />} 

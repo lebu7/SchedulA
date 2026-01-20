@@ -37,11 +37,17 @@ router.post(
         // Add default business hours for providers
         const defaultOpening = user_type === 'provider' ? '08:00' : null;
         const defaultClosing = user_type === 'provider' ? '18:00' : null;
+        
+        // Default Notification Preferences (All ON)
+        const defaultPrefs = JSON.stringify({
+            confirmation: true, acceptance: true, reminder: true, 
+            cancellation: true, receipt: true, new_request: true 
+        });
 
         db.run(
-          `INSERT INTO users (email, password, name, phone, user_type, business_name, opening_time, closing_time)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [email, hashedPassword, name, phone, user_type, business_name, defaultOpening, defaultClosing],
+          `INSERT INTO users (email, password, name, phone, user_type, business_name, opening_time, closing_time, notification_preferences)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [email, hashedPassword, name, phone, user_type, business_name, defaultOpening, defaultClosing, defaultPrefs],
           function (err) {
             if (err) return res.status(500).json({ error: 'Failed to create user' });
 
@@ -104,6 +110,10 @@ router.post(
           { expiresIn: '24h' }
         );
 
+        // Parse notification preferences safely
+        let prefs = {};
+        try { prefs = JSON.parse(user.notification_preferences || '{}'); } catch(e){}
+
         res.json({
           message: 'Login successful',
           token,
@@ -115,7 +125,8 @@ router.post(
             business_name: user.business_name,
             phone: user.phone,
             opening_time: user.opening_time || '08:00',
-            closing_time: user.closing_time || '18:00'
+            closing_time: user.closing_time || '18:00',
+            notification_preferences: prefs // ✅ Return prefs
           }
         });
       });
@@ -131,55 +142,110 @@ router.post(
 router.get('/profile', authenticateToken, (req, res) => {
   db.get(
     `SELECT id, email, name, phone, user_type, business_name, 
-            opening_time, closing_time, created_at 
+            opening_time, closing_time, notification_preferences, created_at 
      FROM users WHERE id = ?`,
     [req.user.userId],
     (err, user) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!user) return res.status(404).json({ error: 'User not found' });
+      
+      // Parse JSON for frontend
+      try { user.notification_preferences = JSON.parse(user.notification_preferences || '{}'); } catch(e) {}
+      
       res.json({ user });
     }
   );
 });
 
 /* ---------------------------------------------
-   ✅ NEW: Update Provider Business Hours
-   Endpoint used by frontend ServiceManager.jsx
-   Method: PUT /auth/business-hours
+   ✅ UPDATE PROFILE (Name, Phone, Business)
+--------------------------------------------- */
+router.put('/profile', authenticateToken, [
+    body('name').notEmpty(),
+    body('phone').matches(/^\+254\d{9}$/).withMessage('Phone must start with +254 and have 9 digits (e.g., +254712345678)'),
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, phone, business_name } = req.body;
+    db.run(
+        `UPDATE users SET name = ?, phone = ?, business_name = ? WHERE id = ?`,
+        [name, phone, business_name || null, req.user.userId],
+        function(err) {
+            if (err) return res.status(500).json({ error: "Failed to update profile" });
+            res.json({ message: "Profile updated", user: { name, phone, business_name } });
+        }
+    );
+});
+
+/* ---------------------------------------------
+   ✅ CHANGE PASSWORD
+--------------------------------------------- */
+router.put('/password', authenticateToken, [
+    body('currentPassword').notEmpty(),
+    body('newPassword').isLength({ min: 6 })
+], (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.userId;
+
+    db.get('SELECT password FROM users WHERE id = ?', [userId], async (err, user) => {
+        if (err || !user) return res.status(404).json({ error: "User not found" });
+
+        const valid = await bcrypt.compare(currentPassword, user.password);
+        if (!valid) return res.status(400).json({ error: "Current password is incorrect" });
+
+        const hashed = await bcrypt.hash(newPassword, 12);
+        db.run('UPDATE users SET password = ? WHERE id = ?', [hashed, userId], (err2) => {
+            if (err2) return res.status(500).json({ error: "Failed to update password" });
+            res.json({ message: "Password changed successfully" });
+        });
+    });
+});
+
+/* ---------------------------------------------
+   ✅ UPDATE NOTIFICATION PREFERENCES
+--------------------------------------------- */
+router.put('/notifications', authenticateToken, (req, res) => {
+    const { preferences } = req.body;
+    const safePrefs = { ...preferences, confirmation: true }; // Force confirmation ON
+
+    db.run(
+        `UPDATE users SET notification_preferences = ? WHERE id = ?`,
+        [JSON.stringify(safePrefs), req.user.userId],
+        function(err) {
+            if (err) return res.status(500).json({ error: "Failed to save preferences" });
+            res.json({ message: "Settings saved", preferences: safePrefs });
+        }
+    );
+});
+
+/* ---------------------------------------------
+   ✅ UPDATE BUSINESS HOURS (Provider Only)
 --------------------------------------------- */
 router.put(
   '/business-hours',
   authenticateToken,
   requireRole('provider'),
   [
-    body('opening_time')
-      .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-      .withMessage('Invalid opening time format (HH:MM)'),
-    body('closing_time')
-      .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-      .withMessage('Invalid closing time format (HH:MM)')
+    body('opening_time').matches(/^([01]\d|2[0-3]):([0-5]\d)$/).withMessage('Invalid opening time (HH:MM)'),
+    body('closing_time').matches(/^([01]\d|2[0-3]):([0-5]\d)$/).withMessage('Invalid closing time (HH:MM)')
   ],
   (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { opening_time, closing_time } = req.body;
-    const providerId = req.user.userId;
-
-    if (closing_time <= opening_time) {
-      return res.status(400).json({ error: 'Closing time must be later than opening time' });
-    }
+    if (closing_time <= opening_time) return res.status(400).json({ error: 'Closing time must be later than opening time' });
 
     db.run(
-      `UPDATE users SET opening_time = ?, closing_time = ? WHERE id = ? AND user_type = 'provider'`,
-      [opening_time, closing_time, providerId],
+      `UPDATE users SET opening_time = ?, closing_time = ? WHERE id = ?`,
+      [opening_time, closing_time, req.user.userId],
       function (err) {
-        if (err) return res.status(500).json({ error: 'Failed to update business hours' });
-        if (this.changes === 0) return res.status(404).json({ error: 'Provider not found' });
-
-        res.json({ message: 'Business hours updated successfully' });
+        if (err) return res.status(500).json({ error: 'Failed to update hours' });
+        res.json({ message: 'Business hours updated' });
       }
     );
   }

@@ -27,7 +27,7 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 
 function initializeDatabase() {
   /* ---------------------------------------------
-     🧱 USERS TABLE (with business hours)
+     🧱 USERS TABLE (with business hours & prefs)
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -40,6 +40,7 @@ function initializeDatabase() {
       business_name TEXT,
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
+      notification_preferences TEXT, -- ✅ NEW COLUMN
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
@@ -81,10 +82,15 @@ function initializeDatabase() {
       provider_id INTEGER NOT NULL,
       service_id INTEGER NOT NULL,
       appointment_date DATETIME NOT NULL,
-      status TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled','completed','cancelled','no-show','rebooked')),
+      status TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled','completed','cancelled','no-show','rebooked','pending')),
       notes TEXT,
       client_deleted BOOLEAN DEFAULT 0,
       provider_deleted BOOLEAN DEFAULT 0,
+      payment_status TEXT DEFAULT 'unpaid',
+      payment_reference TEXT,
+      amount_paid REAL DEFAULT 0,
+      total_price REAL DEFAULT 0,
+      reminder_sent INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES users (id),
       FOREIGN KEY (provider_id) REFERENCES users (id),
@@ -96,13 +102,13 @@ function initializeDatabase() {
   });
 
   /* ---------------------------------------------
-     📱 SMS LOGS TABLE (NEW for SMS Integration)
+     📱 SMS LOGS TABLE
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS sms_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       recipient_phone TEXT NOT NULL,
-      message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general')),
+      message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance')),
       message_content TEXT,
       status TEXT CHECK(status IN ('sent', 'failed', 'error')),
       details TEXT, -- JSON string with API response
@@ -114,11 +120,12 @@ function initializeDatabase() {
   });
 
   /* ---------------------------------------------
-     🔍 Ensure missing columns exist
+     🔍 Ensure missing columns exist (MIGRATIONS)
   --------------------------------------------- */
   // users
   tryAddColumn('users', 'opening_time', "TEXT DEFAULT '08:00'");
   tryAddColumn('users', 'closing_time', "TEXT DEFAULT '18:00'");
+  tryAddColumn('users', 'notification_preferences', "TEXT"); // ✅ Added Migration
 
   // services
   tryAddColumn('services', 'opening_time', "TEXT DEFAULT '08:00'");
@@ -126,11 +133,8 @@ function initializeDatabase() {
   tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
   tryAddColumn('services', 'is_closed', "INTEGER DEFAULT 0");
 
-  // appointments (New columns for SMS & Payment features)
-  tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0"); // 👈 Added for SMS reminders
-  
-  // Note: These payment columns are often handled by migration logic in routes, 
-  // but adding them here ensures safety if the table is fresh.
+  // appointments
+  tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0");
   tryAddColumn('appointments', 'payment_status', "TEXT DEFAULT 'unpaid'");
   tryAddColumn('appointments', 'payment_reference', "TEXT");
   tryAddColumn('appointments', 'amount_paid', "REAL DEFAULT 0");
