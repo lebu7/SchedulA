@@ -104,16 +104,22 @@ async function sendSMS(phoneNumber, message) {
 
 // --- Exports ---
 
+// ✅ UPDATED: Includes Amount Paid & Pending Balance
 export async function sendBookingConfirmation(appointment, client, service, provider) {
-  if (!shouldSend(client, 'confirmation')) return; // Check Prefs
+  if (!shouldSend(client, 'confirmation')) return; 
 
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
-  const msg = `Booking Received! (Appt #${appointment.id}) for ${service.name} with ${provider.business_name || provider.name} on ${date}. Status: Pending Approval.`;
+  const paid = Number(appointment.amount_paid || 0);
+  const total = Number(appointment.total_price || 0);
+  const pending = total - paid;
+
+  const msg = `Booking Received! (Appt #${appointment.id}) for ${service.name} on ${date}. Paid: KES ${paid}. Pending: KES ${pending}. Status: Waiting Approval.`;
+  
   return await sendSMS(client.phone, msg);
 }
 
 export async function sendBookingAccepted(appointment, client, service, provider) {
-    if (!shouldSend(client, 'acceptance')) return; // Check Prefs
+    if (!shouldSend(client, 'acceptance')) return; 
 
     const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
     const msg = `Good News! Your booking for ${service.name} (Appt #${appointment.id}) with ${provider.business_name || provider.name} on ${date} is ACCEPTED.`;
@@ -121,7 +127,7 @@ export async function sendBookingAccepted(appointment, client, service, provider
 }
 
 export async function sendAppointmentReminder(appointment, client, service, provider) {
-  if (!shouldSend(client, 'reminder')) return; // Check Prefs
+  if (!shouldSend(client, 'reminder')) return;
   
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { timeStyle: 'short' });
   const msg = `Reminder: Appointment tomorrow (Appt #${appointment.id}) at ${date} for ${service.name} with ${provider.business_name || provider.name}.`;
@@ -129,14 +135,14 @@ export async function sendAppointmentReminder(appointment, client, service, prov
 }
 
 export async function sendPaymentReceipt(appointment, client, service) {
-  if (!shouldSend(client, 'receipt')) return; // Check Prefs
+  if (!shouldSend(client, 'receipt')) return;
   
   const msg = `Payment Received: KES ${appointment.amount_paid} for Appt #${appointment.id} (${service.name}). Ref: ${appointment.payment_reference}. Thanks!`;
   return await sendSMS(client.phone, msg);
 }
 
 export async function sendCancellationNotice(appointment, client, service, reason) {
-  if (!shouldSend(client, 'cancellation')) return; // Check Prefs
+  if (!shouldSend(client, 'cancellation')) return;
   
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' });
   const msg = `Update: Appt #${appointment.id} for ${service.name} on ${date} has been CANCELLED.${reason ? ' Reason: ' + reason : ''}`;
@@ -144,7 +150,7 @@ export async function sendCancellationNotice(appointment, client, service, reaso
 }
 
 export async function sendProviderNotification(appointment, provider, client, service) {
-  if (!shouldSend(provider, 'new_request')) return; // Check Prefs
+  if (!shouldSend(provider, 'new_request')) return;
   
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' });
   const msg = `New Booking Request (Appt #${appointment.id}): ${client.name} for ${service.name} on ${date}. Log in to Accept/Reject.`;
@@ -158,7 +164,6 @@ export async function sendScheduledReminders() {
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
     const windowEnd = new Date(now.getTime() + 26 * 60 * 60 * 1000).toISOString();
 
-    // ✅ FETCH PREFERENCES
     db.all(
       `SELECT a.*, 
               c.phone as client_phone, c.name as client_name, c.notification_preferences as client_prefs,
