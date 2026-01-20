@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../services/auth";
-import "./BookingModal.css"; // Reuse styling
+import "./BookingModal.css"; // Reuse existing styles
 
 function RescheduleModal({ appointment, onClose, onSuccess }) {
   const [selectedDate, setSelectedDate] = useState("");
@@ -9,9 +9,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // Initialize with current appointment date? Optional.
-  // Better to force them to pick.
 
   useEffect(() => {
     if (selectedDate) {
@@ -37,8 +34,7 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
           res.data.opening_time, 
           res.data.closing_time, 
           res.data.booked_slots || [],
-          appointment.duration // Assuming duration is passed in appointment prop or we fetch it?
-          // appointment object from list usually has duration
+          appointment.duration
         );
       }
     } catch (err) {
@@ -59,11 +55,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     end.setHours(closeH, closeM, 0, 0);
 
     const now = new Date(); 
-    // Assuming appointment object has service capacity, otherwise default 1.
-    // Ideally we fetch service details, but let's assume passed prop or default 1 for now if unavailable.
-    // Wait, the availability endpoint returns booked_slots. Capacity check is tricky on frontend without service capacity.
-    // Let's assume capacity 1 for visualization or just show all and let backend reject if full.
-    // Better: Backend check is definitive.
 
     while (current < end) {
       const timeString = current.toTimeString().slice(0, 5);
@@ -76,16 +67,12 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
                (timeStringEnd > booking.start && timeStringEnd <= booking.end) || 
                (timeString <= booking.start && timeStringEnd >= booking.end); 
       }).length;
-
-      // We don't have capacity here easily without fetching service. 
-      // We will show slots as available unless explicitly blocked by closed day.
-      // Real check happens on submit.
       
       const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
 
       generated.push({
         time: timeString,
-        available: !isPast // && overlapCount < capacity (if we had it)
+        available: !isPast 
       });
 
       current.setMinutes(current.getMinutes() + 30);
@@ -114,55 +101,85 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
 
   const getMinDate = () => {
     const today = new Date();
-    today.setDate(today.getDate() + 1); // Earliest tomorrow? Or today? Let's say tomorrow to be safe or today if logic supports.
+    today.setDate(today.getDate() + 1); 
     return today.toISOString().split("T")[0];
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content booking-modal" onClick={(e) => e.stopPropagation()}>
+        {/* HEADER */}
         <div className="modal-header">
-          <h3>Reschedule Appointment</h3>
+          <div>
+            <h3>Reschedule Appointment</h3>
+            <span className="subtitle">Select a new date and time</span>
+          </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
 
+        {/* BODY */}
         <div className="modal-body">
-          <p><strong>Service:</strong> {appointment.service_name}</p>
-          <p><strong>Current:</strong> {new Date(appointment.appointment_date).toLocaleString()}</p>
-          <hr />
-
-          <div className="form-group">
-            <label>Select New Date</label>
-            <input type="date" className="styled-input" value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(""); }} min={getMinDate()} />
+          <div className="service-quick-info">
+            <div className="info-pill">
+              <i className="fa fa-calendar"></i> 
+              Current: {new Date(appointment.appointment_date).toLocaleString()}
+            </div>
+            <div className="info-pill">
+              <i className="fa fa-clock-o"></i> 
+              {appointment.duration} mins
+            </div>
           </div>
 
-          <div className="form-group">
-            <label>Select New Time</label>
-            {loading ? <p>Loading slots...</p> : (
-              <div className="time-grid">
-                {slots.map((slot) => (
-                  <button 
-                    key={slot.time} 
-                    type="button" 
-                    className={`time-slot ${selectedTime === slot.time ? 'selected' : ''}`} 
-                    disabled={!slot.available} 
-                    onClick={() => setSelectedTime(slot.time)}
-                  >
-                    {slot.time}
-                  </button>
-                ))}
-              </div>
-            )}
-            {error && <p className="error-text">{error}</p>}
-          </div>
+          <div className="booking-form">
+            <div className="form-group">
+              <label>Select New Date</label>
+              <input 
+                type="date" 
+                className="styled-input" 
+                value={selectedDate} 
+                onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(""); }} 
+                min={getMinDate()} 
+              />
+            </div>
 
-          <button 
-            className="btn btn-primary btn-block" 
-            onClick={handleConfirm} 
-            disabled={!selectedTime || saving}
-          >
-            {saving ? "Rescheduling..." : "Confirm New Time"}
-          </button>
+            <div className="form-group">
+              <label>Select New Time</label>
+              {loading ? (
+                <p className="hint">Loading availability...</p>
+              ) : !selectedDate ? (
+                <p className="hint">Please select a date first.</p>
+              ) : (
+                <div className="time-grid">
+                  {slots.map((slot) => (
+                    <button 
+                      key={slot.time} 
+                      type="button" 
+                      className={`time-slot ${selectedTime === slot.time ? 'selected' : ''}`} 
+                      disabled={!slot.available} 
+                      onClick={() => setSelectedTime(slot.time)}
+                    >
+                      {slot.time}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {error && <p className="hint error">{error}</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* FOOTER */}
+        <div className="modal-footer">
+          <button className="btn btn-text" onClick={onClose} disabled={saving}>Cancel</button>
+          <div className="pay-btn-wrapper">
+            <button 
+              className="btn btn-primary btn-block" 
+              onClick={handleConfirm} 
+              disabled={!selectedTime || saving}
+            >
+              {saving ? "Updating..." : "Confirm New Time"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
