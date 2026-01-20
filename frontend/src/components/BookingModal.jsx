@@ -379,6 +379,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                     <div className="price-breakdown">
                       <div className="breakdown-total"><span>Total</span><span>KES {totalPrice.toLocaleString()}</span></div>
                     </div>
+                    
+                    {/* ✅ ADDED POLICY TEXT HERE */}
+                    <div className="policy-text" style={{ fontSize: '0.85em', color: '#666', marginTop: '10px', lineHeight: '1.4', background: '#f9f9f9', padding: '8px', borderRadius: '4px', borderLeft: '3px solid #007bff' }}>
+                      <strong>Policy:</strong> Refunds are processed for cancellations made <em>before</em> the appointment time. The deposit secures your spot; <strong>no-shows are non-refundable</strong>.
+                    </div>
+
                   </div>
                 </div>
 
