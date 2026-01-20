@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { PaystackButton } from "react-paystack";
+import { useLocation } from "react-router-dom"; // ✅ Import useLocation
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
@@ -138,6 +139,7 @@ function PaymentInfoModal({ payment, onClose }) {
    MAIN APPOINTMENT MANAGER
 =============================== */
 function AppointmentManager({ user }) {
+  const location = useLocation(); // ✅ Hook for navigation state
   const [appointments, setAppointments] = useState({
     pending: [],
     scheduled: [],
@@ -145,15 +147,19 @@ function AppointmentManager({ user }) {
     past: [],
   });
   const [loading, setLoading] = useState(true);
+  
+  // ✅ Initialize activeTab based on Navigation State or Default
+  const [activeTab, setActiveTab] = useState(() => {
+    if (location.state?.subTab) return location.state.subTab;
+    return user.user_type === "provider" ? "upcoming" : "pending";
+  });
+
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
-  const [activeTab, setActiveTab] = useState(
-    user.user_type === "provider" ? "upcoming" : "pending"
-  );
   
   // ✅ History Filters
-  const [historyFilter, setHistoryFilter] = useState("all"); // 'all', 'completed', 'cancelled'
+  const [historyFilter, setHistoryFilter] = useState("all"); 
 
   const [showBooking, setShowBooking] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false); 
@@ -164,6 +170,52 @@ function AppointmentManager({ user }) {
   useEffect(() => {
     fetchAppointments();
   }, []);
+
+  // ✅ NEW: SMART TAB DETECTION & AUTO-SWITCH
+  // Finds which list the targetId belongs to and switches tabs automatically.
+  useEffect(() => {
+    if (!loading && location.state?.targetId) {
+      const targetId = parseInt(location.state.targetId); // Ensure ID is number
+      
+      // 1. Check Pending
+      const inPending = appointments.pending?.some(a => a.id === targetId);
+      if (inPending) {
+        setActiveTab("pending");
+        return;
+      }
+
+      // 2. Check Scheduled/Upcoming
+      const upcomingList = user.user_type === "client" ? appointments.scheduled : appointments.upcoming;
+      const inUpcoming = upcomingList?.some(a => a.id === targetId);
+      if (inUpcoming) {
+        setActiveTab(user.user_type === "client" ? "scheduled" : "upcoming");
+        return;
+      }
+
+      // 3. Check History/Past
+      const inHistory = appointments.past?.some(a => a.id === targetId);
+      if (inHistory) {
+        setActiveTab("history");
+        setHistoryFilter("all"); // Force filter to 'all' so the card is visible
+        return;
+      }
+    }
+  }, [loading, appointments, location.state, user.user_type]);
+
+  // ✅ AUTO-SCROLL TO APPOINTMENT
+  useEffect(() => {
+    if (!loading && location.state?.targetId) {
+      setTimeout(() => {
+        const element = document.getElementById(`apt-${location.state.targetId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('highlight-target'); // Optional CSS class for emphasis
+          // Remove highlight after animation (optional logic)
+          setTimeout(() => element.classList.remove('highlight-target'), 2000);
+        }
+      }, 700); // Increased delay slightly to allow Tab Switch to render DOM
+    }
+  }, [loading, activeTab, location.state]);
 
   const fetchAppointments = async () => {
     try {
@@ -397,9 +449,10 @@ function AppointmentManager({ user }) {
            return (
             <div
               key={apt.id}
+              id={`apt-${apt.id}`} // ✅ ADDED ID FOR SCROLLING
               className={`appointment-card ${
                 apt.status === "pending" ? "highlight-pending" : ""
-              }`}
+              } ${location.state?.targetId == apt.id ? "highlight-target" : ""}`}
             >
               <div className="appointment-info">
                 {type === 'history' && getStatusBadge(apt.status)}

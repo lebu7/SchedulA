@@ -1,21 +1,30 @@
-import React, { useState } from 'react'
-import ServiceList from './ServiceList'
-import ServiceManager from './ServiceManager'
-import AppointmentManager from './AppointmentManager'
-import Settings from './Settings' // ✅ Import Settings
-import './Dashboard.css'
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; // ✅ Import useLocation
+import ServiceList from './ServiceList';
+import ServiceManager from './ServiceManager';
+import AppointmentManager from './AppointmentManager';
+import Settings from './Settings';
+import './Dashboard.css';
 
-function Dashboard({ user, setUser }) { // ✅ Accept setUser prop to update global state
-  const [activeTab, setActiveTab] = useState('overview')
+function Dashboard({ user, setUser }) {
+  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation(); // ✅ Hook to access navigation state
+
+  // ✅ LISTEN FOR NAVIGATION STATE
+  useEffect(() => {
+    if (location.state?.tab) {
+      setActiveTab(location.state.tab);
+    }
+  }, [location.state]);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'services':
-        return user.user_type === 'client' ? <ServiceList user={user} /> : <ServiceManager user={user} />
+        return user.user_type === 'client' ? <ServiceList user={user} /> : <ServiceManager user={user} />;
       case 'appointments':
-        return <AppointmentManager user={user} />
+        return <AppointmentManager user={user} />;
       case 'settings':
-        return <Settings user={user} setUser={setUser} /> // ✅ Pass setUser
+        return <Settings user={user} setUser={setUser} />;
       case 'overview':
       default:
         return (
@@ -45,9 +54,9 @@ function Dashboard({ user, setUser }) { // ✅ Accept setUser prop to update glo
               </div>
             </div>
           </div>
-        )
+        );
     }
-  }
+  };
 
   return (
     <div className="container">
@@ -61,7 +70,7 @@ function Dashboard({ user, setUser }) { // ✅ Accept setUser prop to update glo
         <div className="dashboard-content">{renderContent()}</div>
       </div>
     </div>
-  )
+  );
 }
 
-export default Dashboard
+export default Dashboard;

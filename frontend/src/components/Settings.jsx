@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; // ✅ Import useLocation
 import api from '../services/auth';
 import './Settings.css';
 
 const Settings = ({ user, setUser }) => {
+  const location = useLocation(); // ✅ Hook for navigation state
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -11,7 +13,7 @@ const Settings = ({ user, setUser }) => {
   const [profile, setProfile] = useState({ name: '', phone: '', business_name: '' });
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   
-  // ✅ ADDED: Refund toggles (default true)
+  // Refund toggles (default true)
   const [notifications, setNotifications] = useState({
     confirmation: true, 
     acceptance: true, 
@@ -23,6 +25,13 @@ const Settings = ({ user, setUser }) => {
   });
   
   const [hours, setHours] = useState({ opening_time: '08:00', closing_time: '18:00' });
+
+  // ✅ DETECT TAB FROM NAVIGATION (Notification Redirection)
+  useEffect(() => {
+    if (location.state?.subTab) {
+      setActiveTab(location.state.subTab); // e.g., 'notifications', 'hours'
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (user) {
@@ -200,7 +209,7 @@ const Settings = ({ user, setUser }) => {
           <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
           <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
           
-          {/* ✅ ADDED: Refund Notification Toggle (Locked) */}
+          {/* Refund Notification Toggle (Locked) */}
           <Toggle 
             label="Refund Notifications" 
             desc="Sent when refunds are processed (Required)" 
@@ -211,7 +220,7 @@ const Settings = ({ user, setUser }) => {
           {user.user_type === 'provider' && (
              <>
                <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
-               {/* ✅ ADDED: Provider Refund Request Toggle (Locked) */}
+               {/* Provider Refund Request Toggle (Locked) */}
                <Toggle 
                  label="Refund Requests" 
                  desc="When clients cancel and request refunds (Required)" 

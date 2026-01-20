@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom"; // ✅ Import useLocation
 import api from "../services/auth";
 import "./ServiceManager.css";
 
 function ServiceManager({ user }) {
   const [services, setServices] = useState([]);
+  const location = useLocation(); // ✅ Hook for navigation state
+
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState(null);
   
-  // ✅ ADDED: capacity field initialized to "1"
+  // ✅ capacity field initialized to "1"
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -33,6 +36,21 @@ function ServiceManager({ user }) {
   useEffect(() => {
     fetchMyServices();
   }, [user.id]);
+
+  // ✅ Auto-scroll to specific service when redirected from notification
+  useEffect(() => {
+    if (services.length > 0 && location.state?.targetId) {
+      setTimeout(() => {
+        const element = document.getElementById(`service-${location.state.targetId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('highlight-target'); // Optional: Add CSS for highlighting
+          // Remove highlight after animation
+          setTimeout(() => element.classList.remove('highlight-target'), 2000);
+        }
+      }, 500); // Small delay to ensure rendering
+    }
+  }, [services, location.state]);
 
   const fetchMyServices = async () => {
     try {
@@ -75,7 +93,7 @@ function ServiceManager({ user }) {
     if (!formData.price || formData.price < 0)
       newErrors.price = "Price must be a positive number";
     
-    // ✅ ADDED: Validation for capacity
+    // ✅ Validation for capacity
     if (!formData.capacity || parseInt(formData.capacity) < 1)
       newErrors.capacity = "Capacity must be at least 1";
 
@@ -93,7 +111,7 @@ function ServiceManager({ user }) {
         ...formData,
         duration: parseInt(formData.duration),
         price: parseFloat(formData.price),
-        capacity: parseInt(formData.capacity), // ✅ ADDED: Send capacity to API
+        capacity: parseInt(formData.capacity), // ✅ Send capacity to API
       };
 
       const res = editingService
@@ -142,7 +160,7 @@ function ServiceManager({ user }) {
       category: service.category,
       duration: service.duration.toString(),
       price: service.price ? service.price.toString() : "",
-      capacity: service.capacity ? service.capacity.toString() : "1", // ✅ ADDED: Load existing capacity
+      capacity: service.capacity ? service.capacity.toString() : "1", // ✅ Load existing capacity
     });
     setErrors({});
     setShowForm(true);
@@ -485,6 +503,7 @@ function ServiceManager({ user }) {
           {services.map((service) => (
             <div
               key={service.id || `temp-${service.name}-${Math.random()}`}
+              id={`service-${service.id}`} // ✅ ADDED ID FOR SCROLLING
               className={`service-item card ${
                 businessClosed || service.is_closed ? "closed-service" : ""
               }`}
