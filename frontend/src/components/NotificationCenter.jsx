@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import api from "../services/auth";
+import api from '../services/auth';
 import { Bell, CheckCheck } from 'lucide-react'; 
 import './NotificationCenter.css';
 
@@ -9,12 +9,14 @@ function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
+  // ✅ UPDATED: Poll every 5 seconds (5000ms) instead of 30 seconds
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
+    const interval = setInterval(fetchNotifications, 5000); 
     return () => clearInterval(interval);
   }, []);
 
+  // Close dropdown if clicked outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -31,13 +33,14 @@ function NotificationCenter() {
       setNotifications(res.data.notifications);
       setUnreadCount(res.data.unread_count);
     } catch (err) {
-      console.error("Failed to load notifications");
+      // Fail silently to avoid console spam during polling
     }
   };
 
   const markAsRead = async (id) => {
     try {
       await api.put(`/notifications/${id}/read`);
+      // Optimistic UI Update
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (err) { console.error(err); }
