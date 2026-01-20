@@ -547,7 +547,7 @@ router.put(
 
 /* ---------------------------------------------
    ✅ Update appointment (Accept/Cancel/Reschedule)
-   With AUTOMATIC REFUND LOGIC & CUSTOM SMS
+   With AUTOMATIC REFUND LOGIC, CUSTOM SMS & RESCHEDULE VALIDATION
 --------------------------------------------- */
 router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -571,93 +571,158 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Appointment status locked.' });
     }
 
-    const updates = [];
-    const params = [];
-    if (status) {
-      updates.push('status = ?');
-      params.push(status);
+    // ✅ RESCHEDULE VALIDATION START
+    if (appointment_date && appointment_date !== apt.appointment_date) {
+        const newDate = new Date(appointment_date);
+        if (newDate <= new Date()) return res.status(400).json({ error: 'New date must be in the future' });
+
+        // 1. Fetch Service Details
+        db.get('SELECT * FROM services WHERE id = ?', [apt.service_id], (sErr, service) => {
+            if (sErr || !service) return res.status(500).json({ error: 'Service details missing' });
+
+            // 2. Check Provider Closed Days
+            const day = newDate.toISOString().split('T')[0];
+            db.get(
+                'SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?',
+                [apt.provider_id, day],
+                (cErr, closedDay) => {
+                    if (closedDay) return res.status(400).json({ error: `Provider closed on ${day}` });
+
+                    // 3. Check Business Hours
+                    db.get(
+                        `SELECT opening_time, closing_time FROM users WHERE id = ?`,
+                        [apt.provider_id],
+                        (hErr, provider) => {
+                            if (hErr) return res.status(500).json({ error: 'Error checking hours' });
+                            
+                            const open = provider?.opening_time || '08:00';
+                            const close = provider?.closing_time || '18:00';
+                            
+                            const nairobiTime = new Date(newDate.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+                            const bookingMinutes = nairobiTime.getHours() * 60 + nairobiTime.getMinutes();
+                            const [openH, openM] = open.split(':').map(Number);
+                            const [closeH, closeM] = close.split(':').map(Number);
+                            const openTotal = openH * 60 + openM;
+                            const closeTotal = closeH * 60 + closeM;
+
+                            if (bookingMinutes < openTotal || bookingMinutes >= closeTotal) {
+                                return res.status(400).json({ error: `Bookings allowed between ${open} and ${close}.` });
+                            }
+
+                            // 4. Check Capacity
+                            const newStartISO = newDate.toISOString();
+                            const newEndISO = new Date(newDate.getTime() + service.duration * 60000).toISOString();
+
+                            db.all(
+                                `SELECT a.id 
+                                 FROM appointments a
+                                 JOIN services s ON a.service_id = s.id
+                                 WHERE a.provider_id = ? 
+                                 AND a.status IN ('pending', 'scheduled', 'paid') 
+                                 AND a.id != ? -- Exclude itself
+                                 AND (
+                                    (a.appointment_date < ? AND datetime(a.appointment_date, '+' || s.duration || ' minutes') > ?)
+                                 )`,
+                                [apt.provider_id, apt.id, newEndISO, newStartISO],
+                                (capErr, existingBookings) => {
+                                    if (capErr) return res.status(500).json({ error: 'Error checking capacity' });
+                                    
+                                    const maxCapacity = service.capacity || 1;
+                                    if (existingBookings.length >= maxCapacity) {
+                                        return res.status(400).json({ error: 'This time slot is fully booked.' });
+                                    }
+
+                                    // ALL CHECKS PASSED: Proceed to Update
+                                    performUpdate();
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        });
+        return; // Stop here, performUpdate() will be called inside
     }
-    if (appointment_date) {
-      updates.push('appointment_date = ?');
-      params.push(appointment_date);
-    }
-    if (notes) {
-      updates.push('notes = ?');
-      params.push(notes);
-    }
+    // ✅ RESCHEDULE VALIDATION END
 
-    if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
-    
-    params.push(id, userId);
+    // If not rescheduling, update immediately
+    performUpdate();
 
-    const q =
-      userType === 'client'
-        ? `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND client_id = ?`
-        : `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND provider_id = ?`;
+    function performUpdate() {
+        const updates = [];
+        const params = [];
+        if (status) { updates.push('status = ?'); params.push(status); }
+        if (appointment_date) { updates.push('appointment_date = ?'); params.push(appointment_date); }
+        if (notes) { updates.push('notes = ?'); params.push(notes); }
 
-    db.run(q, params, async (err2) => {
-      if (err2) return res.status(500).json({ error: 'Failed to update appointment' });
+        if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
+        params.push(id, userId);
 
-      // ✅ AUTOMATIC REFUND LOGIC
-      if (status === 'cancelled') {
-        try {
-          await handleAutomaticRefund(id, userType, notes);
-        } catch (refundErr) {
-          console.error('Refund processing error:', refundErr);
-        }
-      }
+        const q = userType === 'client'
+          ? `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND client_id = ?`
+          : `UPDATE appointments SET ${updates.join(', ')} WHERE id = ? AND provider_id = ?`;
 
-      // 4. 🚀 SMS TRIGGER LOGIC (UPDATED)
-      if (status === 'scheduled' || status === 'cancelled') {
-        db.get(
-          `SELECT a.*, 
-                  c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
-                  s.name AS service_name,
-                  p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
-           FROM appointments a
-           JOIN users c ON a.client_id = c.id
-           JOIN services s ON a.service_id = s.id
-           JOIN users p ON a.provider_id = p.id
-           WHERE a.id = ?`,
-          [id],
-          async (err3, fullApt) => {
-            if (!err3 && fullApt) {
-              
-              const clientObj = { 
-                  name: fullApt.client_name, 
-                  phone: fullApt.client_phone, 
-                  notification_preferences: fullApt.client_prefs 
-              };
-              const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name };
+        db.run(q, params, async (err2) => {
+          if (err2) return res.status(500).json({ error: 'Failed to update appointment' });
 
-              // A) Provider ACCEPTED the booking (Pending -> Scheduled)
-              if (status === 'scheduled' && apt.status === 'pending') {
-                await smsService.sendBookingAccepted(
-                  { ...fullApt, id: id },
-                  clientObj,
-                  { name: fullApt.service_name },
-                  providerObj
-                );
-              }
-
-              // B) Appointment CANCELLED
-              if (status === 'cancelled') {
-                // ✅ PASS USER TYPE for customized message
-                await smsService.sendCancellationNotice(
-                  { ...fullApt, id: id, amount_paid: fullApt.amount_paid, provider_name: fullApt.provider_name },
-                  clientObj,
-                  { name: fullApt.service_name },
-                  notes, // Reason for cancellation
-                  userType // 'client' or 'provider'
-                );
-              }
+          // ✅ AUTOMATIC REFUND LOGIC
+          if (status === 'cancelled') {
+            try {
+              await handleAutomaticRefund(id, userType, notes);
+            } catch (refundErr) {
+              console.error('Refund processing error:', refundErr);
             }
           }
-        );
-      }
 
-      res.json({ message: 'Appointment updated successfully' });
-    });
+          // 4. 🚀 SMS TRIGGER LOGIC (UPDATED)
+          db.get(
+              `SELECT a.*, 
+                      c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
+                      s.name AS service_name,
+                      p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
+               FROM appointments a
+               JOIN users c ON a.client_id = c.id
+               JOIN services s ON a.service_id = s.id
+               JOIN users p ON a.provider_id = p.id
+               WHERE a.id = ?`,
+              [id],
+              async (err3, fullApt) => {
+                if (!err3 && fullApt) {
+                  const clientObj = { name: fullApt.client_name, phone: fullApt.client_phone, notification_preferences: fullApt.client_prefs };
+                  const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone };
+
+                  if (status === 'scheduled' && apt.status === 'pending') {
+                    await smsService.sendBookingAccepted({ ...fullApt, id: id }, clientObj, { name: fullApt.service_name }, providerObj);
+                  }
+                  
+                  if (status === 'cancelled') {
+                    // ✅ PASS USER TYPE to determine "You cancelled" vs "Provider cancelled"
+                    await smsService.sendCancellationNotice(
+                      { ...fullApt, id: id, amount_paid: fullApt.amount_paid, provider_name: fullApt.provider_name }, 
+                      clientObj, 
+                      { name: fullApt.service_name }, 
+                      notes,
+                      userType // 'client' or 'provider'
+                    );
+                  }
+
+                  // ✅ NEW: RESCHEDULE SMS
+                  if (appointment_date && appointment_date !== apt.appointment_date) {
+                      await smsService.sendRescheduleNotification(
+                          { ...fullApt, id: id, appointment_date: appointment_date }, 
+                          clientObj, 
+                          { name: fullApt.service_name }, 
+                          providerObj, 
+                          apt.appointment_date // Old date
+                      );
+                  }
+                }
+              }
+            );
+
+          res.json({ message: 'Appointment updated successfully' });
+        });
+    }
   });
 });
 
@@ -691,7 +756,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update payment
+   ✅ Update payment (Initial or partial)
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;

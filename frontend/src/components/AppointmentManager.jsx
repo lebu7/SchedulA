@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { PaystackButton } from "react-paystack";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
-import { Receipt, CreditCard, Lock } from "lucide-react";
+import RescheduleModal from "./RescheduleModal"; // ✅ Import new component
+import { Receipt } from "lucide-react";
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -216,7 +217,9 @@ function AppointmentManager({ user }) {
     user.user_type === "provider" ? "upcoming" : "pending"
   );
   const [showBooking, setShowBooking] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false); // ✅ Reschedule Modal State
   const [rebookService, setRebookService] = useState(null);
+  const [rescheduleApt, setRescheduleApt] = useState(null); // ✅ Reschedule Target
   const [processingPayment, setProcessingPayment] = useState(null); // ID of apt being paid
 
   useEffect(() => {
@@ -260,6 +263,12 @@ function AppointmentManager({ user }) {
       old_appointment_id: apt.id,
     });
     setShowBooking(true);
+  };
+
+  // ✅ Open Reschedule Modal
+  const handleReschedule = (apt) => {
+    setRescheduleApt(apt);
+    setShowReschedule(true);
   };
 
   const formatDate = (dateString) =>
@@ -331,6 +340,11 @@ function AppointmentManager({ user }) {
     }
     await fetchAppointments();
     setShowBooking(false);
+  };
+
+  const handleRescheduleSuccess = async () => {
+      await fetchAppointments();
+      setShowReschedule(false);
   };
 
   // ✅ HANDLER: Paystack Success for Balance Payment
@@ -565,25 +579,18 @@ function AppointmentManager({ user }) {
               <div className="appointment-actions">
                 {user.user_type === "client" ? (
                   <>
+                    {/* ✅ CLIENT RESCHEDULE BUTTONS */}
                     {apt.status === "pending" && (
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleCancelAppointment(apt.id)}
-                        disabled={cancelling === apt.id}
-                      >
-                        {cancelling === apt.id ? "Cancelling..." : "Cancel"}
-                      </button>
+                        <>
+                            <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
+                            <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
+                        </>
                     )}
-                    {/* Allow cancelling scheduled appointments (triggers refund request) */}
                     {apt.status === "scheduled" && (
-                      <button
-                        className="btn btn-danger small-btn"
-                        onClick={() => handleCancelAppointment(apt.id)}
-                        disabled={cancelling === apt.id}
-                        style={{marginTop: '10px'}}
-                      >
-                        {cancelling === apt.id ? "Processing..." : "Cancel Appointment"}
-                      </button>
+                        <>
+                            <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
+                            <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
+                        </>
                     )}
 
                     {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
@@ -725,6 +732,15 @@ function AppointmentManager({ user }) {
             user={user}
             onClose={() => setShowBooking(false)}
             onBookingSuccess={handleRebookSuccess}
+          />
+        )}
+
+        {/* ✅ Reschedule Modal Integration */}
+        {showReschedule && (
+          <RescheduleModal 
+            appointment={rescheduleApt} 
+            onClose={() => setShowReschedule(false)} 
+            onSuccess={handleRescheduleSuccess} 
           />
         )}
 

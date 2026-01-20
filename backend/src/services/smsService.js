@@ -12,7 +12,6 @@ const credentials = {
   username: process.env.AFRICAS_TALKING_USERNAME || 'sandbox',
 };
 
-// Diagnostics
 if (!credentials.apiKey) {
   console.error("❌ FATAL: Africa's Talking API Key is missing.");
 }
@@ -36,14 +35,11 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
-// ✅ CHECK PREFERENCES HELPER
 function shouldSend(user, type) {
     if (!user || !user.phone) return false;
     
-    // Critical messages are ALWAYS sent
-    if (type === 'confirmation' || type === 'refund' || type === 'refund_request' || type === 'cancellation') return true;
+    if (type === 'confirmation' || type === 'refund' || type === 'refund_request' || type === 'cancellation' || type === 'reschedule') return true;
 
-    // Default to true if no preferences set
     if (!user.notification_preferences) return true;
 
     let prefs = {};
@@ -66,6 +62,7 @@ async function logSMS(phone, message, status, details) {
     else if (message.includes('Reminder')) messageType = 'reminder';
     else if (message.includes('CANCELLED')) messageType = 'cancellation';
     else if (message.includes('REFUND')) messageType = 'refund'; 
+    else if (message.includes('RESCHEDULED')) messageType = 'notification';
     
     if (db) {
         db.run(
@@ -142,7 +139,6 @@ export async function sendPaymentReceipt(appointment, client, service) {
   return await sendSMS(client.phone, msg);
 }
 
-// ✅ UPDATED: Customized Cancellation Message
 export async function sendCancellationNotice(appointment, client, service, reason, cancelledBy) {
   if (!shouldSend(client, 'cancellation')) return;
   
@@ -188,6 +184,25 @@ export async function sendRefundRequest(appointment, provider, client, amount) {
 
   const msg = `💰 REFUND REQUEST\n${client.name} cancelled Appt #${appointment.id}. Please process refund of KES ${amount.toLocaleString()} via your dashboard.`;
   return await sendSMS(provider.phone, msg);
+}
+
+// ✅ NEW: Send Reschedule Notification
+export async function sendRescheduleNotification(appointment, client, service, provider, oldDateISO) {
+    if (!shouldSend(client, 'reschedule')) return;
+
+    const newDate = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
+    const oldDate = new Date(oldDateISO).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
+
+    const msg = `📅 RESCHEDULED: Your booking (Appt #${appointment.id}) for ${service.name} has been moved from ${oldDate} to ${newDate}.`;
+    
+    // Send to Client
+    await sendSMS(client.phone, msg);
+
+    // Send to Provider (Simple alert)
+    if (provider && provider.phone) {
+        const provMsg = `📅 APPT RESCHEDULED: ${client.name} moved Appt #${appointment.id} to ${newDate}.`;
+        await sendSMS(provider.phone, provMsg);
+    }
 }
 
 export async function sendScheduledReminders() {
@@ -241,6 +256,7 @@ export default {
     sendProviderNotification, 
     sendRefundNotification, 
     sendRefundRequest,
+    sendRescheduleNotification,
     sendScheduledReminders,
     getSMSStats 
 };
