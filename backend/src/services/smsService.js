@@ -41,7 +41,7 @@ function shouldSend(user, type) {
     if (!user || !user.phone) return false;
     
     // Critical messages are ALWAYS sent
-    if (type === 'confirmation' || type === 'refund' || type === 'refund_request') return true;
+    if (type === 'confirmation' || type === 'refund' || type === 'refund_request' || type === 'cancellation') return true;
 
     // Default to true if no preferences set
     if (!user.notification_preferences) return true;
@@ -53,7 +53,6 @@ function shouldSend(user, type) {
         prefs = user.notification_preferences;
     }
 
-    // Check specific toggle (default true if undefined)
     return prefs[type] !== false;
 }
 
@@ -62,12 +61,11 @@ async function logSMS(phone, message, status, details) {
     const { db } = await import('../config/database.js');
     let messageType = 'general';
     
-    // ✅ Updated Categorization
     if (message.includes('Confirmed') || message.includes('Received')) messageType = 'confirmation';
     else if (message.includes('Accepted')) messageType = 'acceptance';
     else if (message.includes('Reminder')) messageType = 'reminder';
     else if (message.includes('CANCELLED')) messageType = 'cancellation';
-    else if (message.includes('REFUND')) messageType = 'refund'; // ✅ Detects Refunds
+    else if (message.includes('REFUND')) messageType = 'refund'; 
     
     if (db) {
         db.run(
@@ -144,11 +142,23 @@ export async function sendPaymentReceipt(appointment, client, service) {
   return await sendSMS(client.phone, msg);
 }
 
-export async function sendCancellationNotice(appointment, client, service, reason) {
+// ✅ UPDATED: Customized Cancellation Message
+export async function sendCancellationNotice(appointment, client, service, reason, cancelledBy) {
   if (!shouldSend(client, 'cancellation')) return;
   
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' });
-  const msg = `Update: Appt #${appointment.id} for ${service.name} on ${date} has been CANCELLED.${reason ? ' Reason: ' + reason : ''}`;
+  const refundAmount = Number(appointment.amount_paid || 0);
+  
+  let actorText = "The appointment";
+  if (cancelledBy === 'provider') actorText = `${appointment.provider_name || 'The provider'} has cancelled the appointment`;
+  if (cancelledBy === 'client') actorText = "You have cancelled the appointment";
+
+  let refundText = "";
+  if (refundAmount > 0) {
+      refundText = " Refund processing initiated.";
+  }
+
+  const msg = `Update: ${actorText} (Appt #${appointment.id}) for ${service.name} on ${date}.${reason ? ' Reason: ' + reason : ''}${refundText}`;
   return await sendSMS(client.phone, msg);
 }
 
@@ -160,7 +170,6 @@ export async function sendProviderNotification(appointment, provider, client, se
   return await sendSMS(provider.phone, msg);
 }
 
-// ✅ NEW: Send Refund Status to Client
 export async function sendRefundNotification(appointment, client, amount, status = 'completed') {
   if (!shouldSend(client, 'refund')) return;
 
@@ -174,7 +183,6 @@ export async function sendRefundNotification(appointment, client, amount, status
   return await sendSMS(client.phone, msg);
 }
 
-// ✅ NEW: Send Refund Request to Provider
 export async function sendRefundRequest(appointment, provider, client, amount) {
   if (!shouldSend(provider, 'refund_request')) return;
 

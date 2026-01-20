@@ -54,7 +54,6 @@ db.get(
           );
         `);
         
-        // Attempt to copy data
         db.run(`INSERT INTO appointments_new (
           id, client_id, provider_id, service_id, appointment_date, status, notes, 
           client_deleted, provider_deleted, payment_status, payment_reference, 
@@ -105,7 +104,7 @@ db.get(
 );
 
 /* ---------------------------------------------
-   ✅ Fetch appointments (client & provider)
+   ✅ Fetch appointments (UPDATED FILTER LOGIC)
 --------------------------------------------- */
 router.get('/', authenticateToken, (req, res) => {
   const userId = req.user.userId;
@@ -134,31 +133,40 @@ router.get('/', authenticateToken, (req, res) => {
     if (err) return res.status(500).json({ error: 'Failed to fetch appointments' });
 
     const now = new Date().toISOString();
-    const filter = (arr, status, futureOnly = true) =>
-      arr.filter((a) => a.status === status && (!futureOnly || a.appointment_date > now));
+
+    // ✅ LOGIC UPDATE: Keep Cancelled+PendingRefund in "Pending" tab
+    const pendingList = appointments.filter(a => 
+        a.status === 'pending' || 
+        (a.status === 'cancelled' && (a.refund_status === 'pending' || a.refund_status === 'processing'))
+    );
+
+    const scheduledList = appointments.filter(a => 
+        a.status === 'scheduled' && a.appointment_date > now
+    );
+
+    // ✅ LOGIC UPDATE: Past list excludes those waiting for refund
+    const pastList = appointments.filter(a => 
+        (a.status === 'completed' || 
+         a.status === 'no-show' || 
+         a.status === 'rebooked' || 
+         (a.status === 'cancelled' && (a.refund_status === 'completed' || a.refund_status === 'failed' || a.refund_status === null)) ||
+         (a.status === 'scheduled' && a.appointment_date <= now))
+    );
 
     if (userType === 'client') {
       res.json({
         appointments: {
-          pending: filter(appointments, 'pending'),
-          scheduled: filter(appointments, 'scheduled'),
-          past: appointments.filter(
-            (a) =>
-              ['completed', 'cancelled', 'no-show', 'rebooked'].includes(a.status) ||
-              a.appointment_date <= now
-          ),
+          pending: pendingList,
+          scheduled: scheduledList,
+          past: pastList,
         },
       });
     } else {
       res.json({
         appointments: {
-          pending: filter(appointments, 'pending'),
-          upcoming: filter(appointments, 'scheduled'),
-          past: appointments.filter(
-            (a) =>
-              ['completed', 'cancelled', 'no-show', 'rebooked'].includes(a.status) ||
-              a.appointment_date <= now
-          ),
+          pending: pendingList,
+          upcoming: scheduledList,
+          past: pastList,
         },
       });
     }
@@ -201,7 +209,7 @@ router.get('/sms-stats', authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Check provider availability (Frontend uses this for grid)
+   ✅ Check provider availability
 --------------------------------------------- */
 router.get('/providers/:id/availability', (req, res) => {
   const providerId = req.params.id;
@@ -261,7 +269,7 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (FIXED INSERT)
+   ✅ Create appointment (With Overlap Protection)
 --------------------------------------------- */
 router.post(
   '/',
@@ -489,7 +497,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Provider can toggle open/closed status
+   ✅ Provider toggles
 --------------------------------------------- */
 router.put('/providers/:id/closed', authenticateToken, (req, res) => {
   const providerId = req.params.id;
@@ -506,9 +514,6 @@ router.put('/providers/:id/closed', authenticateToken, (req, res) => {
   );
 });
 
-/* ---------------------------------------------
-   ✅ Provider sets global business hours
---------------------------------------------- */
 router.put(
   '/providers/:id/hours',
   authenticateToken,
@@ -542,7 +547,7 @@ router.put(
 
 /* ---------------------------------------------
    ✅ Update appointment (Accept/Cancel/Reschedule)
-   With AUTOMATIC REFUND LOGIC
+   With AUTOMATIC REFUND LOGIC & CUSTOM SMS
 --------------------------------------------- */
 router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -602,7 +607,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         }
       }
 
-      // 4. 🚀 SMS TRIGGER LOGIC
+      // 4. 🚀 SMS TRIGGER LOGIC (UPDATED)
       if (status === 'scheduled' || status === 'cancelled') {
         db.get(
           `SELECT a.*, 
@@ -618,11 +623,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
           async (err3, fullApt) => {
             if (!err3 && fullApt) {
               
-              if (!fullApt.client_phone) {
-                 console.warn(`⚠️ SMS Skipped: Client (ID ${fullApt.client_id}) has no phone number.`);
-                 return;
-              }
-
               const clientObj = { 
                   name: fullApt.client_name, 
                   phone: fullApt.client_phone, 
@@ -642,11 +642,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
               // B) Appointment CANCELLED
               if (status === 'cancelled') {
+                // ✅ PASS USER TYPE for customized message
                 await smsService.sendCancellationNotice(
-                  { ...fullApt, id: id },
+                  { ...fullApt, id: id, amount_paid: fullApt.amount_paid, provider_name: fullApt.provider_name },
                   clientObj,
                   { name: fullApt.service_name },
-                  notes // Reason for cancellation
+                  notes, // Reason for cancellation
+                  userType // 'client' or 'provider'
                 );
               }
             }
@@ -689,8 +691,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update payment (Initial or partial)
-   FIXED: Removed payment_amount
+   ✅ Update payment
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -735,7 +736,6 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Pay remaining balance
-   (Includes SMS Receipt)
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -797,7 +797,7 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider can prompt client for remaining balance
+   ✅ Provider request balance
 --------------------------------------------- */
 router.post('/:id/request-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
