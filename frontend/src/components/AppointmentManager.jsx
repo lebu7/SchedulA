@@ -572,7 +572,7 @@ function AppointmentManager({ user }) {
               <div className="appointment-actions">
                 {user.user_type === "client" ? (
                   <>
-                    {apt.status === "pending" && (
+                    {apt.status === "pending" && !apt.refund_status && ( // ✅ Added !apt.refund_status
                         <>
                             <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
                             <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>

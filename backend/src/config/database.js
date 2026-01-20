@@ -106,7 +106,39 @@ function initializeDatabase() {
   `);
 
   /* ---------------------------------------------
-     🔔 NOTIFICATIONS TABLE (NEW)
+     💰 TRANSACTIONS TABLE (NEW)
+     Tracks individual payments to allow correct refunds
+  --------------------------------------------- */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      appointment_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      reference TEXT NOT NULL,
+      type TEXT DEFAULT 'payment', -- payment, refund
+      status TEXT DEFAULT 'success', -- success, failed
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (appointment_id) REFERENCES appointments(id)
+    )
+  `, (err) => {
+    if (!err) {
+      // 🔄 Backfill Migration: Safe attempt
+      db.get("SELECT count(*) as count FROM transactions", [], (e, row) => {
+        if (!e && row.count === 0) {
+          console.log("⚙️ Backfilling transactions from existing appointments...");
+          db.run(`
+            INSERT INTO transactions (appointment_id, amount, reference, type, status)
+            SELECT id, amount_paid, payment_reference, 'payment', 'success'
+            FROM appointments
+            WHERE payment_reference IS NOT NULL AND amount_paid > 0
+          `);
+        }
+      });
+    }
+  });
+
+  /* ---------------------------------------------
+     🔔 NOTIFICATIONS TABLE
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS notifications (
@@ -131,20 +163,17 @@ function initializeDatabase() {
     (err, row) => {
       if (err) return;
 
-      // 1. If table doesn't exist, create it
       if (!row) {
         createSMSLogsTable();
         return;
       }
 
-      // 2. If table exists but lacks new types, MIGRATE it
       if (!row.sql.includes("'refund'")) {
         console.log('⚙️ Migrating sms_logs table to support refund types...');
         db.serialize(() => {
           db.run("PRAGMA foreign_keys=off;");
           db.run("ALTER TABLE sms_logs RENAME TO sms_logs_old;");
           
-          // Create new table with updated constraints
           db.run(`
             CREATE TABLE sms_logs (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,7 +186,6 @@ function initializeDatabase() {
             )
           `);
 
-          // Copy data back (mapping old types if needed)
           db.run(`
             INSERT INTO sms_logs (id, recipient_phone, message_type, message_content, status, details, sent_at)
             SELECT id, recipient_phone, 
@@ -194,12 +222,10 @@ function initializeDatabase() {
   /* ---------------------------------------------
      🔍 Ensure missing columns exist (MIGRATIONS)
   --------------------------------------------- */
-  // users
   tryAddColumn('users', 'opening_time', "TEXT DEFAULT '08:00'");
   tryAddColumn('users', 'closing_time', "TEXT DEFAULT '18:00'");
   tryAddColumn('users', 'notification_preferences', "TEXT");
 
-  // services
   tryAddColumn('services', 'opening_time', "TEXT DEFAULT '08:00'");
   tryAddColumn('services', 'closing_time', "TEXT DEFAULT '18:00'");
   tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
@@ -207,19 +233,15 @@ function initializeDatabase() {
   tryAddColumn('services', 'closed_by_business', "INTEGER DEFAULT 0");
   tryAddColumn('services', 'capacity', "INTEGER DEFAULT 1"); 
 
-  // appointments
   tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0");
   tryAddColumn('appointments', 'payment_status', "TEXT DEFAULT 'unpaid'");
   tryAddColumn('appointments', 'payment_reference', "TEXT");
   tryAddColumn('appointments', 'amount_paid', "REAL DEFAULT 0");
   tryAddColumn('appointments', 'total_price', "REAL DEFAULT 0");
-  
-  // ✅ NEW: Restore missing columns from previous failure
   tryAddColumn('appointments', 'deposit_amount', "REAL DEFAULT 0");
   tryAddColumn('appointments', 'addons_total', "REAL DEFAULT 0");
   tryAddColumn('appointments', 'addons', "TEXT DEFAULT '[]'");
 
-  // Refund Columns
   tryAddColumn('appointments', 'refund_status', "TEXT DEFAULT NULL");
   tryAddColumn('appointments', 'refund_reference', "TEXT");
   tryAddColumn('appointments', 'refund_amount', "REAL DEFAULT 0");
@@ -229,24 +251,13 @@ function initializeDatabase() {
   console.log('🎯 Database initialization completed');
 }
 
-/**
- * ✅ Adds column to a table if it doesn’t already exist
- */
 function tryAddColumn(table, column, definition) {
   db.all(`PRAGMA table_info(${table})`, (err, rows) => {
-    if (err) {
-      console.error(`⚠️ Failed to check columns for table ${table}:`, err.message);
-      return;
-    }
-
+    if (err) return;
     const exists = rows.some(r => r.name === column);
     if (!exists) {
       db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`, (alterErr) => {
-        if (alterErr) {
-          console.error(`⚠️ Failed to add column ${column} to ${table}:`, alterErr.message);
-        } else {
-          console.log(`✅ Added missing column ${column} to ${table}`);
-        }
+        if (alterErr) console.error(`⚠️ Failed to add column ${column} to ${table}:`, alterErr.message);
       });
     }
   });
