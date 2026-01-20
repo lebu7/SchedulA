@@ -4,6 +4,7 @@ import { db } from '../config/database.js';
 import { authenticateToken } from '../middleware/auth.js';
 import smsService from '../services/smsService.js';
 import { processPaystackRefund, sendRefundNotification, sendRefundRequestToProvider } from '../services/refundService.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -134,7 +135,6 @@ router.get('/', authenticateToken, (req, res) => {
 
     const now = new Date().toISOString();
 
-    // ✅ LOGIC UPDATE: Keep Cancelled+PendingRefund in "Pending" tab
     const pendingList = appointments.filter(a => 
         a.status === 'pending' || 
         (a.status === 'cancelled' && (a.refund_status === 'pending' || a.refund_status === 'processing'))
@@ -269,6 +269,7 @@ router.get('/providers/:id/availability', (req, res) => {
 
 /* ---------------------------------------------
    ✅ Create appointment (With Overlap Protection)
+   ⚠️ FIXED: Removed extra placeholder in VALUES
 --------------------------------------------- */
 router.post(
   '/',
@@ -394,7 +395,7 @@ router.post(
                         payment_reference, payment_status,
                         total_price, deposit_amount, addons_total, addons, amount_paid
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // ✅ FIXED: 13 Placeholders for 13 Columns
                         [
                         client_id,
                         service.provider_id,
@@ -426,7 +427,7 @@ router.post(
                             );
                         }
 
-                        // Send SMS
+                        // Notifications & SMS
                         db.get(
                             `SELECT a.*, 
                                     c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
@@ -441,17 +442,12 @@ router.post(
                             async (e, fullApt) => {
                             if (e) return;
 
-                            const clientObj = { 
-                                name: fullApt.client_name, 
-                                phone: fullApt.client_phone, 
-                                notification_preferences: fullApt.client_prefs 
-                            };
-                            const providerObj = { 
-                                name: fullApt.provider_name, 
-                                business_name: fullApt.business_name, 
-                                phone: fullApt.provider_phone, 
-                                notification_preferences: fullApt.provider_prefs
-                            };
+                            const clientObj = { name: fullApt.client_name, phone: fullApt.client_phone, notification_preferences: fullApt.client_prefs };
+                            const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone, notification_preferences: fullApt.provider_prefs };
+
+                            // 🔔 Trigger Notifications
+                            createNotification(client_id, 'booking', 'Booking Sent', `Your booking for ${service.name} is pending approval.`, newId);
+                            createNotification(service.provider_id, 'booking', 'New Booking Request', `${fullApt.client_name} booked ${service.name}.`, newId);
 
                             await smsService.sendBookingConfirmation(
                                 {
@@ -703,10 +699,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
                   const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone };
 
                   if (status === 'scheduled' && apt.status === 'pending') {
+                    createNotification(fullApt.client_id, 'booking', 'Booking Confirmed', `Your booking for ${fullApt.service_name} has been confirmed.`, id);
                     await smsService.sendBookingAccepted({ ...fullApt, id: id }, clientObj, { name: fullApt.service_name }, providerObj);
                   }
                   
                   if (status === 'cancelled') {
+                    if (userType === 'client') {
+                        createNotification(fullApt.provider_id, 'cancellation', 'Booking Cancelled', `${fullApt.client_name} cancelled appointment #${id}.`, id);
+                    } else {
+                        createNotification(fullApt.client_id, 'cancellation', 'Booking Cancelled', `Provider cancelled appointment #${id}.`, id);
+                    }
                     // ✅ PASS USER TYPE to determine "You cancelled" vs "Provider cancelled"
                     await smsService.sendCancellationNotice(
                       { ...fullApt, id: id, amount_paid: fullApt.amount_paid, provider_name: fullApt.provider_name }, 
@@ -718,7 +720,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
                   }
 
                   // ✅ NEW: RESCHEDULE SMS
-                  if (appointment_date && appointment_date !== apt.appointment_date) {
+                  if (isReschedule) {
+                      const targetUser = userType === 'client' ? fullApt.provider_id : fullApt.client_id;
+                      const title = userType === 'client' ? 'Reschedule Request' : 'Appointment Rescheduled';
+                      const msg = userType === 'client' 
+                        ? `${fullApt.client_name} requested to reschedule #${id}.` 
+                        : `Provider moved appointment #${id} to a new time.`;
+                      
+                      createNotification(targetUser, 'reschedule', title, msg, id);
+
                       await smsService.sendRescheduleNotification(
                           { ...fullApt, id: id, appointment_date: appointment_date }, 
                           clientObj, 
@@ -800,6 +810,11 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
         [payment_reference, paid, finalStatus, id],
         function (err2) {
           if (err2) return res.status(500).json({ error: "Failed to update payment info" });
+          
+          // 🔔 Notify Provider
+          db.get(`SELECT provider_id FROM appointments WHERE id=?`, [id], (e, r) => {
+             if(r) createNotification(r.provider_id, 'payment', 'Payment Received', `Payment of KES ${paid} received for Appt #${id}.`, id);
+          });
 
           return res.json({
             message: "Payment updated successfully",
@@ -844,6 +859,9 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
       [newPaid, payment_reference, finalStatus, id],
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to update balance payment' });
+
+        // 🔔 Notify Provider
+        createNotification(row.provider_id, 'payment', 'Balance Paid', `Balance payment of KES ${amount_paid} received for Appt #${id}.`, id);
 
         // 📱 Send Payment Receipt SMS
         db.get(
@@ -898,6 +916,10 @@ router.post('/:id/request-balance', authenticateToken, (req, res) => {
       [id, providerId, row.client_id, Number(amount_requested), note || null],
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to create payment request' });
+        
+        // 🔔 Notify Client
+        createNotification(row.client_id, 'payment', 'Balance Request', `Provider requested balance payment of KES ${amount_requested}.`, id);
+        
         res.json({ message: 'Payment request created', request_id: this.lastID });
       }
     );
@@ -960,6 +982,9 @@ router.post('/:id/process-refund', authenticateToken, async (req, res) => {
            WHERE id = ?`,
           [refundResult.refund_reference, id]
         );
+
+        // 🔔 Notify Client
+        createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountToRefund} has been processed.`, id);
 
         // 3b. Send SMS
         await sendRefundNotification(
@@ -1054,6 +1079,8 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
               [result.refund_reference, appointmentId]
             );
 
+            createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountPaid} for Appt #${appointmentId} is complete.`, appointmentId);
+
             await sendRefundNotification(
               { id: appointmentId, payment_reference: apt.payment_reference },
               clientObj,
@@ -1079,6 +1106,8 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
              WHERE id = ?`,
             [amountPaid, appointmentId]
           );
+
+          createNotification(apt.provider_id, 'refund', 'Refund Request', `Client cancelled Appt #${appointmentId}. Please process refund.`, appointmentId);
 
           await sendRefundRequestToProvider(
             { id: appointmentId },

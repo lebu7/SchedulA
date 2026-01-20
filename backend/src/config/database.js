@@ -106,6 +106,23 @@ function initializeDatabase() {
   `);
 
   /* ---------------------------------------------
+     🔔 NOTIFICATIONS TABLE (NEW)
+  --------------------------------------------- */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL, -- e.g., 'booking', 'refund', 'system'
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT 0,
+      reference_id INTEGER, -- e.g., appointment_id related to this notif
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  /* ---------------------------------------------
      📱 SMS LOGS TABLE (AUTO-MIGRATION)
   --------------------------------------------- */
   db.get(

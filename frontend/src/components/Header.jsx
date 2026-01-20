@@ -1,5 +1,6 @@
 import React from 'react'
 import './Header.css'
+import NotificationCenter from './NotificationCenter';
 
 function Header({ user, onLogout }) {
   return (
@@ -10,6 +11,7 @@ function Header({ user, onLogout }) {
           <nav>
             {user ? (
               <div className="user-menu">
+                <NotificationCenter />
                 <span>Welcome, {user.name}</span>
                 <button onClick={onLogout} className="btn btn-secondary">
                   Logout

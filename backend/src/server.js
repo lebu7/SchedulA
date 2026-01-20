@@ -9,6 +9,7 @@ import { db } from './config/database.js';
 import authRoutes from './routes/auth.js';
 import serviceRoutes from './routes/services.js';
 import appointmentRoutes from './routes/appointments.js';
+import notificationRoutes from './routes/notifications.js'; // ✅ Import Notification Routes
 
 // ✅ Import SMS Scheduled Reminders
 import { sendScheduledReminders } from './services/smsService.js';
@@ -27,6 +28,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/notifications', notificationRoutes); // ✅ Register Notification Routes
 
 // Health check
 app.get('/api/health', (req, res) => {
