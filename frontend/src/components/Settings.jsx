@@ -10,9 +10,18 @@ const Settings = ({ user, setUser }) => {
   // States
   const [profile, setProfile] = useState({ name: '', phone: '', business_name: '' });
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+  
+  // ✅ ADDED: Refund toggles (default true)
   const [notifications, setNotifications] = useState({
-    confirmation: true, acceptance: true, reminder: true, cancellation: true, receipt: true, new_request: true 
+    confirmation: true, 
+    acceptance: true, 
+    reminder: true, 
+    cancellation: true, 
+    receipt: true, 
+    new_request: true,
+    refund: true // Mandatory
   });
+  
   const [hours, setHours] = useState({ opening_time: '08:00', closing_time: '18:00' });
 
   useEffect(() => {
@@ -27,7 +36,6 @@ const Settings = ({ user, setUser }) => {
         closing_time: user.closing_time || '18:00' 
       });
 
-      // Handle Notification Preferences (Safe Parsing)
       if (user.notification_preferences) {
         let prefs = user.notification_preferences;
         if (typeof prefs === 'string') {
@@ -43,13 +51,10 @@ const Settings = ({ user, setUser }) => {
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
 
-  // --- Handlers ---
-
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // 1. Auto-format Phone Number (+254...)
     let formattedPhone = profile.phone.trim();
     if (formattedPhone.startsWith('0')) {
       formattedPhone = '+254' + formattedPhone.substring(1);
@@ -61,7 +66,6 @@ const Settings = ({ user, setUser }) => {
       const res = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
       showMsg('success', 'Profile updated successfully!');
       
-      // Update local state and global user
       setProfile(prev => ({ ...prev, phone: formattedPhone }));
       const updatedUser = { ...user, ...res.data.user };
       setUser(updatedUser);
@@ -89,24 +93,20 @@ const Settings = ({ user, setUser }) => {
   };
 
   const handleNotificationToggle = async (key) => {
-    if (key === 'confirmation') return; // Locked toggle
+    if (key === 'confirmation' || key === 'refund') return; // Locked toggles
     
-    // 1. Optimistic Update
     const newPrefs = { ...notifications, [key]: !notifications[key] };
     setNotifications(newPrefs);
 
     try {
-      // 2. Send to API
       await api.put('/auth/notifications', { preferences: newPrefs });
       
-      // 3. Update Global State
       const updatedUser = { ...user, notification_preferences: newPrefs };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
       
     } catch (err) { 
       console.error('Failed to save prefs:', err.response?.data || err.message);
-      // Revert UI on failure
       setNotifications(prev => ({ ...prev, [key]: !prev[key] }));
       showMsg('error', 'Failed to save setting. Try refreshing.');
     }
@@ -140,10 +140,8 @@ const Settings = ({ user, setUser }) => {
         )}
       </div>
 
-      {/* --- PROFILE TAB (Grid Layout) --- */}
       {activeTab === 'profile' && (
         <div className="settings-section profile-layout">
-          {/* Left Column: Details */}
           <div className="profile-column">
             <h3>Personal Details</h3>
             <form onSubmit={handleProfileUpdate} className="settings-form">
@@ -168,7 +166,6 @@ const Settings = ({ user, setUser }) => {
             </form>
           </div>
 
-          {/* Right Column: Password */}
           <div className="profile-column password-column">
             <h3>Change Password</h3>
             <form onSubmit={handlePasswordChange} className="settings-form">
@@ -192,7 +189,6 @@ const Settings = ({ user, setUser }) => {
         </div>
       )}
 
-      {/* --- NOTIFICATIONS TAB --- */}
       {activeTab === 'notifications' && (
         <div className="settings-section">
           <h3>SMS Preferences</h3>
@@ -203,13 +199,30 @@ const Settings = ({ user, setUser }) => {
           <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
           <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
           <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
+          
+          {/* ✅ ADDED: Refund Notification Toggle (Locked) */}
+          <Toggle 
+            label="Refund Notifications" 
+            desc="Sent when refunds are processed (Required)" 
+            checked={true} 
+            disabled 
+          />
+
           {user.user_type === 'provider' && (
-             <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
+             <>
+               <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
+               {/* ✅ ADDED: Provider Refund Request Toggle (Locked) */}
+               <Toggle 
+                 label="Refund Requests" 
+                 desc="When clients cancel and request refunds (Required)" 
+                 checked={true} 
+                 disabled 
+               />
+             </>
           )}
         </div>
       )}
 
-      {/* --- HOURS TAB --- */}
       {activeTab === 'hours' && (
         <div className="settings-section">
           <h3>Business Hours</h3>

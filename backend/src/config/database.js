@@ -27,7 +27,7 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 
 function initializeDatabase() {
   /* ---------------------------------------------
-     🧱 USERS TABLE (with business hours & prefs)
+     🧱 USERS TABLE
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -40,16 +40,13 @@ function initializeDatabase() {
       business_name TEXT,
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
-      notification_preferences TEXT, -- ✅ NEW COLUMN
+      notification_preferences TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-  `, (err) => {
-    if (err) console.error('❌ Error creating users table:', err.message);
-    else console.log('✅ Users table ready');
-  });
+  `);
 
   /* ---------------------------------------------
-     💈 SERVICES TABLE (with capacity)
+     💈 SERVICES TABLE
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS services (
@@ -60,7 +57,7 @@ function initializeDatabase() {
       category TEXT NOT NULL,
       duration INTEGER NOT NULL,
       price DECIMAL(10,2),
-      capacity INTEGER DEFAULT 1, -- ✅ NEW: Slots per time
+      capacity INTEGER DEFAULT 1,
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
       slot_interval INTEGER DEFAULT 30,
@@ -69,10 +66,7 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (provider_id) REFERENCES users (id)
     )
-  `, (err) => {
-    if (err) console.error('❌ Error creating services table:', err.message);
-    else console.log('✅ Services table ready');
-  });
+  `);
 
   /* ---------------------------------------------
      📅 APPOINTMENTS TABLE
@@ -92,34 +86,93 @@ function initializeDatabase() {
       payment_reference TEXT,
       amount_paid REAL DEFAULT 0,
       total_price REAL DEFAULT 0,
+      deposit_amount REAL DEFAULT 0,
+      addons_total REAL DEFAULT 0,
+      addons TEXT DEFAULT '[]',
       reminder_sent INTEGER DEFAULT 0,
+      
+      -- Refund Columns
+      refund_status TEXT DEFAULT NULL CHECK(refund_status IN (NULL, 'pending', 'processing', 'completed', 'failed')),
+      refund_reference TEXT,
+      refund_amount REAL DEFAULT 0,
+      refund_initiated_at DATETIME,
+      refund_completed_at DATETIME,
+
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES users (id),
       FOREIGN KEY (provider_id) REFERENCES users (id),
       FOREIGN KEY (service_id) REFERENCES services (id)
     )
-  `, (err) => {
-    if (err) console.error('❌ Error creating appointments table:', err.message);
-    else console.log('✅ Appointments table ready');
-  });
+  `);
 
   /* ---------------------------------------------
-     📱 SMS LOGS TABLE
+     📱 SMS LOGS TABLE (AUTO-MIGRATION)
   --------------------------------------------- */
-  db.run(`
-    CREATE TABLE IF NOT EXISTS sms_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      recipient_phone TEXT NOT NULL,
-      message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance')),
-      message_content TEXT,
-      status TEXT CHECK(status IN ('sent', 'failed', 'error')),
-      details TEXT, -- JSON string with API response
-      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `, (err) => {
-    if (err) console.error('❌ Error creating sms_logs table:', err.message);
-    else console.log('✅ SMS logs table ready');
-  });
+  db.get(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='sms_logs'`,
+    [],
+    (err, row) => {
+      if (err) return;
+
+      // 1. If table doesn't exist, create it
+      if (!row) {
+        createSMSLogsTable();
+        return;
+      }
+
+      // 2. If table exists but lacks new types, MIGRATE it
+      if (!row.sql.includes("'refund'")) {
+        console.log('⚙️ Migrating sms_logs table to support refund types...');
+        db.serialize(() => {
+          db.run("PRAGMA foreign_keys=off;");
+          db.run("ALTER TABLE sms_logs RENAME TO sms_logs_old;");
+          
+          // Create new table with updated constraints
+          db.run(`
+            CREATE TABLE sms_logs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              recipient_phone TEXT NOT NULL,
+              message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance', 'refund', 'refund_request')),
+              message_content TEXT,
+              status TEXT CHECK(status IN ('sent', 'failed', 'error')),
+              details TEXT,
+              sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          // Copy data back (mapping old types if needed)
+          db.run(`
+            INSERT INTO sms_logs (id, recipient_phone, message_type, message_content, status, details, sent_at)
+            SELECT id, recipient_phone, 
+                   CASE WHEN message_type NOT IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance', 'refund', 'refund_request') THEN 'general' ELSE message_type END,
+                   message_content, status, details, sent_at
+            FROM sms_logs_old
+          `);
+
+          db.run("DROP TABLE sms_logs_old;");
+          db.run("PRAGMA foreign_keys=on;");
+          console.log("✅ SMS Logs table migration completed.");
+        });
+      }
+    }
+  );
+
+  function createSMSLogsTable() {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sms_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient_phone TEXT NOT NULL,
+        message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance', 'refund', 'refund_request')),
+        message_content TEXT,
+        status TEXT CHECK(status IN ('sent', 'failed', 'error')),
+        details TEXT,
+        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `, (err) => {
+      if (err) console.error('❌ Error creating sms_logs table:', err.message);
+      else console.log('✅ SMS logs table ready');
+    });
+  }
 
   /* ---------------------------------------------
      🔍 Ensure missing columns exist (MIGRATIONS)
@@ -135,7 +188,7 @@ function initializeDatabase() {
   tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
   tryAddColumn('services', 'is_closed', "INTEGER DEFAULT 0");
   tryAddColumn('services', 'closed_by_business', "INTEGER DEFAULT 0");
-  tryAddColumn('services', 'capacity', "INTEGER DEFAULT 1"); // ✅ Added Migration
+  tryAddColumn('services', 'capacity', "INTEGER DEFAULT 1"); 
 
   // appointments
   tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0");
@@ -143,6 +196,18 @@ function initializeDatabase() {
   tryAddColumn('appointments', 'payment_reference', "TEXT");
   tryAddColumn('appointments', 'amount_paid', "REAL DEFAULT 0");
   tryAddColumn('appointments', 'total_price', "REAL DEFAULT 0");
+  
+  // ✅ NEW: Restore missing columns from previous failure
+  tryAddColumn('appointments', 'deposit_amount', "REAL DEFAULT 0");
+  tryAddColumn('appointments', 'addons_total', "REAL DEFAULT 0");
+  tryAddColumn('appointments', 'addons', "TEXT DEFAULT '[]'");
+
+  // Refund Columns
+  tryAddColumn('appointments', 'refund_status', "TEXT DEFAULT NULL");
+  tryAddColumn('appointments', 'refund_reference', "TEXT");
+  tryAddColumn('appointments', 'refund_amount', "REAL DEFAULT 0");
+  tryAddColumn('appointments', 'refund_initiated_at', "DATETIME");
+  tryAddColumn('appointments', 'refund_completed_at', "DATETIME");
 
   console.log('🎯 Database initialization completed');
 }

@@ -46,6 +46,10 @@ function PaymentInfoModal({ payment, onClose }) {
       statusLabel = "Deposit Paid";
       statusColor = "#9a3412";   // Orange
       statusBg = "#fff7ed";
+    } else if (payment.payment_status === "refunded") {
+      statusLabel = "Refunded";
+      statusColor = "#b91c1c";
+      statusBg = "#fee2e2";
     }
 
     // 3. Generate Professional HTML
@@ -165,10 +169,12 @@ function PaymentInfoModal({ payment, onClose }) {
             <strong>Status:</strong> 
             <span className={`payment-status ${
               payment.payment_status === 'paid' ? 'paid' : 
-              payment.payment_status === 'deposit-paid' ? 'deposit-paid' : 'unpaid'
+              payment.payment_status === 'deposit-paid' ? 'deposit-paid' : 
+              payment.payment_status === 'refunded' ? 'refunded' : 'unpaid'
             }`}>
               {payment.payment_status === 'paid' ? 'Fully Paid' : 
-               payment.payment_status === 'deposit-paid' ? 'Deposit Paid' : ''}
+               payment.payment_status === 'deposit-paid' ? 'Deposit Paid' :
+               payment.payment_status === 'refunded' ? 'Refunded' : 'Unpaid'}
             </span>
           </p>
 
@@ -286,14 +292,30 @@ function AppointmentManager({ user }) {
   };
 
   const handleCancelAppointment = async (id) => {
-    if (window.confirm("Cancel this appointment?")) {
+    if (window.confirm("Cancel this appointment? Refund request will be sent.")) {
       setCancelling(id);
       try {
         await api.put(`/appointments/${id}`, { status: "cancelled" });
         await fetchAppointments();
+        alert("Appointment cancelled. Refund request sent to provider.");
       } finally {
         setCancelling(null);
       }
+    }
+  };
+
+  // ✅ PROVIDER: Manual Refund Handler
+  const handleProviderRefund = async (appointmentId) => {
+    if (!window.confirm("Process refund for this cancelled appointment?")) return;
+    setUpdating(appointmentId);
+    try {
+      const res = await api.post(`/appointments/${appointmentId}/process-refund`);
+      alert('✅ ' + res.data.message);
+      await fetchAppointments();
+    } catch (error) {
+      alert('❌ ' + (error.response?.data?.error || 'Refund failed'));
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -382,20 +404,18 @@ function AppointmentManager({ user }) {
       const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
       const pending = Math.max(total - paid, 0);
 
-      // ✅ RETURN ALL NEEDED VALUES (fixed previous crash)
+      // ✅ RETURN ALL NEEDED VALUES
       return { basePrice, addonsTotal, total, deposit, paid, pending, selectedAddons };
     };
 
     return (
       <div className="appointments-list">
         {list.map((apt) => {
-           // ✅ DESTRUCTURE VALUES
            const { basePrice, addonsTotal, total, deposit, paid, pending } = calculateTotals(apt);
 
-           // ✅ PAYSTACK CONFIG (Amount in Kobo)
            const paystackConfig = {
              reference: (new Date()).getTime().toString(),
-             email: user.email || "client@example.com", // Uses logged-in user email (provider or client)
+             email: user.email || "client@example.com",
              amount: pending * 100, 
              publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
              currency: "KES",
@@ -426,6 +446,16 @@ function AppointmentManager({ user }) {
               <div className="appointment-info">
                 {type === 'past' && getStatusBadge(apt.status)}
 
+                {/* ✅ REFUND STATUS BADGE */}
+                {apt.refund_status && (
+                  <div className={`refund-status-badge ${apt.refund_status}`}>
+                    {apt.refund_status === 'completed' && '✅ Refunded'}
+                    {apt.refund_status === 'processing' && '⏳ Refund Processing'}
+                    {apt.refund_status === 'pending' && '⏰ Refund Pending'}
+                    {apt.refund_status === 'failed' && '❌ Refund Failed'}
+                  </div>
+                )}
+
                 <h4>{apt.service_name}</h4>
 
                 {user.user_type === "client" ? (
@@ -452,7 +482,7 @@ function AppointmentManager({ user }) {
                   <p className="payment-line">
                     <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
 
-                    {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid') && (
+                    {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid' || apt.payment_status === 'refunded') && (
                       <span 
                         className="receipt-wrapper" 
                         onClick={(e) => {
@@ -485,8 +515,8 @@ function AppointmentManager({ user }) {
                       <strong>Balance:</strong> KES {pending.toLocaleString()}
                     </p>
 
-                    {/* ✅ PAYSTACK BUTTONS (Client Pay OR Provider Terminal) */}
-                    {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && (
+                    {/* ✅ PAYSTACK BUTTONS (Only if not cancelled/refunded) */}
+                    {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && apt.payment_status !== 'refunded' && (
                        <PaystackButton
                          {...paystackConfig}
                          text={processingPayment === apt.id ? "Processing..." : (user.user_type === 'client' ? "Pay Balance" : "Process Payment")}
@@ -507,7 +537,6 @@ function AppointmentManager({ user }) {
                             gap: "4px"
                          }}
                        >
-                         {/* Optional Icon inside button if library supports children, usually text prop is safer */}
                        </PaystackButton>
                     )}
                   </div>
@@ -545,6 +574,18 @@ function AppointmentManager({ user }) {
                         {cancelling === apt.id ? "Cancelling..." : "Cancel"}
                       </button>
                     )}
+                    {/* Allow cancelling scheduled appointments (triggers refund request) */}
+                    {apt.status === "scheduled" && (
+                      <button
+                        className="btn btn-danger small-btn"
+                        onClick={() => handleCancelAppointment(apt.id)}
+                        disabled={cancelling === apt.id}
+                        style={{marginTop: '10px'}}
+                      >
+                        {cancelling === apt.id ? "Processing..." : "Cancel Appointment"}
+                      </button>
+                    )}
+
                     {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
                       <div className="action-row">
                         {apt.status === 'cancelled' && (
@@ -584,6 +625,18 @@ function AppointmentManager({ user }) {
                           Reject
                         </button>
                       </div>
+                    )}
+
+                    {/* ✅ PROVIDER REFUND BUTTON (For Client Cancellations) */}
+                    {apt.status === 'cancelled' && apt.refund_status === 'pending' && (
+                      <button
+                        className="btn btn-success small-btn"
+                        onClick={() => handleProviderRefund(apt.id)}
+                        disabled={updating === apt.id}
+                        style={{ marginTop: '10px', width: '100%', backgroundColor: '#10b981' }}
+                      >
+                        {updating === apt.id ? "Processing..." : "💰 Process Refund"}
+                      </button>
                     )}
 
                     {/* Provider Upcoming Controls with COMPLETE LOCK */}

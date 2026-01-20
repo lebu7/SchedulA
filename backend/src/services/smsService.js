@@ -36,12 +36,12 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
-// Check Preferences Helper
+// ✅ CHECK PREFERENCES HELPER
 function shouldSend(user, type) {
     if (!user || !user.phone) return false;
     
-    // Always send confirmation regardless of preference
-    if (type === 'confirmation') return true;
+    // Critical messages are ALWAYS sent
+    if (type === 'confirmation' || type === 'refund' || type === 'refund_request') return true;
 
     // Default to true if no preferences set
     if (!user.notification_preferences) return true;
@@ -61,10 +61,13 @@ async function logSMS(phone, message, status, details) {
   try {
     const { db } = await import('../config/database.js');
     let messageType = 'general';
+    
+    // ✅ Updated Categorization
     if (message.includes('Confirmed') || message.includes('Received')) messageType = 'confirmation';
     else if (message.includes('Accepted')) messageType = 'acceptance';
     else if (message.includes('Reminder')) messageType = 'reminder';
     else if (message.includes('CANCELLED')) messageType = 'cancellation';
+    else if (message.includes('REFUND')) messageType = 'refund'; // ✅ Detects Refunds
     
     if (db) {
         db.run(
@@ -104,15 +107,12 @@ async function sendSMS(phoneNumber, message) {
 
 // --- Exports ---
 
-// ✅ UPDATED: Fixes negative pending balance issue
 export async function sendBookingConfirmation(appointment, client, service, provider) {
   if (!shouldSend(client, 'confirmation')) return; 
 
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
   const paid = Number(appointment.amount_paid || 0);
   const total = Number(appointment.total_price || 0);
-  
-  // Logic: If Paid >= Total, Pending is 0. Otherwise Total - Paid.
   const pending = Math.max(0, total - paid);
 
   const msg = `Booking Received! (Appt #${appointment.id}) for ${service.name} on ${date}. Paid: KES ${paid.toLocaleString()}. Balance: KES ${pending.toLocaleString()}. Status: Waiting Approval.`;
@@ -157,6 +157,28 @@ export async function sendProviderNotification(appointment, provider, client, se
   
   const date = new Date(appointment.appointment_date).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' });
   const msg = `New Booking Request (Appt #${appointment.id}): ${client.name} for ${service.name} on ${date}. Log in to Accept/Reject.`;
+  return await sendSMS(provider.phone, msg);
+}
+
+// ✅ NEW: Send Refund Status to Client
+export async function sendRefundNotification(appointment, client, amount, status = 'completed') {
+  if (!shouldSend(client, 'refund')) return;
+
+  const messages = {
+    'completed': `✅ REFUND PROCESSED\nKES ${amount.toLocaleString()} has been refunded to your payment source for Appt #${appointment.id}. Funds reflect in 5-10 days.`,
+    'processing': `⏳ REFUND IN PROGRESS\nYour refund of KES ${amount.toLocaleString()} for Appt #${appointment.id} is being processed.`,
+    'failed': `❌ REFUND FAILED\nIssue processing refund of KES ${amount.toLocaleString()} for Appt #${appointment.id}. Contact support (Ref: ${appointment.payment_reference}).`
+  };
+
+  const msg = messages[status] || messages['completed'];
+  return await sendSMS(client.phone, msg);
+}
+
+// ✅ NEW: Send Refund Request to Provider
+export async function sendRefundRequest(appointment, provider, client, amount) {
+  if (!shouldSend(provider, 'refund_request')) return;
+
+  const msg = `💰 REFUND REQUEST\n${client.name} cancelled Appt #${appointment.id}. Please process refund of KES ${amount.toLocaleString()} via your dashboard.`;
   return await sendSMS(provider.phone, msg);
 }
 
@@ -209,6 +231,8 @@ export default {
     sendPaymentReceipt, 
     sendCancellationNotice, 
     sendProviderNotification, 
+    sendRefundNotification, 
+    sendRefundRequest,
     sendScheduledReminders,
     getSMSStats 
 };
