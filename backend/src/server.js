@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import cron from 'node-cron'; // ✅ Import Cron
 import { db } from './config/database.js';
 
 // Import routes
@@ -66,32 +67,40 @@ const autoCancelPastAppointments = async () => {
 };
 
 /* =====================================================
-   📱 SMS REMINDER SCHEDULER
-   Runs every hour to check for appointments
-   happening in 24-26 hours and sends reminders
+   ⏰ BACKGROUND SCHEDULER (Cron Jobs)
 ===================================================== */
-const checkAndSendReminders = async () => {
+
+// 1. SMS Reminders: Runs every 10 minutes
+// Checks for appointments 24-26 hours away and sends SMS
+cron.schedule('*/10 * * * *', async () => {
+  console.log('🔔 CRON: Checking for SMS reminders...');
   try {
-    console.log('🔔 Checking for appointments needing reminders...');
     await sendScheduledReminders();
   } catch (error) {
-    console.error('❌ Error in reminder scheduler:', error);
+    console.error('❌ SMS Scheduler Error:', error);
   }
-};
+});
 
-// Run tasks once when server starts
+// 2. Cleanup: Runs every hour (at minute 0)
+// Cancels stale pending appointments
+cron.schedule('0 * * * *', async () => {
+  console.log('🧹 CRON: Running cleanup tasks...');
+  try {
+    await autoCancelPastAppointments();
+  } catch (error) {
+    console.error('❌ Cleanup Scheduler Error:', error);
+  }
+});
+
+// ---------------------------------------------------------
+
+// Run tasks immediately on startup
+console.log('🚀 Initializing background tasks...');
 autoCancelPastAppointments();
-console.log('📱 Initializing SMS reminder scheduler...');
-checkAndSendReminders();
-
-// Schedule to run every hour
-setInterval(() => {
-  autoCancelPastAppointments();
-  checkAndSendReminders();
-}, 60 * 60 * 1000); // every 1 hour
+sendScheduledReminders();
 
 app.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-  console.log(`📱 SMS notifications: ENABLED`);
+  console.log(`⏰ Scheduler active: Reminders (Every 10m), Cleanup (Hourly)`);
 });

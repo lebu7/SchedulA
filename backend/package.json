@@ -17,6 +17,7 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.2.1",
     "sqlite3": "^5.1.6",
     "twilio": "^4.14.0"
   },
