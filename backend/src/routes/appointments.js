@@ -733,7 +733,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
                             (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
                      FROM services s
                      WHERE s.id = ?`,
-                    [apt.client_id, apt.client_id, apt.client_id, apt.client_id, apt.service_id],
+                    [apt.client_id, apt.client_id, apt.client_id, apt.service_id], // FIXED: Removed extra param
                     (e, r) => e ? reject(e) : resolve(r)
                 );
             });
@@ -953,7 +953,7 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
                           (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
                    FROM services s
                    WHERE s.id = ?`,
-                  [row.client_id, row.client_id, row.client_id, row.client_id, row.service_id], 
+                  [row.client_id, row.client_id, row.client_id, row.service_id], // FIXED: Removed extra param
                   (e, r) => e ? reject(e) : resolve(r)
               );
           });
@@ -1072,7 +1072,7 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
                         (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
                  FROM services s
                  WHERE s.id = ?`,
-                [row.client_id, row.client_id, row.client_id, row.client_id, row.service_id], 
+                [row.client_id, row.client_id, row.client_id, row.service_id], // FIXED: Removed extra param
                 (e, r) => e ? reject(e) : resolve(r)
             );
         });
