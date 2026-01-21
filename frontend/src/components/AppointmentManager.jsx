@@ -4,7 +4,7 @@ import { useLocation } from "react-router-dom";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
-import { Receipt, AlertTriangle, CheckCircle, Info, Calendar } from "lucide-react"; // 🧠 Added Calendar Icon
+import { Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock } from "lucide-react"; // 🧠 Added Icons
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -184,10 +184,13 @@ function AppointmentManager({ user }) {
   const [cancelling, setCancelling] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
   
-  // Status Filter
+  // Status Filter (History)
   const [historyFilter, setHistoryFilter] = useState("all"); 
-  // 🆕 Date Filter
+  // Date Filter (History)
   const [dateFilter, setDateFilter] = useState("all"); 
+
+  // 🆕 DEV MODE: Allow modifying future appointments for testing
+  const [isDevMode, setIsDevMode] = useState(false);
 
   const [showBooking, setShowBooking] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false); 
@@ -402,303 +405,333 @@ function AppointmentManager({ user }) {
     );
   };
 
+  // 🆕 Helper Function to Render Single Card (Reusable for split sections)
+  const renderAppointmentCard = (apt, type) => {
+     const selectedAddons = parseAddons(apt);
+     const addonsTotal = selectedAddons.reduce(
+       (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
+       0
+     );
+     const basePrice = Number(apt.price ?? ((apt.total_price ?? 0) - addonsTotal) ?? 0);
+     const total = Number(apt.total_price ?? basePrice + addonsTotal);
+     const deposit = Number(apt.deposit_amount ?? Math.round(total * 0.3));
+     const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
+     const pending = Math.max(total - paid, 0);
+
+     const paystackConfig = {
+       reference: (new Date()).getTime().toString(),
+       email: user.email || "client@example.com",
+       amount: pending * 100, 
+       publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+       currency: "KES",
+       metadata: {
+         appointment_id: apt.id,
+         service: apt.service_name,
+         provider: apt.provider_name
+       }
+     };
+
+     const handleStatusChange = (e) => {
+       const newStatus = e.target.value;
+       if (newStatus === 'completed' && pending > 0) {
+         alert(`⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`);
+         return; 
+       }
+       handleStatusUpdate(apt.id, newStatus);
+     };
+
+     // 🛑 Future Restriction Logic
+     const isFuture = new Date(apt.appointment_date) > new Date();
+     // If it's a future appointment AND we are NOT in dev mode, disable actions
+     const actionsDisabled = isFuture && !isDevMode;
+
+     return (
+        <div
+            key={apt.id}
+            id={`apt-${apt.id}`} 
+            className={`appointment-card ${
+            apt.status === "pending" ? "highlight-pending" : ""
+            } ${location.state?.targetId == apt.id ? "highlight-target" : ""}`}
+        >
+            <div className="appointment-info">
+            {type === 'history' && getStatusBadge(apt.status)}
+
+            {apt.refund_status && (
+                <div className={`refund-status-badge ${apt.refund_status}`}>
+                {apt.refund_status === 'completed' && '✅ Refunded'}
+                {apt.refund_status === 'processing' && '⏳ Refund Processing'}
+                {apt.refund_status === 'pending' && '⏰ Refund Pending'}
+                {apt.refund_status === 'failed' && '❌ Refund Failed'}
+                </div>
+            )}
+
+            <h4>{apt.service_name}</h4>
+
+            {user.user_type === "client" ? (
+                <p><strong>With:</strong> {apt.provider_name}</p>
+            ) : (
+                <div>
+                <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                {(apt.status === 'pending' || apt.status === 'scheduled') && (
+                    <div style={{ marginTop: '5px', marginBottom: '8px' }}>
+                        {getRiskBadge(apt.no_show_risk)}
+                    </div>
+                )}
+                </div>
+            )}
+
+            <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
+            <p><strong>Duration:</strong> {apt.duration} minutes</p>
+
+            {apt.status === 'cancelled' && apt.notes && (
+                <p className="cancellation-reason" style={{ color: '#dc2626', fontSize: '13px', fontStyle: 'italic', marginTop: '6px' }}>
+                <strong>Note:</strong> {apt.notes}
+                </p>
+            )}
+
+            <div className="payment-details">
+                <p className="payment-line">
+                <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
+                </p>
+
+                <p className="payment-line">
+                <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
+
+                {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid' || apt.payment_status === 'refunded') && (
+                    <span 
+                    className="receipt-wrapper" 
+                    onClick={(e) => {
+                        e.stopPropagation(); 
+                        setSelectedPayment(apt);
+                    }}
+                    title="View Payment Receipt"
+                    style={{ 
+                        display: "inline-flex", 
+                        alignItems: "center", 
+                        marginLeft: "12px", 
+                        cursor: "pointer", 
+                        color: "#16a34a", 
+                        fontWeight: "600", 
+                        fontSize: "0.9em" 
+                    }}
+                    >
+                    <Receipt size={18} style={{ marginRight: "4px" }} />
+                    Receipt
+                    </span>
+                )}
+                </p>
+
+                <div className="info-row"><strong>Total Amount:</strong>
+                <span className="amount">KES {total.toLocaleString()}</span>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                <p style={{ color: pending > 0 ? "#b30000" : "#007b55", margin: 0 }}>
+                    <strong>Balance:</strong> KES {pending.toLocaleString()}
+                </p>
+
+                {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && apt.payment_status !== 'refunded' && (
+                    <PaystackButton
+                        {...paystackConfig}
+                        text={processingPayment === apt.id ? "Processing..." : (user.user_type === 'client' ? "Pay Balance" : "Process Payment")}
+                        className={`small-btn ${user.user_type === 'client' ? 'btn-primary' : 'btn-secondary'}`}
+                        onSuccess={(res) => handlePaystackSuccess(res, apt, pending)}
+                        onClose={() => console.log("Payment cancelled")}
+                        style={{
+                        background: user.user_type === 'client' ? "#16a34a" : "#4f46e5", 
+                        border: "none", 
+                        marginLeft: "10px", 
+                        fontSize: "12px", 
+                        padding: "6px 10px", 
+                        cursor: "pointer", 
+                        color: "white", 
+                        borderRadius: "6px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                        }}
+                    >
+                    </PaystackButton>
+                )}
+                </div>
+            </div>
+
+            {renderAddons(apt)}
+
+            <div className="total-cost-box">
+                <div className="total-row">
+                <span>Base Price:</span>
+                <strong>KES {basePrice.toLocaleString()}</strong>
+                </div>
+                <div className="total-row">
+                <span>Add-ons:</span>
+                <strong>+ KES {addonsTotal.toLocaleString()}</strong>
+                </div>
+                <div className="total-divider" />
+                <div className="total-row total-final">
+                <span>Total:</span>
+                <strong>KES {total.toLocaleString()}</strong>
+                </div>
+            </div>
+            </div>
+
+            <div className="appointment-actions">
+            {user.user_type === "client" ? (
+                <>
+                {/* Client Actions (Same as before) */}
+                {(apt.status === "pending" || apt.status === "scheduled") && !apt.refund_status && ( 
+                    <>
+                        <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
+                        <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
+                    </>
+                )}
+
+                {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
+                    <div className="action-row">
+                    {apt.status === 'cancelled' && (
+                        <button className="btn btn-primary small-btn" onClick={() => handleRebook(apt)}>Rebook</button>
+                    )}
+                    <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
+                    </div>
+                )}
+                </>
+            ) : (
+                <>
+                {/* Provider Actions */}
+                {apt.status === "pending" && type === "pending" && (
+                    <div className="status-action-row">
+                    <button className="btn-status confirm" onClick={() => handleStatusUpdate(apt.id, "scheduled")} disabled={updating === apt.id}>{updating === apt.id ? "..." : "Confirm"}</button>
+                    <button className="btn-status reject" onClick={() => handleReject(apt.id)} disabled={updating === apt.id}>Reject</button>
+                    </div>
+                )}
+
+                {apt.status === 'cancelled' && apt.refund_status === 'pending' && (
+                    <button
+                    className="btn btn-success small-btn"
+                    onClick={() => handleProviderRefund(apt.id)}
+                    disabled={updating === apt.id}
+                    style={{ marginTop: '10px', width: '100%', backgroundColor: '#10b981' }}
+                    >
+                    {updating === apt.id ? "Processing..." : "💰 Process Refund"}
+                    </button>
+                )}
+
+                {type === "upcoming" && apt.status === "scheduled" && (
+                    <div className="status-dropdown-container">
+                    {/* 🔒 Future Restriction: Disable dropdown if in future unless dev mode is on */}
+                    <div style={{display:'flex', alignItems:'center', gap:'8px', width:'100%'}}>
+                        {actionsDisabled && <Clock size={16} color="#94a3b8" title="Available when appointment time reached" />}
+                        <select
+                            value={apt.status}
+                            onChange={handleStatusChange} 
+                            disabled={updating === apt.id || actionsDisabled}
+                            className={`status-select ${actionsDisabled ? 'disabled-select' : ''}`}
+                            title={actionsDisabled ? "Actions disabled for future appointments (Enable Test Mode to override)" : ""}
+                        >
+                            <option value="scheduled">Scheduled</option>
+                            <option value="completed">{pending > 0 ? "🔒 Completed (Pay Balance First)" : "Completed"}</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="no-show">No Show</option>
+                        </select>
+                    </div>
+                    {actionsDisabled && <small style={{color:'#94a3b8', fontSize:'11px', marginTop:'4px', display:'block'}}>Action available on date</small>}
+                    </div>
+                )}
+
+                {type === "history" && (
+                    <div className="action-row">
+                    <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
+                    </div>
+                )}
+                </>
+            )}
+            </div>
+        </div>
+    );
+  };
+
   const renderAppointmentsList = (list, type) => {
     let displayList = list || [];
 
-    // 🧠 LOGIC: Apply Filters (Status + Date) for History Tab
+    // Filter Logic for History
     if (type === 'history') {
       displayList = appointments.past || [];
-      
-      // 1. Status Filter
-      if (historyFilter === 'completed') {
-        displayList = displayList.filter(apt => apt.status === 'completed');
-      } else if (historyFilter === 'cancelled') {
-        displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
-      }
+      if (historyFilter === 'completed') displayList = displayList.filter(apt => apt.status === 'completed');
+      else if (historyFilter === 'cancelled') displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
 
-      // 2. 🆕 Date Filter Logic
       const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth();
-
-      if (dateFilter === 'this_year') {
-        displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === currentYear);
-      } else if (dateFilter === 'this_month') {
-        displayList = displayList.filter(apt => {
-          const d = new Date(apt.appointment_date);
-          return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-        });
-      } else if (dateFilter === 'last_3_months') {
-        // Simple logic for last ~90 days
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-        displayList = displayList.filter(apt => new Date(apt.appointment_date) >= ninetyDaysAgo);
+      if (dateFilter === 'this_year') displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear());
+      else if (dateFilter === 'this_month') displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear() && new Date(apt.appointment_date).getMonth() === now.getMonth());
+      else if (dateFilter === 'last_3_months') {
+        const d = new Date(); d.setDate(d.getDate() - 90);
+        displayList = displayList.filter(apt => new Date(apt.appointment_date) >= d);
       }
     }
 
+    // 🧠 LOGIC: Split Upcoming Tab for Providers (Due vs Future)
+    if (type === 'upcoming' && user.user_type === 'provider') {
+        const now = new Date();
+        const dueAppointments = displayList.filter(apt => new Date(apt.appointment_date) <= now);
+        const futureAppointments = displayList.filter(apt => new Date(apt.appointment_date) > now);
+
+        return (
+            <div className="appointments-split-view">
+                {/* 1. Due / Overdue Section */}
+                <div className="section-block">
+                    <h3 className="section-title warning">
+                        <AlertTriangle size={18} /> Actions Due / Pending
+                    </h3>
+                    {dueAppointments.length === 0 ? (
+                        <p className="no-data-text">No pending appointments due right now.</p>
+                    ) : (
+                        <div className="appointments-list">
+                            {dueAppointments.map(apt => renderAppointmentCard(apt, type))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="section-divider"></div>
+
+                {/* 2. Future Section with Toggle */}
+                <div className="section-block">
+                    <div className="section-header-row" style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
+                        <h3 className="section-title info">
+                            <Calendar size={18} /> Future Appointments
+                        </h3>
+                        
+                        {/* 🛠️ Dev Mode Toggle */}
+                        <label className="dev-mode-toggle" title="Enable to test actions on future appointments">
+                            <input 
+                                type="checkbox" 
+                                checked={isDevMode} 
+                                onChange={(e) => setIsDevMode(e.target.checked)} 
+                            />
+                            <span className="toggle-label">
+                                {isDevMode ? <Unlock size={14} color="#16a34a"/> : <Lock size={14} color="#64748b"/>}
+                                Test Mode
+                            </span>
+                        </label>
+                    </div>
+
+                    {futureAppointments.length === 0 ? (
+                        <p className="no-data-text">No upcoming future appointments.</p>
+                    ) : (
+                        <div className="appointments-list">
+                            {futureAppointments.map(apt => renderAppointmentCard(apt, type))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Default Render for other tabs
     if (!displayList || displayList.length === 0)
       return <div className="no-appointments">No appointments found matching your filters.</div>;
 
-    const calculateTotals = (apt) => {
-      const selectedAddons = parseAddons(apt);
-      const addonsTotal = selectedAddons.reduce(
-        (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
-        0
-      );
-      const basePrice = Number(apt.price ?? ((apt.total_price ?? 0) - addonsTotal) ?? 0);
-      const total = Number(apt.total_price ?? basePrice + addonsTotal);
-      const deposit = Number(apt.deposit_amount ?? Math.round(total * 0.3));
-      const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
-      const pending = Math.max(total - paid, 0);
-
-      return { basePrice, addonsTotal, total, deposit, paid, pending, selectedAddons };
-    };
-
     return (
       <div className="appointments-list">
-        {displayList.map((apt) => {
-           const { basePrice, addonsTotal, total, deposit, paid, pending } = calculateTotals(apt);
-
-           const paystackConfig = {
-             reference: (new Date()).getTime().toString(),
-             email: user.email || "client@example.com",
-             amount: pending * 100, 
-             publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-             currency: "KES",
-             metadata: {
-               appointment_id: apt.id,
-               service: apt.service_name,
-               provider: apt.provider_name
-             }
-           };
-
-           const handleStatusChange = (e) => {
-             const newStatus = e.target.value;
-             if (newStatus === 'completed' && pending > 0) {
-               alert(`⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`);
-               return; 
-             }
-             handleStatusUpdate(apt.id, newStatus);
-           };
-
-           return (
-            <div
-              key={apt.id}
-              id={`apt-${apt.id}`} 
-              className={`appointment-card ${
-                apt.status === "pending" ? "highlight-pending" : ""
-              } ${location.state?.targetId == apt.id ? "highlight-target" : ""}`}
-            >
-              <div className="appointment-info">
-                {type === 'history' && getStatusBadge(apt.status)}
-
-                {apt.refund_status && (
-                  <div className={`refund-status-badge ${apt.refund_status}`}>
-                    {apt.refund_status === 'completed' && '✅ Refunded'}
-                    {apt.refund_status === 'processing' && '⏳ Refund Processing'}
-                    {apt.refund_status === 'pending' && '⏰ Refund Pending'}
-                    {apt.refund_status === 'failed' && '❌ Refund Failed'}
-                  </div>
-                )}
-
-                <h4>{apt.service_name}</h4>
-
-                {user.user_type === "client" ? (
-                  <p><strong>With:</strong> {apt.provider_name}</p>
-                ) : (
-                  <div>
-                    <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
-                    {/* 🧠 AI Risk Badge (Provider Only) */}
-                    {(apt.status === 'pending' || apt.status === 'scheduled') && (
-                        <div style={{ marginTop: '5px', marginBottom: '8px' }}>
-                            {getRiskBadge(apt.no_show_risk)}
-                        </div>
-                    )}
-                  </div>
-                )}
-
-                <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
-                <p><strong>Duration:</strong> {apt.duration} minutes</p>
-
-                {apt.status === 'cancelled' && apt.notes && (
-                  <p className="cancellation-reason" style={{ color: '#dc2626', fontSize: '13px', fontStyle: 'italic', marginTop: '6px' }}>
-                    <strong>Note:</strong> {apt.notes}
-                  </p>
-                )}
-
-                <div className="payment-details">
-                  <p className="payment-line">
-                    <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
-                  </p>
-
-                  <p className="payment-line">
-                    <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
-
-                    {(paid > 0 || apt.payment_status === 'paid' || apt.payment_status === 'deposit-paid' || apt.payment_status === 'refunded') && (
-                      <span 
-                        className="receipt-wrapper" 
-                        onClick={(e) => {
-                          e.stopPropagation(); 
-                          setSelectedPayment(apt);
-                        }}
-                        title="View Payment Receipt"
-                        style={{ 
-                          display: "inline-flex", 
-                          alignItems: "center", 
-                          marginLeft: "12px", 
-                          cursor: "pointer", 
-                          color: "#16a34a", 
-                          fontWeight: "600", 
-                          fontSize: "0.9em" 
-                        }}
-                      >
-                        <Receipt size={18} style={{ marginRight: "4px" }} />
-                        Receipt
-                      </span>
-                    )}
-                  </p>
-
-                  <div className="info-row"><strong>Total Amount:</strong>
-                    <span className="amount">KES {total.toLocaleString()}</span>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-                    <p style={{ color: pending > 0 ? "#b30000" : "#007b55", margin: 0 }}>
-                      <strong>Balance:</strong> KES {pending.toLocaleString()}
-                    </p>
-
-                    {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && apt.payment_status !== 'refunded' && (
-                       <PaystackButton
-                         {...paystackConfig}
-                         text={processingPayment === apt.id ? "Processing..." : (user.user_type === 'client' ? "Pay Balance" : "Process Payment")}
-                         className={`small-btn ${user.user_type === 'client' ? 'btn-primary' : 'btn-secondary'}`}
-                         onSuccess={(res) => handlePaystackSuccess(res, apt, pending)}
-                         onClose={() => console.log("Payment cancelled")}
-                         style={{
-                            background: user.user_type === 'client' ? "#16a34a" : "#4f46e5", 
-                            border: "none", 
-                            marginLeft: "10px", 
-                            fontSize: "12px", 
-                            padding: "6px 10px", 
-                            cursor: "pointer", 
-                            color: "white", 
-                            borderRadius: "6px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "4px"
-                         }}
-                       >
-                       </PaystackButton>
-                    )}
-                  </div>
-                </div>
-
-                {renderAddons(apt)}
-
-                <div className="total-cost-box">
-                  <div className="total-row">
-                    <span>Base Price:</span>
-                    <strong>KES {basePrice.toLocaleString()}</strong>
-                  </div>
-                  <div className="total-row">
-                    <span>Add-ons:</span>
-                    <strong>+ KES {addonsTotal.toLocaleString()}</strong>
-                  </div>
-                  <div className="total-divider" />
-                  <div className="total-row total-final">
-                    <span>Total:</span>
-                    <strong>KES {total.toLocaleString()}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="appointment-actions">
-                {user.user_type === "client" ? (
-                  <>
-                    {apt.status === "pending" && !apt.refund_status && ( 
-                        <>
-                            <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
-                            <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
-                        </>
-                    )}
-                    {apt.status === "scheduled" && (
-                        <>
-                            <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
-                            <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
-                        </>
-                    )}
-
-                    {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
-                      <div className="action-row">
-                        {apt.status === 'cancelled' && (
-                          <button
-                            className="btn btn-primary small-btn"
-                            onClick={() => handleRebook(apt)}
-                          >
-                            Rebook
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-danger small-btn"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {apt.status === "pending" && type === "pending" && (
-                      <div className="status-action-row">
-                        <button className="btn-status confirm" onClick={() => handleStatusUpdate(apt.id, "scheduled")} disabled={updating === apt.id}>{updating === apt.id ? "..." : "Confirm"}</button>
-                        <button className="btn-status reject" onClick={() => handleReject(apt.id)} disabled={updating === apt.id}>Reject</button>
-                      </div>
-                    )}
-
-                    {apt.status === 'cancelled' && apt.refund_status === 'pending' && (
-                      <button
-                        className="btn btn-success small-btn"
-                        onClick={() => handleProviderRefund(apt.id)}
-                        disabled={updating === apt.id}
-                        style={{ marginTop: '10px', width: '100%', backgroundColor: '#10b981' }}
-                      >
-                        {updating === apt.id ? "Processing..." : "💰 Process Refund"}
-                      </button>
-                    )}
-
-                    {type === "upcoming" && apt.status === "scheduled" && (
-                      <div className="status-dropdown-container">
-                        <select
-                          value={apt.status}
-                          onChange={handleStatusChange} 
-                          disabled={updating === apt.id}
-                          className="status-select"
-                        >
-                          <option value="scheduled">Scheduled</option>
-                          <option value="completed">{pending > 0 ? "🔒 Completed (Pay Balance First)" : "Completed"}</option>
-                          <option value="cancelled">Cancelled</option>
-                          <option value="no-show">No Show</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {type === "history" && (
-                      <div className="action-row">
-                        <button
-                          className="btn btn-danger small-btn"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-           );
-        })}
+        {displayList.map((apt) => renderAppointmentCard(apt, type))}
       </div>
     );
   };
@@ -735,27 +768,12 @@ function AppointmentManager({ user }) {
           <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             {/* Status Pills */}
             <div className="status-filters">
-              <button 
-                className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} 
-                onClick={() => setHistoryFilter('all')}
-              >
-                All Status
-              </button>
-              <button 
-                className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} 
-                onClick={() => setHistoryFilter('completed')}
-              >
-                Completed
-              </button>
-              <button 
-                className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} 
-                onClick={() => setHistoryFilter('cancelled')}
-              >
-                Cancelled
-              </button>
+              <button className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} onClick={() => setHistoryFilter('all')}>All Status</button>
+              <button className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} onClick={() => setHistoryFilter('completed')}>Completed</button>
+              <button className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} onClick={() => setHistoryFilter('cancelled')}>Cancelled</button>
             </div>
 
-            {/* 🆕 Date Filter Dropdown */}
+            {/* Date Filter Dropdown */}
             <div className="date-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Calendar size={18} color="#64748b" />
                 <select 
