@@ -4,7 +4,7 @@ import { useLocation } from "react-router-dom";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
-import { Receipt, AlertTriangle, CheckCircle, Info } from "lucide-react"; // 🧠 Added Icons
+import { Receipt, AlertTriangle, CheckCircle, Info, Calendar } from "lucide-react"; // 🧠 Added Calendar Icon
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -27,12 +27,10 @@ const parseAddons = (apt) => {
 
 /* 🧠 Helper: AI Risk Badge Logic */
 const getRiskBadge = (riskScore) => {
-  // If no score or score is 0, don't show anything (or show Low)
   if (riskScore === undefined || riskScore === null) return null;
   
   const score = Number(riskScore);
   
-  // Define Thresholds
   if (score < 0.3) {
     return (
       <span className="risk-badge low" title="Low probability of No-Show">
@@ -186,7 +184,10 @@ function AppointmentManager({ user }) {
   const [cancelling, setCancelling] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
   
+  // Status Filter
   const [historyFilter, setHistoryFilter] = useState("all"); 
+  // 🆕 Date Filter
+  const [dateFilter, setDateFilter] = useState("all"); 
 
   const [showBooking, setShowBooking] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false); 
@@ -404,17 +405,39 @@ function AppointmentManager({ user }) {
   const renderAppointmentsList = (list, type) => {
     let displayList = list || [];
 
+    // 🧠 LOGIC: Apply Filters (Status + Date) for History Tab
     if (type === 'history') {
       displayList = appointments.past || [];
+      
+      // 1. Status Filter
       if (historyFilter === 'completed') {
         displayList = displayList.filter(apt => apt.status === 'completed');
       } else if (historyFilter === 'cancelled') {
         displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
       }
+
+      // 2. 🆕 Date Filter Logic
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+
+      if (dateFilter === 'this_year') {
+        displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === currentYear);
+      } else if (dateFilter === 'this_month') {
+        displayList = displayList.filter(apt => {
+          const d = new Date(apt.appointment_date);
+          return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+        });
+      } else if (dateFilter === 'last_3_months') {
+        // Simple logic for last ~90 days
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        displayList = displayList.filter(apt => new Date(apt.appointment_date) >= ninetyDaysAgo);
+      }
     }
 
     if (!displayList || displayList.length === 0)
-      return <div className="no-appointments">No {type === 'history' ? historyFilter : type} appointments found.</div>;
+      return <div className="no-appointments">No appointments found matching your filters.</div>;
 
     const calculateTotals = (apt) => {
       const selectedAddons = parseAddons(apt);
@@ -709,25 +732,52 @@ function AppointmentManager({ user }) {
         </div>
 
         {activeTab === 'history' && (
-          <div className="history-filters">
-            <button 
-              className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} 
-              onClick={() => setHistoryFilter('all')}
-            >
-              All
-            </button>
-            <button 
-              className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} 
-              onClick={() => setHistoryFilter('completed')}
-            >
-              Completed
-            </button>
-            <button 
-              className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} 
-              onClick={() => setHistoryFilter('cancelled')}
-            >
-              Cancelled
-            </button>
+          <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            {/* Status Pills */}
+            <div className="status-filters">
+              <button 
+                className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} 
+                onClick={() => setHistoryFilter('all')}
+              >
+                All Status
+              </button>
+              <button 
+                className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} 
+                onClick={() => setHistoryFilter('completed')}
+              >
+                Completed
+              </button>
+              <button 
+                className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} 
+                onClick={() => setHistoryFilter('cancelled')}
+              >
+                Cancelled
+              </button>
+            </div>
+
+            {/* 🆕 Date Filter Dropdown */}
+            <div className="date-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Calendar size={18} color="#64748b" />
+                <select 
+                    value={dateFilter} 
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="date-select"
+                    style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#fff',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        outline: 'none'
+                    }}
+                >
+                    <option value="all">All Time</option>
+                    <option value="this_year">📅 This Year ({new Date().getFullYear()})</option>
+                    <option value="this_month">📅 This Month</option>
+                    <option value="last_3_months">⏳ Last 3 Months</option>
+                </select>
+            </div>
           </div>
         )}
 
