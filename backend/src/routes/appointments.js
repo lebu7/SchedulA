@@ -1,3 +1,4 @@
+/* backend/src/routes/appointments.js */
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { db } from '../config/database.js';
@@ -5,11 +6,12 @@ import { authenticateToken } from '../middleware/auth.js';
 import smsService from '../services/smsService.js';
 import { processPaystackRefund, sendRefundNotification, sendRefundRequestToProvider } from '../services/refundService.js';
 import { createNotification } from '../services/notificationService.js';
+import { predictNoShow } from '../services/aiPredictor.js'; // 🧠 AI Import
 
 const router = express.Router();
 
 /* ---------------------------------------------
-   ✅ Ensure "rebooked" status & Refund columns exist
+   ✅ Ensure "rebooked", "Refund", & "AI Risk" columns exist
 --------------------------------------------- */
 db.get(
   `SELECT sql FROM sqlite_master WHERE type='table' AND name='appointments'`,
@@ -19,9 +21,10 @@ db.get(
     
     const missingRebooked = !row.sql.includes("'rebooked'");
     const missingRefund = !row.sql.includes("'refund-pending'");
+    const missingRisk = !row.sql.includes("no_show_risk"); // 🧠 Check for AI column
 
-    if (missingRebooked || missingRefund) {
-      console.log('⚙️ Updating appointments table schema to support new statuses...');
+    if (missingRebooked || missingRefund || missingRisk) {
+      console.log('⚙️ Updating appointments table schema to support AI & Refunds...');
       db.serialize(() => {
         db.run('PRAGMA foreign_keys=off;');
         db.run(`
@@ -48,6 +51,7 @@ db.get(
             refund_amount REAL DEFAULT 0,
             refund_initiated_at DATETIME,
             refund_completed_at DATETIME,
+            no_show_risk REAL DEFAULT 0,  -- 🧠 New AI Risk Score
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES users(id),
             FOREIGN KEY (provider_id) REFERENCES users(id),
@@ -55,6 +59,7 @@ db.get(
           );
         `);
         
+        // Migrate existing data
         db.run(`INSERT INTO appointments_new (
           id, client_id, provider_id, service_id, appointment_date, status, notes, 
           client_deleted, provider_deleted, payment_status, payment_reference, 
@@ -70,7 +75,7 @@ db.get(
         db.run('DROP TABLE appointments;');
         db.run('ALTER TABLE appointments_new RENAME TO appointments;');
         db.run('PRAGMA foreign_keys=on;');
-        console.log('✅ Appointments table schema updated successfully.');
+        console.log('✅ Appointments table updated with AI Risk Column.');
       });
     }
   }
@@ -105,10 +110,8 @@ db.get(
 
 /* ---------------------------------------------
    ✅ Helper: Process Multi-Transaction Refunds
-   ⚠️ FIXED: Uses clear status codes from service
 --------------------------------------------- */
 async function processMultiTransactionRefund(appointmentId, totalAmountToRefund) {
-  // 1. Fetch all successful transactions for this appointment
   const transactions = await new Promise((resolve, reject) => {
     db.all(
       `SELECT * FROM transactions WHERE appointment_id = ? AND status = 'success' AND type = 'payment' ORDER BY id ASC`,
@@ -120,7 +123,6 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
     );
   });
 
-  // Fallback: If no transactions found (legacy data), try using the main table reference
   if (transactions.length === 0) {
     const apt = await new Promise((resolve) => {
         db.get(`SELECT payment_reference, amount_paid FROM appointments WHERE id = ?`, [appointmentId], (e, r) => resolve(r));
@@ -142,16 +144,12 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
     try {
         const result = await processPaystackRefund(tx.reference, Math.round(refundAmount * 100));
         
-        // ✅ Check Status Code from Service
         if (result.success || result.status === 'already_refunded') {
-            
             refundedTotal += refundAmount;
             remaining -= refundAmount;
-            
             const refToStore = result.refund_reference || `existing-${tx.reference}`;
             refundRefs.push(refToStore);
 
-            // Log refund transaction (Check existence first to avoid duplicates)
             await new Promise(resolve => {
                db.get(`SELECT id FROM transactions WHERE reference = ? AND type = 'refund'`, [refToStore], (e, row) => {
                   if (!row) {
@@ -164,7 +162,6 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
             });
 
         } else if (result.status === 'amount_exceeded') {
-            // Likely legacy data mismatch, skip gracefully
             console.warn(`⚠️ Skipped tx ${tx.reference} (Amount Mismatch)`);
         }
     } catch (e) {
@@ -172,7 +169,6 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
     }
   }
 
-  // Treat as success if we accounted for the money (either refunded now or previously)
   if (refundedTotal === 0 && totalAmountToRefund > 0) {
       throw new Error("Unable to verify any refunds for this appointment. Please check Paystack dashboard.");
   }
@@ -199,7 +195,9 @@ router.get('/', authenticateToken, (req, res) => {
       ORDER BY a.appointment_date DESC`
       : `
       SELECT a.*, s.name AS service_name, s.duration, s.price,
-             u.name AS client_name, u.phone AS client_phone
+             u.name AS client_name, u.phone AS client_phone,
+             -- 🧠 Provider sees Risk Score
+             a.no_show_risk 
       FROM appointments a
       JOIN services s ON a.service_id = s.id
       JOIN users u ON a.client_id = u.id
@@ -344,9 +342,7 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (With Overlap Protection)
-   ⚠️ FIXED: Removed extra placeholder in VALUES
-   ⚠️ FIXED: Log Transaction
+   ✅ Create appointment (With AI Prediction)
 --------------------------------------------- */
 router.post(
   '/',
@@ -438,7 +434,7 @@ router.post(
                     (a.appointment_date < ? AND datetime(a.appointment_date, '+' || s.duration || ' minutes') > ?)
                  )`,
                 [service.provider_id, newEndISO, newStartISO],
-                (errOverlap, existingBookings) => {
+                async (errOverlap, existingBookings) => {
                     if (errOverlap) return res.status(500).json({ error: 'Error checking availability' });
                     
                     const maxCapacity = service.capacity || 1;
@@ -447,6 +443,50 @@ router.post(
                         return res.status(400).json({ 
                             error: `This time slot is fully booked. Please choose another time.` 
                         });
+                    }
+
+                    // 🧠 AI PREDICTION: Calculate Features
+                    let riskScore = 0;
+                    try {
+                        const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const dayName = daysOfWeek[appointmentDate.getDay()];
+                        const hour = appointmentDate.getHours();
+                        let tod = 'afternoon';
+                        if (hour < 12) tod = 'morning';
+                        else if (hour > 17) tod = 'evening';
+
+                        // Fetch Client History for Features
+                        const clientStats = await new Promise(resolve => {
+                            db.get(
+                                `SELECT 
+                                    COUNT(CASE WHEN status='no-show' THEN 1 END) as noshows,
+                                    COUNT(CASE WHEN status='cancelled' THEN 1 END) as cancels,
+                                    MAX(appointment_date) as last_visit
+                                 FROM appointments WHERE client_id = ?`,
+                                [client_id],
+                                (e, r) => resolve(r || {})
+                            );
+                        });
+
+                        const recency = clientStats.last_visit 
+                            ? Math.floor((new Date() - new Date(clientStats.last_visit)) / (1000 * 60 * 60 * 24)) 
+                            : 30; // Default to 30 days if new
+
+                        // Get Prediction
+                        riskScore = await predictNoShow({
+                            timeOfDay: tod,
+                            dayOfWeek: dayName,
+                            category: service.category || 'MISC', // Assumes 'category' col in services
+                            recency: recency,
+                            lastReceipt: 50, // Placeholder or fetch actual sum
+                            historyNoShow: clientStats.noshows || 0,
+                            historyCancel: clientStats.cancels || 0
+                        });
+
+                        console.log(`🤖 AI Risk Prediction for Client ${client_id}: ${riskScore.toFixed(2)}`);
+
+                    } catch (aiErr) {
+                        console.error('AI Prediction skipped:', aiErr);
                     }
 
                     // Proceed to Create Appointment
@@ -469,9 +509,10 @@ router.post(
                         `INSERT INTO appointments (
                         client_id, provider_id, service_id, appointment_date, notes, status,
                         payment_reference, payment_status,
-                        total_price, deposit_amount, addons_total, addons, amount_paid
+                        total_price, deposit_amount, addons_total, addons, amount_paid,
+                        no_show_risk
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 13 columns
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 14 columns
                         [
                         client_id,
                         service.provider_id,
@@ -486,6 +527,7 @@ router.post(
                         addons_total,
                         JSON.stringify(Array.isArray(addons) ? addons : []),
                         paymentAmt || 0,
+                        riskScore || 0 // 🧠 Save Risk
                         ],
                         function (err4) {
                         if (err4) {
@@ -527,7 +569,13 @@ router.post(
 
                             // 🔔 Trigger Notifications
                             createNotification(client_id, 'booking', 'Booking Sent', `Your booking for ${service.name} is pending approval.`, newId);
-                            createNotification(service.provider_id, 'booking', 'New Booking Request', `${fullApt.client_name} booked ${service.name}.`, newId);
+                            
+                            // 🧠 Alert Provider if Risk is High
+                            let alertMsg = `${fullApt.client_name} booked ${service.name}.`;
+                            if (fullApt.no_show_risk > 0.7) {
+                                alertMsg += ` ⚠️ High No-Show Risk detected (${(fullApt.no_show_risk * 100).toFixed(0)}%).`;
+                            }
+                            createNotification(service.provider_id, 'booking', 'New Booking Request', alertMsg, newId);
 
                             await smsService.sendBookingConfirmation(
                                 {
@@ -652,7 +700,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (appointment_date && appointment_date !== apt.appointment_date) {
         const newDate = new Date(appointment_date);
         if (newDate <= new Date()) return res.status(400).json({ error: 'New date must be in the future' });
-        // (Validation logic omitted for brevity, assumed integrated)
     }
 
     // Update logic
@@ -717,13 +764,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
                 } else {
                     createNotification(fullApt.client_id, 'cancellation', 'Booking Cancelled', `Provider cancelled appointment #${id}.`, id);
                 }
-                // ✅ PASS USER TYPE to determine "You cancelled" vs "Provider cancelled"
+                
                 await smsService.sendCancellationNotice(
                   { ...fullApt, id: id, amount_paid: fullApt.amount_paid, provider_name: fullApt.provider_name }, 
                   clientObj, 
                   { name: fullApt.service_name }, 
                   notes,
-                  userType // 'client' or 'provider'
+                  userType 
                 );
               }
 
@@ -785,7 +832,6 @@ router.delete('/:id', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Update payment
-   FIXED: Log transaction
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -817,11 +863,9 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
         function (err2) {
           if (err2) return res.status(500).json({ error: "Failed to update payment info" });
           
-          // ✅ Log Transaction
           db.run(`INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`, 
                 [id, paid, payment_reference]);
 
-          // 🔔 Notify Provider
           db.get(`SELECT provider_id FROM appointments WHERE id=?`, [id], (e, r) => {
              if(r) createNotification(r.provider_id, 'payment', 'Payment Received', `Payment of KES ${paid} received for Appt #${id}.`, id);
           });
@@ -839,7 +883,6 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 
 /* ---------------------------------------------
    ✅ Pay remaining balance
-   FIXED: Log Transaction
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -870,14 +913,11 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to update balance payment' });
 
-        // ✅ Log Transaction
         db.run(`INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`, 
                 [id, amount_paid, payment_reference]);
 
-        // 🔔 Notify Provider
         createNotification(row.provider_id, 'payment', 'Balance Paid', `Balance payment of KES ${amount_paid} received for Appt #${id}.`, id);
 
-        // 📱 Send Payment Receipt SMS
         db.get(
           `SELECT c.name, c.phone, c.notification_preferences, s.name AS service_name, a.*
            FROM appointments a
@@ -931,7 +971,6 @@ router.post('/:id/request-balance', authenticateToken, (req, res) => {
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to create payment request' });
         
-        // 🔔 Notify Client
         createNotification(row.client_id, 'payment', 'Balance Request', `Provider requested balance payment of KES ${amount_requested}.`, id);
         
         res.json({ message: 'Payment request created', request_id: this.lastID });
@@ -962,7 +1001,6 @@ router.post('/:id/process-refund', authenticateToken, async (req, res) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
-      // Only allow if pending
       if (apt.refund_status !== 'pending') {
         return res.status(400).json({ error: 'No pending refund request found for this appointment' });
       }
@@ -975,7 +1013,6 @@ router.post('/:id/process-refund', authenticateToken, async (req, res) => {
 
       db.run(`UPDATE appointments SET refund_status = 'processing' WHERE id = ?`, [id]);
 
-      // ✅ Use Multi-Transaction Logic
       try {
           const result = await processMultiTransactionRefund(id, amountToRefund);
           
@@ -986,7 +1023,7 @@ router.post('/:id/process-refund', authenticateToken, async (req, res) => {
                  refund_completed_at = datetime('now'),
                  payment_status = 'refunded'
              WHERE id = ?`,
-            [result.references.join(','), id] // Store all refund refs
+            [result.references.join(','), id] 
           );
 
           createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountToRefund} has been processed.`, id);
@@ -1032,7 +1069,7 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
         if (err || !apt) return reject(err);
 
         const amountPaid = Number(apt.amount_paid || 0);
-        if (amountPaid <= 0) return resolve(); // Nothing to refund
+        if (amountPaid <= 0) return resolve(); 
 
         const clientObj = { name: apt.client_name, phone: apt.client_phone, notification_preferences: apt.client_prefs };
         const providerObj = { name: apt.provider_name, phone: apt.provider_phone, notification_preferences: apt.provider_prefs };
@@ -1050,7 +1087,6 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
             [amountPaid, appointmentId]
           );
 
-          // ✅ Use Multi-Transaction Logic
           try {
             const result = await processMultiTransactionRefund(appointmentId, amountPaid);
 

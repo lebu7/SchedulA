@@ -1,5 +1,6 @@
 /* backend/src/services/aiPredictor.js */
-import tf from '@tensorflow/tfjs-node';
+import * as tf from '@tensorflow/tfjs';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -8,16 +9,35 @@ const __dirname = path.dirname(__filename);
 
 let model = null;
 
-// Load model once when server starts
+// --- CUSTOM FILE LOADER FOR NODE 24 (Pure JS) ---
+// This enables loading local files without the crashing 'tfjs-node' adapter
+const loadModelFromDisk = async (dirPath) => {
+    const modelJsonPath = path.join(dirPath, 'model.json');
+    const weightsPath = path.join(dirPath, 'weights.bin');
+
+    // 1. Read the files manually using standard Node fs
+    const modelJson = JSON.parse(fs.readFileSync(modelJsonPath, 'utf8'));
+    const weightsBuffer = fs.readFileSync(weightsPath);
+
+    // 2. Create a virtual IO handler that returns the loaded files
+    const ioHandler = tf.io.fromMemory(
+        modelJson, 
+        weightsBuffer.buffer // Pass as ArrayBuffer
+    );
+
+    return await tf.loadLayersModel(ioHandler);
+};
+// ----------------------------------------------
+
 export const loadModel = async () => {
     if (model) return;
-    // Fix path to point to the saved model correctly
-    const modelPath = 'file://' + path.join(__dirname, '../ai-models/no-show-model/model.json');
+    const modelDir = path.join(__dirname, '../ai-models/no-show-model');
     try {
-        model = await tf.loadLayersModel(modelPath);
-        console.log("AI Model Loaded Successfully");
+        // Use our custom loader instead of standard URL loader
+        model = await loadModelFromDisk(modelDir);
+        console.log("✅ AI Model Loaded Successfully (Pure JS Mode)");
     } catch (err) {
-        console.error("Failed to load AI model:", err);
+        console.error("❌ Failed to load AI model:", err);
     }
 };
 
@@ -45,10 +65,15 @@ export const predictNoShow = async (appointmentDetails) => {
     if (!model) return 0;
 
     const features = encodeFeatures(appointmentDetails);
-    const inputTensor = tf.tensor2d([features], [1, 7]);
     
+    // Create tensor and run prediction
+    const inputTensor = tf.tensor2d([features], [1, 7]);
     const prediction = model.predict(inputTensor);
     const riskScore = prediction.dataSync()[0]; // Returns number between 0 and 1
+    
+    // Cleanup memory (Important in Pure JS mode)
+    inputTensor.dispose();
+    prediction.dispose();
     
     return riskScore; 
 };
