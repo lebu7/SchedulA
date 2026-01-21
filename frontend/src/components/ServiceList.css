@@ -378,3 +378,189 @@
 }
 
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* =========================================
+   PROVIDER DASHBOARD SPECIFIC STYLES
+   ========================================= */
+
+/* Top Action Bar (Add Service / Close Business) */
+.provider-top-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 25px;
+}
+
+.btn-add-service {
+  background-color: #0f172a;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-add-service:hover {
+  background-color: #334155;
+  transform: translateY(-2px);
+}
+
+.btn-close-business {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid #fecaca;
+  transition: all 0.2s;
+}
+
+.btn-close-business:hover {
+  background-color: #fecaca;
+}
+
+/* === PROVIDER SERVICE CARD === */
+.provider-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.provider-card:hover {
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+  border-color: #cbd5e1;
+}
+
+/* Header Section */
+.provider-card-header {
+  margin-bottom: 12px;
+}
+
+.provider-card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.provider-category-badge {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-top: 5px;
+}
+
+/* Description */
+.provider-card-desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+  margin-bottom: 15px;
+  min-height: 40px; /* Aligns cards */
+}
+
+/* Stats Row (Time, Price, Capacity) */
+.provider-stats-row {
+  display: flex;
+  justify-content: space-between;
+  background: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 15px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.stat-item span {
+  display: block;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+/* View Add-ons Button (Middle) */
+.btn-view-addons {
+  width: 100%;
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px dashed #bfdbfe;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-view-addons:hover {
+  background-color: #dbeafe;
+}
+
+/* Bottom Actions Row */
+.provider-actions-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 15px;
+}
+
+.btn-action {
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-edit {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+.btn-edit:hover { background-color: #e2e8f0; color: #1e293b; }
+
+.btn-delete {
+  background-color: #fff1f2;
+  color: #e11d48;
+}
+.btn-delete:hover { background-color: #ffe4e6; }
+
+.btn-toggle-close {
+  background-color: #f0f9ff;
+  color: #0284c7;
+}
+.btn-toggle-close:hover { background-color: #e0f2fe; }
+
+.btn-toggle-open {
+  background-color: #fefce8;
+  color: #ca8a04;
+}
+.btn-toggle-open:hover { background-color: #fef08a; }
