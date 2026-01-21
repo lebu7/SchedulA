@@ -496,10 +496,10 @@ router.post(
                         console.log(`🤖 Base AI Score: ${riskScore.toFixed(2)}`);
 
                         if (paidAmt >= totalCost && totalCost > 0) {
-                            riskScore = riskScore * 0.2; // Reduce to 20%
+                            riskScore = riskScore * 0.2; 
                             console.log("💰 Full Payment: Reducing Risk significantly.");
                         } else if (paidAmt > depositReq) {
-                            riskScore = riskScore * 0.7; // Reduce to 70%
+                            riskScore = riskScore * 0.7; 
                             console.log("💰 Extra Payment: Reducing Risk.");
                         }
                         
@@ -922,7 +922,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update payment
+   ✅ Update payment (Includes 🧠 AI Risk Recalculation)
 --------------------------------------------- */
 router.put('/:id/payment', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -934,23 +934,88 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
   const paid = Number(amount_paid || 0);
 
   db.get(
-    `SELECT total_price FROM appointments WHERE id = ?`,
+    `SELECT * FROM appointments WHERE id = ?`,
     [id],
-    (err, row) => {
+    async (err, row) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (!row) return res.status(404).json({ error: "Appointment not found" });
 
       const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
 
-      db.run(
-        `
+      // 🧠 RE-CALCULATE RISK ON PAYMENT
+      let newRiskScore = null;
+      try {
+          const riskData = await new Promise((resolve, reject) => {
+              db.get(
+                  `SELECT s.category, 
+                          (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='no-show') as noshows,
+                          (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='cancelled') as cancels,
+                          (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
+                   FROM services s
+                   WHERE s.id = ?`,
+                  [row.client_id, row.client_id, row.client_id, row.client_id, row.service_id], 
+                  (e, r) => e ? reject(e) : resolve(r)
+              );
+          });
+
+          if (riskData) {
+              const aptDate = new Date(row.appointment_date);
+              const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+              const dayName = daysOfWeek[aptDate.getDay()];
+              const hour = aptDate.getHours();
+              let tod = 'afternoon';
+              if (hour < 12) tod = 'morning';
+              else if (hour > 17) tod = 'evening';
+
+              const recency = riskData.last_visit 
+                  ? Math.floor((new Date() - new Date(riskData.last_visit)) / (1000 * 60 * 60 * 24)) 
+                  : 30;
+
+              newRiskScore = await predictNoShow({
+                  timeOfDay: tod,
+                  dayOfWeek: dayName,
+                  category: riskData.category || 'MISC',
+                  recency: recency,
+                  lastReceipt: 50, 
+                  historyNoShow: riskData.noshows || 0,
+                  historyCancel: riskData.cancels || 0
+              });
+
+              // Apply Payment Logic
+              const totalCost = Number(row.total_price || 0);
+              const depositReq = Number(row.deposit_amount || 0);
+              
+              if (paid >= totalCost && totalCost > 0) {
+                  newRiskScore = newRiskScore * 0.2;
+              } else if (paid > depositReq) {
+                  newRiskScore = newRiskScore * 0.7;
+              }
+              newRiskScore = Math.max(0, newRiskScore);
+          }
+      } catch (e) {
+          console.error("Payment Risk Recalc Failed:", e);
+      }
+
+      // Update Query
+      let updateQuery = `
         UPDATE appointments
         SET payment_reference = ?,
             amount_paid = ?, 
             payment_status = ?
-        WHERE id = ?
-        `,
-        [payment_reference, paid, finalStatus, id],
+      `;
+      const updateParams = [payment_reference, paid, finalStatus];
+
+      if (newRiskScore !== null) {
+          updateQuery += `, no_show_risk = ?`;
+          updateParams.push(newRiskScore);
+      }
+
+      updateQuery += ` WHERE id = ?`;
+      updateParams.push(id);
+
+      db.run(
+        updateQuery,
+        updateParams,
         function (err2) {
           if (err2) return res.status(500).json({ error: "Failed to update payment info" });
           
@@ -973,7 +1038,7 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Pay remaining balance
+   ✅ Pay remaining balance (Includes 🧠 AI Risk Recalculation)
 --------------------------------------------- */
 router.put('/:id/pay-balance', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -984,7 +1049,7 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'payment_reference and positive amount_paid are required' });
   }
 
-  db.get(`SELECT client_id, provider_id, total_price, amount_paid FROM appointments WHERE id = ?`, [id], (err, row) => {
+  db.get(`SELECT * FROM appointments WHERE id = ?`, [id], async (err, row) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!row) return res.status(404).json({ error: 'Appointment not found' });
 
@@ -996,11 +1061,77 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
     const newPaid = prevPaid + Number(amount_paid);
     const finalStatus = newPaid >= Number(row.total_price || 0) ? 'paid' : 'deposit-paid';
 
+    // 🧠 RE-CALCULATE RISK ON BALANCE PAYMENT
+    let newRiskScore = null;
+    try {
+        const riskData = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT s.category, 
+                        (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='no-show') as noshows,
+                        (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='cancelled') as cancels,
+                        (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
+                 FROM services s
+                 WHERE s.id = ?`,
+                [row.client_id, row.client_id, row.client_id, row.client_id, row.service_id], 
+                (e, r) => e ? reject(e) : resolve(r)
+            );
+        });
+
+        if (riskData) {
+            const aptDate = new Date(row.appointment_date);
+            const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayName = daysOfWeek[aptDate.getDay()];
+            const hour = aptDate.getHours();
+            let tod = 'afternoon';
+            if (hour < 12) tod = 'morning';
+            else if (hour > 17) tod = 'evening';
+
+            const recency = riskData.last_visit 
+                ? Math.floor((new Date() - new Date(riskData.last_visit)) / (1000 * 60 * 60 * 24)) 
+                : 30;
+
+            newRiskScore = await predictNoShow({
+                timeOfDay: tod,
+                dayOfWeek: dayName,
+                category: riskData.category || 'MISC',
+                recency: recency,
+                lastReceipt: 50, 
+                historyNoShow: riskData.noshows || 0,
+                historyCancel: riskData.cancels || 0
+            });
+
+            // Apply Payment Logic (Using newPaid which is current + previous)
+            const totalCost = Number(row.total_price || 0);
+            const depositReq = Number(row.deposit_amount || 0);
+            
+            if (newPaid >= totalCost && totalCost > 0) {
+                newRiskScore = newRiskScore * 0.2;
+            } else if (newPaid > depositReq) {
+                newRiskScore = newRiskScore * 0.7;
+            }
+            newRiskScore = Math.max(0, newRiskScore);
+        }
+    } catch (e) {
+        console.error("Balance Pay Risk Recalc Failed:", e);
+    }
+
+    let updateQuery = `
+      UPDATE appointments
+      SET amount_paid = ?, payment_reference = ?, payment_status = ?
+    `;
+    const updateParams = [newPaid, payment_reference, finalStatus];
+
+    if (newRiskScore !== null) {
+        updateQuery += `, no_show_risk = ?`;
+        updateParams.push(newRiskScore);
+    }
+
+    updateQuery += ` WHERE id = ?`;
+    updateParams.push(id);
+
     db.run(
-      `UPDATE appointments
-       SET amount_paid = ?, payment_reference = ?, payment_status = ?
-       WHERE id = ?`,
-      [newPaid, payment_reference, finalStatus, id],
+      updateQuery,
+      updateParams,
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to update balance payment' });
 
