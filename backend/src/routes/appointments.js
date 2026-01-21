@@ -340,7 +340,7 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (With AI Prediction)
+   ✅ Create appointment (With AI Prediction + Payment Override)
 --------------------------------------------- */
 router.post(
   '/',
@@ -468,20 +468,42 @@ router.post(
 
                         const recency = clientStats.last_visit 
                             ? Math.floor((new Date() - new Date(clientStats.last_visit)) / (1000 * 60 * 60 * 24)) 
-                            : 30; // Default to 30 days if new
+                            : 30; 
 
-                        // Get Prediction
+                        // Get Base Prediction
                         riskScore = await predictNoShow({
                             timeOfDay: tod,
                             dayOfWeek: dayName,
-                            category: service.category || 'MISC', // Assumes 'category' col in services
+                            category: service.category || 'MISC', 
                             recency: recency,
-                            lastReceipt: 50, // Placeholder or fetch actual sum
+                            lastReceipt: 50, 
                             historyNoShow: clientStats.noshows || 0,
                             historyCancel: clientStats.cancels || 0
                         });
 
-                        console.log(`🤖 AI Risk Prediction for Client ${client_id}: ${riskScore.toFixed(2)}`);
+                        // 💰 PAYMENT OVERRIDE LOGIC
+                        let addons_total = 0;
+                        if (Array.isArray(addons) && addons.length > 0) {
+                          addons_total = addons.reduce(
+                            (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
+                            0
+                          );
+                        }
+                        const totalCost = Number(service.price || 0) + addons_total;
+                        const depositReq = Math.round(totalCost * 0.3);
+                        const paidAmt = Number(payment_amount || 0);
+
+                        console.log(`🤖 Base AI Score: ${riskScore.toFixed(2)}`);
+
+                        if (paidAmt >= totalCost && totalCost > 0) {
+                            riskScore = riskScore * 0.2; // Reduce to 20%
+                            console.log("💰 Full Payment: Reducing Risk significantly.");
+                        } else if (paidAmt > depositReq) {
+                            riskScore = riskScore * 0.7; // Reduce to 70%
+                            console.log("💰 Extra Payment: Reducing Risk.");
+                        }
+                        
+                        riskScore = Math.max(0, riskScore);
 
                     } catch (aiErr) {
                         console.error('AI Prediction skipped:', aiErr);
@@ -510,7 +532,7 @@ router.post(
                         total_price, deposit_amount, addons_total, addons, amount_paid,
                         no_show_risk
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 14 columns
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
                         [
                         client_id,
                         service.provider_id,
@@ -525,7 +547,7 @@ router.post(
                         addons_total,
                         JSON.stringify(Array.isArray(addons) ? addons : []),
                         paymentAmt || 0,
-                        riskScore || 0 // 🧠 Save Risk
+                        riskScore || 0 
                         ],
                         function (err4) {
                         if (err4) {
@@ -565,7 +587,6 @@ router.post(
                             const clientObj = { name: fullApt.client_name, phone: fullApt.client_phone, notification_preferences: fullApt.client_prefs };
                             const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone, notification_preferences: fullApt.provider_prefs };
 
-                            // 🔔 Trigger Notifications
                             createNotification(client_id, 'booking', 'Booking Sent', `Your booking for ${service.name} is pending approval.`, newId);
                             
                             // 🧠 Alert Provider if Risk is High
@@ -683,7 +704,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
       ? 'SELECT * FROM appointments WHERE id = ? AND client_id = ?'
       : 'SELECT * FROM appointments WHERE id = ? AND provider_id = ?';
 
-  // 🧠 Changed callback to async to handle AI Promise
   db.get(accessQuery, [id, userId], async (err, apt) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!apt) return res.status(404).json({ error: 'Appointment not found' });
@@ -704,7 +724,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
         // 🧠 RE-CALCULATE AI RISK
         try {
-            // 1. Fetch Service Category & Client History
+            // 1. Fetch Service Category, Client History AND Payment Info
             const riskData = await new Promise((resolve, reject) => {
                 db.get(
                     `SELECT s.category, 
@@ -740,7 +760,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
                     historyCancel: riskData.cancels || 0
                 });
                 
-                console.log(`🧠 Reschedule detected. New Risk Score: ${newRiskScore.toFixed(2)}`);
+                console.log(`🤖 Reschedule - Base AI Score: ${newRiskScore.toFixed(2)}`);
+
+                // 💰 APPLY PAYMENT OVERRIDE ON RESCHEDULE TOO
+                const totalCost = Number(apt.total_price || 0);
+                const paidAmt = Number(apt.amount_paid || 0);
+                const depositReq = Number(apt.deposit_amount || 0);
+
+                if (paidAmt >= totalCost && totalCost > 0) {
+                    newRiskScore = newRiskScore * 0.2; 
+                    console.log("💰 Reschedule: Fully Paid -> Risk Lowered.");
+                } else if (paidAmt > depositReq) {
+                    newRiskScore = newRiskScore * 0.7; 
+                    console.log("💰 Reschedule: Extra Paid -> Risk Lowered.");
+                }
+
+                newRiskScore = Math.max(0, newRiskScore);
             }
         } catch (e) {
             console.error("AI Recalc Failed:", e);
