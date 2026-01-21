@@ -1,3 +1,4 @@
+/* backend/config/database.js */
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -98,6 +99,9 @@ function initializeDatabase() {
       refund_initiated_at DATETIME,
       refund_completed_at DATETIME,
 
+      -- 🧠 AI Risk Score
+      no_show_risk REAL DEFAULT 0,
+
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES users (id),
       FOREIGN KEY (provider_id) REFERENCES users (id),
@@ -106,7 +110,7 @@ function initializeDatabase() {
   `);
 
   /* ---------------------------------------------
-     💰 TRANSACTIONS TABLE (NEW)
+     💰 TRANSACTIONS TABLE
      Tracks individual payments to allow correct refunds
   --------------------------------------------- */
   db.run(`
@@ -136,6 +140,22 @@ function initializeDatabase() {
       });
     }
   });
+
+  /* ---------------------------------------------
+     🧠 AI PREDICTIONS TRACKING TABLE (NEW)
+     Logs AI accuracy for future model improvement
+  --------------------------------------------- */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ai_predictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      appointment_id INTEGER NOT NULL,
+      predicted_risk REAL NOT NULL,
+      actual_outcome TEXT, -- 'no-show', 'completed', 'cancelled'
+      payment_amount REAL,
+      prediction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (appointment_id) REFERENCES appointments(id)
+    )
+  `);
 
   /* ---------------------------------------------
      🔔 NOTIFICATIONS TABLE
@@ -247,6 +267,9 @@ function initializeDatabase() {
   tryAddColumn('appointments', 'refund_amount', "REAL DEFAULT 0");
   tryAddColumn('appointments', 'refund_initiated_at', "DATETIME");
   tryAddColumn('appointments', 'refund_completed_at', "DATETIME");
+  
+  // 🧠 Ensure AI column is added if missing
+  tryAddColumn('appointments', 'no_show_risk', "REAL DEFAULT 0");
 
   console.log('🎯 Database initialization completed');
 }

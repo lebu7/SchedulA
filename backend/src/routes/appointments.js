@@ -11,7 +11,7 @@ import { predictNoShow } from '../services/aiPredictor.js'; // 🧠 AI Import
 const router = express.Router();
 
 /* ---------------------------------------------
-   ✅ Ensure "rebooked", "Refund", & "AI Risk" columns exist
+   ✅ Ensure "rebooked", "Refund", "AI Risk" & "AI Predictions" tables exist
 --------------------------------------------- */
 db.get(
   `SELECT sql FROM sqlite_master WHERE type='table' AND name='appointments'`,
@@ -79,6 +79,21 @@ db.get(
     }
   }
 );
+
+/* ---------------------------------------------
+   🧠 Create AI Predictions Tracking Table
+--------------------------------------------- */
+db.run(`
+  CREATE TABLE IF NOT EXISTS ai_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    appointment_id INTEGER NOT NULL,
+    predicted_risk REAL NOT NULL,
+    actual_outcome TEXT, -- 'no-show', 'completed', 'cancelled'
+    payment_amount REAL,
+    prediction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (appointment_id) REFERENCES appointments(id)
+  )
+`);
 
 /* ---------------------------------------------
    Create payment_requests table if not exists
@@ -173,6 +188,86 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
   }
 
   return { success: true, refundedAmount: refundedTotal, references: refundRefs };
+}
+
+/* ---------------------------------------------
+   🧠 CENTRALIZED AI RISK CALCULATOR
+   Fetches real history, service category, and applies payment logic
+--------------------------------------------- */
+async function calculateNoShowRisk(appointmentData) {
+    try {
+        const { client_id, service_id, appointment_date, amount_paid, total_price, deposit_amount } = appointmentData;
+
+        // 1. Fetch Service Category
+        const serviceData = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT category FROM services WHERE id = ?`,
+                [service_id],
+                (e, r) => e ? reject(e) : resolve(r || {})
+            );
+        });
+
+        // 2. Fetch Client History (Real Data)
+        const clientStats = await new Promise((resolve) => {
+            db.get(
+                `SELECT 
+                    COUNT(CASE WHEN status='no-show' THEN 1 END) as noshows,
+                    COUNT(CASE WHEN status='cancelled' THEN 1 END) as cancels,
+                    MAX(appointment_date) as last_visit,
+                    AVG(CASE WHEN amount_paid > 0 THEN amount_paid ELSE NULL END) as avg_receipt
+                 FROM appointments WHERE client_id = ?`,
+                [client_id],
+                (e, r) => resolve(r || {})
+            );
+        });
+
+        // 3. Calculate Time Features
+        const aptDate = new Date(appointment_date);
+        const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayName = daysOfWeek[aptDate.getDay()];
+        const hour = aptDate.getHours();
+        let tod = 'afternoon';
+        if (hour < 12) tod = 'morning';
+        else if (hour > 17) tod = 'evening';
+
+        const recency = clientStats.last_visit 
+            ? Math.floor((new Date() - new Date(clientStats.last_visit)) / (1000 * 60 * 60 * 24)) 
+            : 30; // Default 30 for new clients
+
+        // 4. Get Base Prediction
+        // Note: avg_receipt defaults to 50 if no history
+        let riskScore = await predictNoShow({
+            timeOfDay: tod,
+            dayOfWeek: dayName,
+            category: serviceData?.category || 'Barbershop', // Default fallback
+            recency: recency,
+            lastReceipt: clientStats.avg_receipt || 50, 
+            historyNoShow: clientStats.noshows || 0,
+            historyCancel: clientStats.cancels || 0
+        });
+
+        console.log(`🤖 Base AI Score: ${riskScore.toFixed(2)}`);
+
+        // 5. Apply Payment Override
+        const totalCost = Number(total_price || 0);
+        const paidAmt = Number(amount_paid || 0);
+        const depositReq = Number(deposit_amount || Math.round(totalCost * 0.3));
+
+        if (paidAmt >= totalCost && totalCost > 0) {
+            riskScore = riskScore * 0.2; // Full payment -> Massive Risk Reduction
+            console.log("💰 Full Payment: Risk reduced significantly");
+        } else if (paidAmt > depositReq) {
+            riskScore = riskScore * 0.7; // Extra payment -> Moderate Reduction
+            console.log("💰 Extra Payment: Risk reduced");
+        }
+
+        // Clamp between 0 and 1
+        return Math.max(0, Math.min(1, riskScore));
+
+    } catch (error) {
+        console.error("❌ AI Risk Calculation Failed:", error);
+        return 0; // Return Low Risk on failure so booking proceeds
+    }
 }
 
 /* ---------------------------------------------
@@ -340,7 +435,7 @@ router.get('/providers/:id/availability', (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (With AI Prediction + Payment Override)
+   ✅ Create appointment (With AI Prediction + Tracking)
 --------------------------------------------- */
 router.post(
   '/',
@@ -443,75 +538,7 @@ router.post(
                         });
                     }
 
-                    // 🧠 AI PREDICTION: Calculate Features
-                    let riskScore = 0;
-                    try {
-                        const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                        const dayName = daysOfWeek[appointmentDate.getDay()];
-                        const hour = appointmentDate.getHours();
-                        let tod = 'afternoon';
-                        if (hour < 12) tod = 'morning';
-                        else if (hour > 17) tod = 'evening';
-
-                        // Fetch Client History for Features
-                        const clientStats = await new Promise(resolve => {
-                            db.get(
-                                `SELECT 
-                                    COUNT(CASE WHEN status='no-show' THEN 1 END) as noshows,
-                                    COUNT(CASE WHEN status='cancelled' THEN 1 END) as cancels,
-                                    MAX(appointment_date) as last_visit
-                                 FROM appointments WHERE client_id = ?`,
-                                [client_id],
-                                (e, r) => resolve(r || {})
-                            );
-                        });
-
-                        const recency = clientStats.last_visit 
-                            ? Math.floor((new Date() - new Date(clientStats.last_visit)) / (1000 * 60 * 60 * 24)) 
-                            : 30; 
-
-                        // Get Base Prediction
-                        riskScore = await predictNoShow({
-                            timeOfDay: tod,
-                            dayOfWeek: dayName,
-                            category: service.category || 'MISC', 
-                            recency: recency,
-                            lastReceipt: 50, 
-                            historyNoShow: clientStats.noshows || 0,
-                            historyCancel: clientStats.cancels || 0
-                        });
-
-                        // 💰 PAYMENT OVERRIDE LOGIC
-                        let addons_total = 0;
-                        if (Array.isArray(addons) && addons.length > 0) {
-                          addons_total = addons.reduce(
-                            (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
-                            0
-                          );
-                        }
-                        const totalCost = Number(service.price || 0) + addons_total;
-                        const depositReq = Math.round(totalCost * 0.3);
-                        const paidAmt = Number(payment_amount || 0);
-
-                        console.log(`🤖 Base AI Score: ${riskScore.toFixed(2)}`);
-
-                        if (paidAmt >= totalCost && totalCost > 0) {
-                            riskScore = riskScore * 0.2; 
-                            console.log("💰 Full Payment: Reducing Risk significantly.");
-                        } else if (paidAmt > depositReq) {
-                            riskScore = riskScore * 0.7; 
-                            console.log("💰 Extra Payment: Reducing Risk.");
-                        }
-                        
-                        riskScore = Math.max(0, riskScore);
-
-                    } catch (aiErr) {
-                        console.error('AI Prediction skipped:', aiErr);
-                    }
-
-                    // Proceed to Create Appointment
-                    const status = 'pending';
-                    
+                    // 💰 Calculate Financials
                     let addons_total = 0;
                     if (Array.isArray(addons) && addons.length > 0) {
                       addons_total = addons.reduce(
@@ -519,11 +546,23 @@ router.post(
                         0
                       );
                     }
-
                     const total_price = Number(service.price || 0) + addons_total;
                     const deposit_amount = Math.round(total_price * 0.3);
                     const paymentAmt = Number(payment_amount || 0);
                     let payment_status = paymentAmt >= total_price ? 'paid' : 'deposit-paid';
+
+                    // 🧠 AI PREDICTION (Using Central Helper)
+                    const riskScore = await calculateNoShowRisk({
+                        client_id,
+                        service_id,
+                        appointment_date: appointmentDate,
+                        amount_paid: paymentAmt,
+                        total_price,
+                        deposit_amount
+                    });
+
+                    // Proceed to Create Appointment
+                    const status = 'pending';
 
                     db.run(
                         `INSERT INTO appointments (
@@ -557,9 +596,13 @@ router.post(
 
                         const newId = this.lastID;
 
-                        // ✅ Log Transaction to transactions table
+                        // ✅ Log Transaction
                         db.run(`INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`, 
                             [newId, paymentAmt, payment_reference]);
+
+                        // 🧠 Log Prediction for Future Analysis
+                        db.run(`INSERT INTO ai_predictions (appointment_id, predicted_risk, payment_amount) VALUES (?, ?, ?)`, 
+                            [newId, riskScore, paymentAmt]);
 
                         if (rebook_from) {
                             db.run(
@@ -723,63 +766,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
         if (newDate <= new Date()) return res.status(400).json({ error: 'New date must be in the future' });
 
         // 🧠 RE-CALCULATE AI RISK
-        try {
-            // 1. Fetch Service Category, Client History AND Payment Info
-            const riskData = await new Promise((resolve, reject) => {
-                db.get(
-                    `SELECT s.category, 
-                            (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='no-show') as noshows,
-                            (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='cancelled') as cancels,
-                            (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
-                     FROM services s
-                     WHERE s.id = ?`,
-                    [apt.client_id, apt.client_id, apt.client_id, apt.service_id], // FIXED: Removed extra param
-                    (e, r) => e ? reject(e) : resolve(r)
-                );
-            });
-
-            if (riskData) {
-                const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                const dayName = daysOfWeek[newDate.getDay()];
-                const hour = newDate.getHours();
-                let tod = 'afternoon';
-                if (hour < 12) tod = 'morning';
-                else if (hour > 17) tod = 'evening';
-
-                const recency = riskData.last_visit 
-                    ? Math.floor((new Date() - new Date(riskData.last_visit)) / (1000 * 60 * 60 * 24)) 
-                    : 30;
-
-                newRiskScore = await predictNoShow({
-                    timeOfDay: tod,
-                    dayOfWeek: dayName,
-                    category: riskData.category || 'MISC',
-                    recency: recency,
-                    lastReceipt: 50, // Placeholder
-                    historyNoShow: riskData.noshows || 0,
-                    historyCancel: riskData.cancels || 0
-                });
-                
-                console.log(`🤖 Reschedule - Base AI Score: ${newRiskScore.toFixed(2)}`);
-
-                // 💰 APPLY PAYMENT OVERRIDE ON RESCHEDULE TOO
-                const totalCost = Number(apt.total_price || 0);
-                const paidAmt = Number(apt.amount_paid || 0);
-                const depositReq = Number(apt.deposit_amount || 0);
-
-                if (paidAmt >= totalCost && totalCost > 0) {
-                    newRiskScore = newRiskScore * 0.2; 
-                    console.log("💰 Reschedule: Fully Paid -> Risk Lowered.");
-                } else if (paidAmt > depositReq) {
-                    newRiskScore = newRiskScore * 0.7; 
-                    console.log("💰 Reschedule: Extra Paid -> Risk Lowered.");
-                }
-
-                newRiskScore = Math.max(0, newRiskScore);
-            }
-        } catch (e) {
-            console.error("AI Recalc Failed:", e);
-        }
+        newRiskScore = await calculateNoShowRisk({
+            client_id: apt.client_id,
+            service_id: apt.service_id,
+            appointment_date: newDate,
+            amount_paid: apt.amount_paid,
+            total_price: apt.total_price,
+            deposit_amount: apt.deposit_amount
+        });
     }
 
     // Update logic
@@ -812,6 +806,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     db.run(q, params, async (err2) => {
       if (err2) return res.status(500).json({ error: 'Failed to update appointment' });
+
+      // ✅ Log Prediction outcome if status changed to final state
+      if (['completed', 'no-show', 'cancelled'].includes(effectiveStatus)) {
+          db.run(`UPDATE ai_predictions SET actual_outcome = ? WHERE appointment_id = ?`, [effectiveStatus, id]);
+      }
 
       // ✅ AUTOMATIC REFUND LOGIC
       if (status === 'cancelled') {
@@ -943,75 +942,25 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
       const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
 
       // 🧠 RE-CALCULATE RISK ON PAYMENT
-      let newRiskScore = null;
-      try {
-          const riskData = await new Promise((resolve, reject) => {
-              db.get(
-                  `SELECT s.category, 
-                          (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='no-show') as noshows,
-                          (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='cancelled') as cancels,
-                          (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
-                   FROM services s
-                   WHERE s.id = ?`,
-                  [row.client_id, row.client_id, row.client_id, row.service_id], // FIXED: Removed extra param
-                  (e, r) => e ? reject(e) : resolve(r)
-              );
-          });
-
-          if (riskData) {
-              const aptDate = new Date(row.appointment_date);
-              const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-              const dayName = daysOfWeek[aptDate.getDay()];
-              const hour = aptDate.getHours();
-              let tod = 'afternoon';
-              if (hour < 12) tod = 'morning';
-              else if (hour > 17) tod = 'evening';
-
-              const recency = riskData.last_visit 
-                  ? Math.floor((new Date() - new Date(riskData.last_visit)) / (1000 * 60 * 60 * 24)) 
-                  : 30;
-
-              newRiskScore = await predictNoShow({
-                  timeOfDay: tod,
-                  dayOfWeek: dayName,
-                  category: riskData.category || 'MISC',
-                  recency: recency,
-                  lastReceipt: 50, 
-                  historyNoShow: riskData.noshows || 0,
-                  historyCancel: riskData.cancels || 0
-              });
-
-              // Apply Payment Logic
-              const totalCost = Number(row.total_price || 0);
-              const depositReq = Number(row.deposit_amount || 0);
-              
-              if (paid >= totalCost && totalCost > 0) {
-                  newRiskScore = newRiskScore * 0.2;
-              } else if (paid > depositReq) {
-                  newRiskScore = newRiskScore * 0.7;
-              }
-              newRiskScore = Math.max(0, newRiskScore);
-          }
-      } catch (e) {
-          console.error("Payment Risk Recalc Failed:", e);
-      }
+      const newRiskScore = await calculateNoShowRisk({
+          client_id: row.client_id,
+          service_id: row.service_id,
+          appointment_date: row.appointment_date,
+          amount_paid: paid,
+          total_price: row.total_price,
+          deposit_amount: row.deposit_amount
+      });
 
       // Update Query
       let updateQuery = `
         UPDATE appointments
         SET payment_reference = ?,
             amount_paid = ?, 
-            payment_status = ?
+            payment_status = ?,
+            no_show_risk = ?
+        WHERE id = ?
       `;
-      const updateParams = [payment_reference, paid, finalStatus];
-
-      if (newRiskScore !== null) {
-          updateQuery += `, no_show_risk = ?`;
-          updateParams.push(newRiskScore);
-      }
-
-      updateQuery += ` WHERE id = ?`;
-      updateParams.push(id);
+      const updateParams = [payment_reference, paid, finalStatus, newRiskScore, id];
 
       db.run(
         updateQuery,
@@ -1021,6 +970,10 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
           
           db.run(`INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`, 
                 [id, paid, payment_reference]);
+
+          // Update Prediction Tracker if exists
+          db.run(`UPDATE ai_predictions SET predicted_risk = ?, payment_amount = ? WHERE appointment_id = ?`, 
+                [newRiskScore, paid, id]);
 
           db.get(`SELECT provider_id FROM appointments WHERE id=?`, [id], (e, r) => {
              if(r) createNotification(r.provider_id, 'payment', 'Payment Received', `Payment of KES ${paid} received for Appt #${id}.`, id);
@@ -1062,72 +1015,21 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
     const finalStatus = newPaid >= Number(row.total_price || 0) ? 'paid' : 'deposit-paid';
 
     // 🧠 RE-CALCULATE RISK ON BALANCE PAYMENT
-    let newRiskScore = null;
-    try {
-        const riskData = await new Promise((resolve, reject) => {
-            db.get(
-                `SELECT s.category, 
-                        (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='no-show') as noshows,
-                        (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='cancelled') as cancels,
-                        (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
-                 FROM services s
-                 WHERE s.id = ?`,
-                [row.client_id, row.client_id, row.client_id, row.service_id], // FIXED: Removed extra param
-                (e, r) => e ? reject(e) : resolve(r)
-            );
-        });
-
-        if (riskData) {
-            const aptDate = new Date(row.appointment_date);
-            const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const dayName = daysOfWeek[aptDate.getDay()];
-            const hour = aptDate.getHours();
-            let tod = 'afternoon';
-            if (hour < 12) tod = 'morning';
-            else if (hour > 17) tod = 'evening';
-
-            const recency = riskData.last_visit 
-                ? Math.floor((new Date() - new Date(riskData.last_visit)) / (1000 * 60 * 60 * 24)) 
-                : 30;
-
-            newRiskScore = await predictNoShow({
-                timeOfDay: tod,
-                dayOfWeek: dayName,
-                category: riskData.category || 'MISC',
-                recency: recency,
-                lastReceipt: 50, 
-                historyNoShow: riskData.noshows || 0,
-                historyCancel: riskData.cancels || 0
-            });
-
-            // Apply Payment Logic (Using newPaid which is current + previous)
-            const totalCost = Number(row.total_price || 0);
-            const depositReq = Number(row.deposit_amount || 0);
-            
-            if (newPaid >= totalCost && totalCost > 0) {
-                newRiskScore = newRiskScore * 0.2;
-            } else if (newPaid > depositReq) {
-                newRiskScore = newRiskScore * 0.7;
-            }
-            newRiskScore = Math.max(0, newRiskScore);
-        }
-    } catch (e) {
-        console.error("Balance Pay Risk Recalc Failed:", e);
-    }
+    const newRiskScore = await calculateNoShowRisk({
+        client_id: row.client_id,
+        service_id: row.service_id,
+        appointment_date: row.appointment_date,
+        amount_paid: newPaid, // Use total paid so far
+        total_price: row.total_price,
+        deposit_amount: row.deposit_amount
+    });
 
     let updateQuery = `
       UPDATE appointments
-      SET amount_paid = ?, payment_reference = ?, payment_status = ?
+      SET amount_paid = ?, payment_reference = ?, payment_status = ?, no_show_risk = ?
+      WHERE id = ?
     `;
-    const updateParams = [newPaid, payment_reference, finalStatus];
-
-    if (newRiskScore !== null) {
-        updateQuery += `, no_show_risk = ?`;
-        updateParams.push(newRiskScore);
-    }
-
-    updateQuery += ` WHERE id = ?`;
-    updateParams.push(id);
+    const updateParams = [newPaid, payment_reference, finalStatus, newRiskScore, id];
 
     db.run(
       updateQuery,
@@ -1137,6 +1039,10 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
 
         db.run(`INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`, 
                 [id, amount_paid, payment_reference]);
+
+        // Update Prediction Tracker
+        db.run(`UPDATE ai_predictions SET predicted_risk = ?, payment_amount = ? WHERE appointment_id = ?`, 
+              [newRiskScore, newPaid, id]);
 
         createNotification(row.provider_id, 'payment', 'Balance Paid', `Balance payment of KES ${amount_paid} received for Appt #${id}.`, id);
 
