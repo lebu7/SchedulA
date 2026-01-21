@@ -21,7 +21,7 @@ db.get(
     
     const missingRebooked = !row.sql.includes("'rebooked'");
     const missingRefund = !row.sql.includes("'refund-pending'");
-    const missingRisk = !row.sql.includes("no_show_risk"); // 🧠 Check for AI column
+    const missingRisk = !row.sql.includes("no_show_risk"); 
 
     if (missingRebooked || missingRefund || missingRisk) {
       console.log('⚙️ Updating appointments table schema to support AI & Refunds...');
@@ -51,7 +51,7 @@ db.get(
             refund_amount REAL DEFAULT 0,
             refund_initiated_at DATETIME,
             refund_completed_at DATETIME,
-            no_show_risk REAL DEFAULT 0,  -- 🧠 New AI Risk Score
+            no_show_risk REAL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES users(id),
             FOREIGN KEY (provider_id) REFERENCES users(id),
@@ -59,7 +59,6 @@ db.get(
           );
         `);
         
-        // Migrate existing data
         db.run(`INSERT INTO appointments_new (
           id, client_id, provider_id, service_id, appointment_date, status, notes, 
           client_deleted, provider_deleted, payment_status, payment_reference, 
@@ -196,7 +195,6 @@ router.get('/', authenticateToken, (req, res) => {
       : `
       SELECT a.*, s.name AS service_name, s.duration, s.price,
              u.name AS client_name, u.phone AS client_phone,
-             -- 🧠 Provider sees Risk Score
              a.no_show_risk 
       FROM appointments a
       JOIN services s ON a.service_id = s.id
@@ -672,7 +670,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ Update appointment (Accept/Cancel/Reschedule)
+   ✅ Update appointment (Accept/Cancel/Reschedule) with AI Recalculation
 --------------------------------------------- */
 router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -685,7 +683,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
       ? 'SELECT * FROM appointments WHERE id = ? AND client_id = ?'
       : 'SELECT * FROM appointments WHERE id = ? AND provider_id = ?';
 
-  db.get(accessQuery, [id, userId], (err, apt) => {
+  // 🧠 Changed callback to async to handle AI Promise
+  db.get(accessQuery, [id, userId], async (err, apt) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
@@ -696,10 +695,56 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Appointment status locked.' });
     }
 
-    // ✅ RESCHEDULE VALIDATION
+    // ✅ RESCHEDULE VALIDATION & AI RE-CALCULATION
+    let newRiskScore = null;
+
     if (appointment_date && appointment_date !== apt.appointment_date) {
         const newDate = new Date(appointment_date);
         if (newDate <= new Date()) return res.status(400).json({ error: 'New date must be in the future' });
+
+        // 🧠 RE-CALCULATE AI RISK
+        try {
+            // 1. Fetch Service Category & Client History
+            const riskData = await new Promise((resolve, reject) => {
+                db.get(
+                    `SELECT s.category, 
+                            (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='no-show') as noshows,
+                            (SELECT COUNT(*) FROM appointments WHERE client_id = ? AND status='cancelled') as cancels,
+                            (SELECT MAX(appointment_date) FROM appointments WHERE client_id = ?) as last_visit
+                     FROM services s
+                     WHERE s.id = ?`,
+                    [apt.client_id, apt.client_id, apt.client_id, apt.client_id, apt.service_id],
+                    (e, r) => e ? reject(e) : resolve(r)
+                );
+            });
+
+            if (riskData) {
+                const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const dayName = daysOfWeek[newDate.getDay()];
+                const hour = newDate.getHours();
+                let tod = 'afternoon';
+                if (hour < 12) tod = 'morning';
+                else if (hour > 17) tod = 'evening';
+
+                const recency = riskData.last_visit 
+                    ? Math.floor((new Date() - new Date(riskData.last_visit)) / (1000 * 60 * 60 * 24)) 
+                    : 30;
+
+                newRiskScore = await predictNoShow({
+                    timeOfDay: tod,
+                    dayOfWeek: dayName,
+                    category: riskData.category || 'MISC',
+                    recency: recency,
+                    lastReceipt: 50, // Placeholder
+                    historyNoShow: riskData.noshows || 0,
+                    historyCancel: riskData.cancels || 0
+                });
+                
+                console.log(`🧠 Reschedule detected. New Risk Score: ${newRiskScore.toFixed(2)}`);
+            }
+        } catch (e) {
+            console.error("AI Recalc Failed:", e);
+        }
     }
 
     // Update logic
@@ -716,6 +761,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (effectiveStatus) { updates.push('status = ?'); params.push(effectiveStatus); }
     if (appointment_date) { updates.push('appointment_date = ?'); params.push(appointment_date); }
     if (notes) { updates.push('notes = ?'); params.push(notes); }
+    
+    // 🧠 Add Risk Score update if calculated
+    if (newRiskScore !== null) {
+        updates.push('no_show_risk = ?');
+        params.push(newRiskScore);
+    }
 
     if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
     params.push(id, userId);
@@ -782,6 +833,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
                     : `Provider moved appointment #${id} to a new time.`;
                   
                   createNotification(targetUser, 'reschedule', title, msg, id);
+                  
+                  // 🧠 Alert Provider if RISK CHANGED to HIGH
+                  if (newRiskScore && newRiskScore > 0.7) {
+                      createNotification(fullApt.provider_id, 'reschedule', 'High Risk Reschedule', `⚠️ ${fullApt.client_name}'s rescheduled slot has High No-Show Risk.`, id);
+                  }
 
                   await smsService.sendRescheduleNotification(
                       { ...fullApt, id: id, appointment_date: appointment_date }, 
