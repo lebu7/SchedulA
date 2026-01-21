@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { PaystackButton } from "react-paystack";
-import { useLocation } from "react-router-dom"; // ✅ Import useLocation
+import { useLocation } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
-import { Receipt } from "lucide-react";
+import { Receipt, AlertTriangle, CheckCircle, Info } from "lucide-react"; // 🧠 Added Icons
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -23,6 +23,35 @@ const parseAddons = (apt) => {
 
   if (!Array.isArray(selectedAddons)) selectedAddons = [];
   return selectedAddons;
+};
+
+/* 🧠 Helper: AI Risk Badge Logic */
+const getRiskBadge = (riskScore) => {
+  // If no score or score is 0, don't show anything (or show Low)
+  if (riskScore === undefined || riskScore === null) return null;
+  
+  const score = Number(riskScore);
+  
+  // Define Thresholds
+  if (score < 0.3) {
+    return (
+      <span className="risk-badge low" title="Low probability of No-Show">
+        <CheckCircle size={14} /> Low Risk
+      </span>
+    );
+  } else if (score < 0.7) {
+    return (
+      <span className="risk-badge medium" title="Moderate probability of No-Show">
+        <Info size={14} /> Medium Risk
+      </span>
+    );
+  } else {
+    return (
+      <span className="risk-badge high" title="High probability of No-Show">
+        <AlertTriangle size={14} /> High Risk ({(score * 100).toFixed(0)}%)
+      </span>
+    );
+  }
 };
 
 /* 💳 Printable Payment Info Modal */
@@ -139,7 +168,7 @@ function PaymentInfoModal({ payment, onClose }) {
    MAIN APPOINTMENT MANAGER
 =============================== */
 function AppointmentManager({ user }) {
-  const location = useLocation(); // ✅ Hook for navigation state
+  const location = useLocation(); 
   const [appointments, setAppointments] = useState({
     pending: [],
     scheduled: [],
@@ -148,7 +177,6 @@ function AppointmentManager({ user }) {
   });
   const [loading, setLoading] = useState(true);
   
-  // ✅ Initialize activeTab based on Navigation State or Default
   const [activeTab, setActiveTab] = useState(() => {
     if (location.state?.subTab) return location.state.subTab;
     return user.user_type === "provider" ? "upcoming" : "pending";
@@ -158,7 +186,6 @@ function AppointmentManager({ user }) {
   const [cancelling, setCancelling] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
   
-  // ✅ History Filters
   const [historyFilter, setHistoryFilter] = useState("all"); 
 
   const [showBooking, setShowBooking] = useState(false);
@@ -171,49 +198,39 @@ function AppointmentManager({ user }) {
     fetchAppointments();
   }, []);
 
-  // ✅ NEW: SMART TAB DETECTION & AUTO-SWITCH
-  // Finds which list the targetId belongs to and switches tabs automatically.
   useEffect(() => {
     if (!loading && location.state?.targetId) {
-      const targetId = parseInt(location.state.targetId); // Ensure ID is number
-      
-      // 1. Check Pending
+      const targetId = parseInt(location.state.targetId);
       const inPending = appointments.pending?.some(a => a.id === targetId);
       if (inPending) {
         setActiveTab("pending");
         return;
       }
-
-      // 2. Check Scheduled/Upcoming
       const upcomingList = user.user_type === "client" ? appointments.scheduled : appointments.upcoming;
       const inUpcoming = upcomingList?.some(a => a.id === targetId);
       if (inUpcoming) {
         setActiveTab(user.user_type === "client" ? "scheduled" : "upcoming");
         return;
       }
-
-      // 3. Check History/Past
       const inHistory = appointments.past?.some(a => a.id === targetId);
       if (inHistory) {
         setActiveTab("history");
-        setHistoryFilter("all"); // Force filter to 'all' so the card is visible
+        setHistoryFilter("all"); 
         return;
       }
     }
   }, [loading, appointments, location.state, user.user_type]);
 
-  // ✅ AUTO-SCROLL TO APPOINTMENT
   useEffect(() => {
     if (!loading && location.state?.targetId) {
       setTimeout(() => {
         const element = document.getElementById(`apt-${location.state.targetId}`);
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          element.classList.add('highlight-target'); // Optional CSS class for emphasis
-          // Remove highlight after animation (optional logic)
+          element.classList.add('highlight-target'); 
           setTimeout(() => element.classList.remove('highlight-target'), 2000);
         }
-      }, 700); // Increased delay slightly to allow Tab Switch to render DOM
+      }, 700); 
     }
   }, [loading, activeTab, location.state]);
 
@@ -384,16 +401,11 @@ function AppointmentManager({ user }) {
     );
   };
 
-  // ✅ Updated Render Logic with Filters
   const renderAppointmentsList = (list, type) => {
     let displayList = list || [];
 
-    // History Logic (formerly 'past')
     if (type === 'history') {
-      // Use the 'past' array from state
       displayList = appointments.past || [];
-      
-      // Filter Logic
       if (historyFilter === 'completed') {
         displayList = displayList.filter(apt => apt.status === 'completed');
       } else if (historyFilter === 'cancelled') {
@@ -449,7 +461,7 @@ function AppointmentManager({ user }) {
            return (
             <div
               key={apt.id}
-              id={`apt-${apt.id}`} // ✅ ADDED ID FOR SCROLLING
+              id={`apt-${apt.id}`} 
               className={`appointment-card ${
                 apt.status === "pending" ? "highlight-pending" : ""
               } ${location.state?.targetId == apt.id ? "highlight-target" : ""}`}
@@ -471,7 +483,15 @@ function AppointmentManager({ user }) {
                 {user.user_type === "client" ? (
                   <p><strong>With:</strong> {apt.provider_name}</p>
                 ) : (
-                  <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                  <div>
+                    <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                    {/* 🧠 AI Risk Badge (Provider Only) */}
+                    {(apt.status === 'pending' || apt.status === 'scheduled') && (
+                        <div style={{ marginTop: '5px', marginBottom: '8px' }}>
+                            {getRiskBadge(apt.no_show_risk)}
+                        </div>
+                    )}
+                  </div>
                 )}
 
                 <p><strong>When:</strong> {formatDate(apt.appointment_date)}</p>
@@ -572,7 +592,7 @@ function AppointmentManager({ user }) {
               <div className="appointment-actions">
                 {user.user_type === "client" ? (
                   <>
-                    {apt.status === "pending" && !apt.refund_status && ( // ✅ Added !apt.refund_status
+                    {apt.status === "pending" && !apt.refund_status && ( 
                         <>
                             <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
                             <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
@@ -640,7 +660,6 @@ function AppointmentManager({ user }) {
                       </div>
                     )}
 
-                    {/* History Actions */}
                     {type === "history" && (
                       <div className="action-row">
                         <button
@@ -663,9 +682,8 @@ function AppointmentManager({ user }) {
 
   if (loading) return <div className="loading">Loading appointments...</div>;
 
-  // ✅ Tabs Configuration
   const tabs = user.user_type === "client" 
-    ? ["pending", "scheduled", "history"] // Renamed 'past' to 'history'
+    ? ["pending", "scheduled", "history"] 
     : ["pending", "upcoming", "history"];
 
   return (
@@ -675,7 +693,6 @@ function AppointmentManager({ user }) {
           {user.user_type === "provider" ? "Manage Appointments" : "My Appointments"}
         </h2>
 
-        {/* ✅ Main Tabs */}
         <div className="tabs">
           {tabs.map((tab) => {
             const count = tab === 'history' ? appointments.past?.length : appointments[tab]?.length;
@@ -691,7 +708,6 @@ function AppointmentManager({ user }) {
           })}
         </div>
 
-        {/* ✅ History Filters (Only shown when History tab is active) */}
         {activeTab === 'history' && (
           <div className="history-filters">
             <button 
