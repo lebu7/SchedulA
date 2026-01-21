@@ -8,7 +8,7 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false); // 🔒 Lock state for double-submit prevention
 
   useEffect(() => {
     if (selectedDate) {
@@ -82,19 +82,23 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
 
   const handleConfirm = async () => {
     if (!selectedDate || !selectedTime) return;
+    
+    // 🔒 1. Lock immediately
     setSaving(true);
     
     const newDateTime = new Date(`${selectedDate}T${selectedTime}:00`).toISOString();
 
     try {
+      // 2. Send request ONCE
       await api.put(`/appointments/${appointment.id}`, {
         appointment_date: newDateTime
       });
       alert("Appointment rescheduled successfully!");
       onSuccess();
+      onClose(); // Close modal on success
     } catch (err) {
+      // 3. Unlock only on error so user can retry
       alert(err.response?.data?.error || "Failed to reschedule.");
-    } finally {
       setSaving(false);
     }
   };
@@ -175,7 +179,7 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
             <button 
               className="btn btn-primary btn-block" 
               onClick={handleConfirm} 
-              disabled={!selectedTime || saving}
+              disabled={!selectedTime || saving} // 🔒 Disable if saving
             >
               {saving ? "Updating..." : "Confirm New Time"}
             </button>

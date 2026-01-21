@@ -117,12 +117,13 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
 
 /* ---------------------------------------------
    🧠 CENTRALIZED AI RISK CALCULATOR
+   Includes improved Error Handling, Documentation, and Logging logic
 --------------------------------------------- */
 async function calculateNoShowRisk(appointmentData) {
     try {
         const { client_id, service_id, appointment_date, amount_paid, total_price, deposit_amount } = appointmentData;
 
-        // 1. Fetch Service Category (With Error Handling)
+        // 1. Fetch Service Category (With Robust Error Handling)
         const serviceData = await new Promise((resolve, reject) => {
             db.get(`SELECT category FROM services WHERE id = ?`, [service_id],
                 (e, r) => {
@@ -178,6 +179,7 @@ async function calculateNoShowRisk(appointmentData) {
         });
 
         const baseRisk = riskScore; // Capture base risk for logging
+        console.log(`📊 Raw Time/History Risk: ${riskScore.toFixed(2)}`);
 
         // 5. Apply Payment Override Logic (Documented)
         // Research shows payment commitment correlates with attendance:
@@ -190,10 +192,12 @@ async function calculateNoShowRisk(appointmentData) {
 
         if (paidAmt >= totalCost && totalCost > 0) {
             riskScore = riskScore * 0.2; // 80% reduction
-            console.log("💰 Full Payment: Risk reduced significantly");
+            console.log(`💰 Full Payment Found (${paidAmt}): Lowering Risk from ${baseRisk.toFixed(2)} to ${riskScore.toFixed(2)}`);
         } else if (paidAmt > depositReq) {
             riskScore = riskScore * 0.7; // 30% reduction
-            console.log("💰 Extra Payment: Risk reduced");
+            console.log(`💰 Extra Payment Found (${paidAmt}): Lowering Risk from ${baseRisk.toFixed(2)} to ${riskScore.toFixed(2)}`);
+        } else {
+            console.log(`⚠️ No significant extra payment. Keeping Raw Risk: ${riskScore.toFixed(2)}`);
         }
 
         // 🛡️ Safety: Clamp between 0 and 1, handle NaN
@@ -726,6 +730,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
             deposit_amount: apt.deposit_amount
         });
         newRiskScore = result.riskScore; // Extract just the score for simple update
+        
+        // 🧠 Log Reschedule Prediction
+        db.run(`INSERT INTO ai_predictions (
+            appointment_id, predicted_risk, payment_amount,
+            base_risk_before_payment, payment_ratio, client_history_factor
+        ) VALUES (?, ?, ?, ?, ?, ?)`, 
+            [id, result.riskScore, apt.amount_paid, result.baseRisk, result.paymentRatio, result.historyFactor]);
     }
 
     // Update logic
