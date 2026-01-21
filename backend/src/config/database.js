@@ -150,6 +150,9 @@ function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       appointment_id INTEGER NOT NULL,
       predicted_risk REAL NOT NULL,
+      base_risk_before_payment REAL, -- 🆕
+      payment_ratio REAL,            -- 🆕
+      client_history_factor REAL,    -- 🆕
       actual_outcome TEXT, -- 'no-show', 'completed', 'cancelled'
       payment_amount REAL,
       prediction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -268,8 +271,13 @@ function initializeDatabase() {
   tryAddColumn('appointments', 'refund_initiated_at', "DATETIME");
   tryAddColumn('appointments', 'refund_completed_at', "DATETIME");
   
-  // 🧠 Ensure AI column is added if missing
+  // 🧠 Ensure AI columns are added if missing
   tryAddColumn('appointments', 'no_show_risk', "REAL DEFAULT 0");
+  
+  // 🧠 Ensure AI Prediction Table columns exist (for migration)
+  tryAddColumn('ai_predictions', 'base_risk_before_payment', "REAL");
+  tryAddColumn('ai_predictions', 'payment_ratio', "REAL");
+  tryAddColumn('ai_predictions', 'client_history_factor', "REAL");
 
   console.log('🎯 Database initialization completed');
 }
