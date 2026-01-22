@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom'; // ✅ Import useLocation
+import { useLocation } from 'react-router-dom'; 
 import api from '../services/auth';
+import { MessageSquare, Bell, Clock, User, Briefcase } from 'lucide-react'; 
 import './Settings.css';
 
 const Settings = ({ user, setUser }) => {
-  const location = useLocation(); // ✅ Hook for navigation state
-  const [activeTab, setActiveTab] = useState('profile');
+  const location = useLocation(); 
+  
+  // ✅ Initialize active tab from navigation state or default to 'profile'
+  const [activeTab, setActiveTab] = useState(() => {
+      return location.state?.subTab || 'profile';
+  });
+
+  // 🆕 Sub-tab state for Notifications (SMS vs In-App)
+  const [notifSubTab, setNotifSubTab] = useState('sms');
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // States
+  // Profile States
   const [profile, setProfile] = useState({ name: '', phone: '', business_name: '' });
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   
-  // Refund toggles (default true)
+  // SMS Preferences (Existing)
   const [notifications, setNotifications] = useState({
     confirmation: true, 
     acceptance: true, 
@@ -21,18 +30,20 @@ const Settings = ({ user, setUser }) => {
     cancellation: true, 
     receipt: true, 
     new_request: true,
-    refund: true // Mandatory
+    refund: true 
+  });
+
+  // 🧠 In-App Preferences (New State)
+  const [inAppPrefs, setInAppPrefs] = useState({
+    booking_alerts: true,
+    system_updates: true,
+    payment_alerts: true,
+    reminders: true
   });
   
   const [hours, setHours] = useState({ opening_time: '08:00', closing_time: '18:00' });
 
-  // ✅ DETECT TAB FROM NAVIGATION (Notification Redirection)
-  useEffect(() => {
-    if (location.state?.subTab) {
-      setActiveTab(location.state.subTab); // e.g., 'notifications', 'hours'
-    }
-  }, [location.state]);
-
+  // Sync state with User prop
   useEffect(() => {
     if (user) {
       setProfile({ 
@@ -50,10 +61,23 @@ const Settings = ({ user, setUser }) => {
         if (typeof prefs === 'string') {
             try { prefs = JSON.parse(prefs); } catch (e) { prefs = {}; }
         }
+        // Merge SMS defaults
         setNotifications(prev => ({ ...prev, ...prefs }));
+        
+        // Merge In-App defaults if they exist in the JSON
+        if (prefs.in_app) {
+            setInAppPrefs(prev => ({ ...prev, ...prefs.in_app }));
+        }
       }
     }
   }, [user]);
+
+  // Update active tab if navigation state changes
+  useEffect(() => {
+    if (location.state?.subTab) {
+      setActiveTab(location.state.subTab);
+    }
+  }, [location.state]);
 
   const showMsg = (type, text) => {
     setMessage({ type, text });
@@ -101,23 +125,37 @@ const Settings = ({ user, setUser }) => {
     setLoading(false);
   };
 
+  // Toggle SMS Settings
   const handleNotificationToggle = async (key) => {
     if (key === 'confirmation' || key === 'refund') return; // Locked toggles
     
     const newPrefs = { ...notifications, [key]: !notifications[key] };
     setNotifications(newPrefs);
+    // Save SMS + Current In-App to avoid overwriting
+    savePreferences({ ...newPrefs, in_app: inAppPrefs });
+  };
 
+  // 🧠 Toggle In-App Settings
+  const handleInAppToggle = async (key) => {
+    const newInApp = { ...inAppPrefs, [key]: !inAppPrefs[key] };
+    setInAppPrefs(newInApp);
+    
+    // Merge into main preferences object (SMS + New In-App)
+    const mergedPrefs = { ...notifications, in_app: newInApp };
+    savePreferences(mergedPrefs);
+  };
+
+  const savePreferences = async (prefs) => {
     try {
-      await api.put('/auth/notifications', { preferences: newPrefs });
-      
-      const updatedUser = { ...user, notification_preferences: newPrefs };
-      setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      
+        await api.put('/auth/notifications', { preferences: prefs });
+        
+        const updatedUser = { ...user, notification_preferences: prefs };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
     } catch (err) { 
       console.error('Failed to save prefs:', err.response?.data || err.message);
-      setNotifications(prev => ({ ...prev, [key]: !prev[key] }));
-      showMsg('error', 'Failed to save setting. Try refreshing.');
+      showMsg('error', 'Failed to save setting.');
     }
   };
 
@@ -141,14 +179,22 @@ const Settings = ({ user, setUser }) => {
       <h2>⚙️ Account Settings</h2>
       {message.text && <div className={`settings-alert ${message.type}`}>{message.text}</div>}
 
+      {/* MAIN TAB NAVIGATION */}
       <div className="settings-tabs">
-        <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>Profile</button>
-        <button className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>Notifications</button>
+        <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
+            <User size={16} /> Profile
+        </button>
+        <button className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
+            <Bell size={16} /> Notifications
+        </button>
         {user?.user_type === 'provider' && (
-          <button className={`tab-btn ${activeTab === 'hours' ? 'active' : ''}`} onClick={() => setActiveTab('hours')}>Business Hours</button>
+          <button className={`tab-btn ${activeTab === 'hours' ? 'active' : ''}`} onClick={() => setActiveTab('hours')}>
+              <Briefcase size={16} /> Business Hours
+          </button>
         )}
       </div>
 
+      {/* === PROFILE TAB === */}
       {activeTab === 'profile' && (
         <div className="settings-section profile-layout">
           <div className="profile-column">
@@ -198,51 +244,98 @@ const Settings = ({ user, setUser }) => {
         </div>
       )}
 
+      {/* === NOTIFICATIONS TAB === */}
       {activeTab === 'notifications' && (
         <div className="settings-section">
-          <h3>SMS Preferences</h3>
-          <p className="section-desc">Toggle which SMS notifications you receive.</p>
-          
-          <Toggle label="Booking Confirmation" desc="Sent immediately after booking." checked={true} disabled />
-          <Toggle label="Booking Accepted" desc="When provider confirms." checked={notifications.acceptance} onChange={() => handleNotificationToggle('acceptance')} />
-          <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
-          <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
-          <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
-          
-          {/* Refund Notification Toggle (Locked) */}
-          <Toggle 
-            label="Refund Notifications" 
-            desc="Sent when refunds are processed (Required)" 
-            checked={true} 
-            disabled 
-          />
+          <div className="section-header-row">
+              <h3>Notification Preferences</h3>
+              
+              {/* 🧠 PILL TABS FOR SMS / IN-APP */}
+              <div className="pill-nav">
+                  <button 
+                    className={`pill-btn ${notifSubTab === 'sms' ? 'active' : ''}`}
+                    onClick={() => setNotifSubTab('sms')}
+                  >
+                    <MessageSquare size={14} /> SMS
+                  </button>
+                  <button 
+                    className={`pill-btn ${notifSubTab === 'in-app' ? 'active' : ''}`}
+                    onClick={() => setNotifSubTab('in-app')}
+                  >
+                    <Bell size={14} /> In-App
+                  </button>
+              </div>
+          </div>
 
-          {user.user_type === 'provider' && (
-             <>
-               <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
-               {/* Provider Refund Request Toggle (Locked) */}
-               <Toggle 
-                 label="Refund Requests" 
-                 desc="When clients cancel and request refunds (Required)" 
-                 checked={true} 
-                 disabled 
-               />
-             </>
+          {/* SMS SETTINGS VIEW */}
+          {notifSubTab === 'sms' && (
+              <div className="notif-group fade-in">
+                  <p className="section-desc">Manage text messages sent to your phone.</p>
+                  
+                  <Toggle label="Booking Confirmation" desc="Sent immediately after booking." checked={true} disabled />
+                  <Toggle label="Booking Accepted" desc="When provider confirms." checked={notifications.acceptance} onChange={() => handleNotificationToggle('acceptance')} />
+                  <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
+                  <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
+                  <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
+                  
+                  {/* Refund Notification Toggle (Locked) */}
+                  <Toggle label="Refund Notifications" desc="Sent when refunds are processed (Required)" checked={true} disabled />
+
+                  {user.user_type === 'provider' && (
+                    <>
+                      <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
+                      <Toggle label="Refund Requests" desc="When clients cancel and request refunds (Required)" checked={true} disabled />
+                    </>
+                  )}
+              </div>
+          )}
+
+          {/* 🆕 IN-APP SETTINGS VIEW */}
+          {notifSubTab === 'in-app' && (
+              <div className="notif-group fade-in">
+                  <p className="section-desc">Control what appears in your notification bell.</p>
+                  
+                  <Toggle 
+                    label="Booking Alerts" 
+                    desc="New bookings, status changes, and approvals." 
+                    checked={inAppPrefs.booking_alerts} 
+                    onChange={() => handleInAppToggle('booking_alerts')} 
+                  />
+                  <Toggle 
+                    label="System Updates" 
+                    desc="Important platform announcements and maintenance." 
+                    checked={inAppPrefs.system_updates} 
+                    onChange={() => handleInAppToggle('system_updates')} 
+                  />
+                  <Toggle 
+                    label="Payment Alerts" 
+                    desc="Confirmations of deposits and balance payments." 
+                    checked={inAppPrefs.payment_alerts} 
+                    onChange={() => handleInAppToggle('payment_alerts')} 
+                  />
+                  <Toggle 
+                    label="In-App Reminders" 
+                    desc="Pop-up reminders when you are online." 
+                    checked={inAppPrefs.reminders} 
+                    onChange={() => handleInAppToggle('reminders')} 
+                  />
+              </div>
           )}
         </div>
       )}
 
+      {/* === BUSINESS HOURS TAB === */}
       {activeTab === 'hours' && (
         <div className="settings-section">
           <h3>Business Hours</h3>
           <p className="section-desc">Set your operating hours to control availability.</p>
           <form onSubmit={handleHoursUpdate} style={{ maxWidth: '400px' }}>
              <div className="form-group">
-               <label>Opening Time</label>
+               <label>Opening Time <Clock size={14} style={{marginLeft:'5px', color:'#666'}} /></label>
                <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} />
              </div>
              <div className="form-group">
-               <label>Closing Time</label>
+               <label>Closing Time <Clock size={14} style={{marginLeft:'5px', color:'#666'}} /></label>
                <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} />
              </div>
              <button type="submit" className="save-btn" disabled={loading}>Save Business Hours</button>

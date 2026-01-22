@@ -32,6 +32,8 @@ function NotificationCenter() {
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications');
+      // 🧠 CHANGED: No more filtering here. Frontend shows everything backend sends.
+      // Logic for enabling/disabling alerts is now handled in appointments.js (Backend).
       setNotifications(res.data.notifications);
       setUnreadCount(res.data.unread_count);
     } catch (err) {
@@ -55,68 +57,46 @@ function NotificationCenter() {
     } catch (err) { console.error(err); }
   };
 
-  // ✅ FIXED: Handle Click Navigation with State
   const handleNotificationClick = (notif) => {
-    // 1. Mark as read immediately
     if (!notif.is_read) {
       markAsRead(notif.id);
     }
-
-    // 2. Close dropdown
     setIsOpen(false);
 
-    // 3. Determine Destination
-    // We must navigate to '/dashboard' and pass the 'tab' in state.
     let navState = { tab: 'overview' };
-
     const title = notif.title.toLowerCase();
 
     switch (notif.type) {
       case 'booking':
-        // New bookings go to pending
         navState = { tab: 'appointments', subTab: 'pending', targetId: notif.reference_id };
         break;
-        
       case 'reschedule':
-        // Reschedules usually need approval (pending) or checking upcoming
         navState = { tab: 'appointments', subTab: 'pending', targetId: notif.reference_id };
         break;
-
       case 'cancellation':
       case 'refund':
-        // Cancelled/Refunded items are in history
         navState = { tab: 'appointments', subTab: 'history', targetId: notif.reference_id };
         break;
-
       case 'payment':
-        // Payments usually relate to active appointments
         navState = { tab: 'appointments', subTab: 'upcoming', targetId: notif.reference_id };
         break;
-      
       case 'system':
         if (title.includes('service')) {
-          // Service updates
           navState = { tab: 'services', targetId: notif.reference_id };
         } else if (title.includes('profile') || title.includes('password')) {
-          // Profile settings
           navState = { tab: 'settings', subTab: 'profile' };
         } else if (title.includes('schedule') || title.includes('hours')) {
-          // Business hours
           navState = { tab: 'settings', subTab: 'hours' };
         } else if (title.includes('settings')) {
-          // Notification settings
           navState = { tab: 'settings', subTab: 'notifications' };
         } else {
-          // Generic system messages go to overview
           navState = { tab: 'overview' };
         }
         break;
-
       default:
         navState = { tab: 'overview' };
     }
 
-    // 4. Navigate with State
     navigate('/dashboard', { state: navState });
   };
 

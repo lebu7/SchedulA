@@ -11,6 +11,22 @@ import { predictNoShow } from '../services/aiPredictor.js'; // 🧠 AI Import
 const router = express.Router();
 
 /* ---------------------------------------------
+   🧠 Helper: Check In-App Notification Preferences
+   Returns true if notification should be sent.
+   Defaults to TRUE if prefs are missing.
+--------------------------------------------- */
+const shouldNotify = (prefsString, category) => {
+    try {
+        if (!prefsString) return true;
+        const prefs = JSON.parse(prefsString);
+        // Check in_app object, default to true if key is missing
+        return prefs.in_app?.[category] !== false;
+    } catch (e) {
+        return true; // Fail safe: deliver notification
+    }
+};
+
+/* ---------------------------------------------
    ✅ Ensure Tables Exist (Fallback)
 --------------------------------------------- */
 db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_predictions'", [], (err, row) => {
@@ -117,13 +133,12 @@ async function processMultiTransactionRefund(appointmentId, totalAmountToRefund)
 
 /* ---------------------------------------------
    🧠 CENTRALIZED AI RISK CALCULATOR
-   Includes improved Error Handling, Documentation, and Logging logic
 --------------------------------------------- */
 async function calculateNoShowRisk(appointmentData) {
     try {
         const { client_id, service_id, appointment_date, amount_paid, total_price, deposit_amount } = appointmentData;
 
-        // 1. Fetch Service Category (With Robust Error Handling)
+        // 1. Fetch Service Category
         const serviceData = await new Promise((resolve, reject) => {
             db.get(`SELECT category FROM services WHERE id = ?`, [service_id],
                 (e, r) => {
@@ -139,7 +154,7 @@ async function calculateNoShowRisk(appointmentData) {
             );
         });
 
-        // 2. Fetch Client History (Real Data)
+        // 2. Fetch Client History
         const clientStats = await new Promise((resolve) => {
             db.get(
                 `SELECT 
@@ -164,43 +179,37 @@ async function calculateNoShowRisk(appointmentData) {
 
         const recency = clientStats.last_visit 
             ? Math.floor((new Date() - new Date(clientStats.last_visit)) / (1000 * 60 * 60 * 24)) 
-            : 30; // Default 30 for new clients
+            : 30;
 
         // 4. Get Base Prediction
-        // Note: avg_receipt defaults to 50 if no history
         let riskScore = await predictNoShow({
             timeOfDay: tod,
             dayOfWeek: dayName,
-            category: serviceData?.category || 'Barbershop', // Default fallback
+            category: serviceData?.category || 'Barbershop',
             recency: recency,
             lastReceipt: clientStats.avg_receipt || 50, 
             historyNoShow: clientStats.noshows || 0,
             historyCancel: clientStats.cancels || 0
         });
 
-        const baseRisk = riskScore; // Capture base risk for logging
+        const baseRisk = riskScore;
         console.log(`📊 Raw Time/History Risk: ${riskScore.toFixed(2)}`);
 
-        // 5. Apply Payment Override Logic (Documented)
-        // Research shows payment commitment correlates with attendance:
-        // - Full payment (100%): 80% risk reduction (multiply by 0.2)
-        // - Extra payment (>30%): 30% risk reduction (multiply by 0.7)
-        // - Deposit only: No adjustment (use base score)
+        // 5. Apply Payment Override Logic
         const totalCost = Number(total_price || 0);
         const paidAmt = Number(amount_paid || 0);
         const depositReq = Number(deposit_amount || Math.round(totalCost * 0.3));
 
         if (paidAmt >= totalCost && totalCost > 0) {
-            riskScore = riskScore * 0.2; // 80% reduction
+            riskScore = riskScore * 0.2;
             console.log(`💰 Full Payment Found (${paidAmt}): Lowering Risk from ${baseRisk.toFixed(2)} to ${riskScore.toFixed(2)}`);
         } else if (paidAmt > depositReq) {
-            riskScore = riskScore * 0.7; // 30% reduction
+            riskScore = riskScore * 0.7;
             console.log(`💰 Extra Payment Found (${paidAmt}): Lowering Risk from ${baseRisk.toFixed(2)} to ${riskScore.toFixed(2)}`);
         } else {
             console.log(`⚠️ No significant extra payment. Keeping Raw Risk: ${riskScore.toFixed(2)}`);
         }
 
-        // 🛡️ Safety: Clamp between 0 and 1, handle NaN
         const clampedRisk = Math.max(0, Math.min(1, riskScore || 0));
         
         if (isNaN(clampedRisk)) {
@@ -503,7 +512,6 @@ router.post(
                     let payment_status = paymentAmt >= total_price ? 'paid' : 'deposit-paid';
 
                     // 🧠 AI PREDICTION (Centralized)
-                    // We now destructure all the improved data points
                     const { riskScore, baseRisk, paymentRatio, historyFactor } = await calculateNoShowRisk({
                         client_id,
                         service_id,
@@ -585,14 +593,19 @@ router.post(
                             const clientObj = { name: fullApt.client_name, phone: fullApt.client_phone, notification_preferences: fullApt.client_prefs };
                             const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone, notification_preferences: fullApt.provider_prefs };
 
-                            createNotification(client_id, 'booking', 'Booking Sent', `Your booking for ${service.name} is pending approval.`, newId);
+                            // 🧠 Check In-App Preferences before notifying
+                            if (shouldNotify(fullApt.client_prefs, 'booking_alerts')) {
+                                createNotification(client_id, 'booking', 'Booking Sent', `Your booking for ${service.name} is pending approval.`, newId);
+                            }
                             
                             // 🧠 Alert Provider if Risk is High
                             let alertMsg = `${fullApt.client_name} booked ${service.name}.`;
                             if (fullApt.no_show_risk > 0.7) {
                                 alertMsg += ` ⚠️ High No-Show Risk detected (${(fullApt.no_show_risk * 100).toFixed(0)}%).`;
                             }
-                            createNotification(service.provider_id, 'booking', 'New Booking Request', alertMsg, newId);
+                            if (shouldNotify(fullApt.provider_prefs, 'booking_alerts')) {
+                                createNotification(service.provider_id, 'booking', 'New Booking Request', alertMsg, newId);
+                            }
 
                             await smsService.sendBookingConfirmation(
                                 {
@@ -802,15 +815,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
               const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone, notification_preferences: fullApt.provider_prefs };
 
               if (status === 'scheduled' && apt.status === 'pending') {
-                createNotification(fullApt.client_id, 'booking', 'Booking Confirmed', `Your booking for ${fullApt.service_name} has been confirmed.`, id);
+                if (shouldNotify(fullApt.client_prefs, 'booking_alerts')) {
+                    createNotification(fullApt.client_id, 'booking', 'Booking Confirmed', `Your booking for ${fullApt.service_name} has been confirmed.`, id);
+                }
                 await smsService.sendBookingAccepted({ ...fullApt, id: id }, clientObj, { name: fullApt.service_name }, providerObj);
               }
               
               if (status === 'cancelled') {
                 if (userType === 'client') {
-                    createNotification(fullApt.provider_id, 'cancellation', 'Booking Cancelled', `${fullApt.client_name} cancelled appointment #${id}.`, id);
+                    if (shouldNotify(fullApt.provider_prefs, 'booking_alerts')) { // 'cancellation' is usually under booking alerts in simple systems, or add 'cancellation' key
+                        createNotification(fullApt.provider_id, 'cancellation', 'Booking Cancelled', `${fullApt.client_name} cancelled appointment #${id}.`, id);
+                    }
                 } else {
-                    createNotification(fullApt.client_id, 'cancellation', 'Booking Cancelled', `Provider cancelled appointment #${id}.`, id);
+                    if (shouldNotify(fullApt.client_prefs, 'booking_alerts')) {
+                        createNotification(fullApt.client_id, 'cancellation', 'Booking Cancelled', `Provider cancelled appointment #${id}.`, id);
+                    }
                 }
                 
                 await smsService.sendCancellationNotice(
@@ -824,16 +843,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
               if (isReschedule) {
                   const targetUser = userType === 'client' ? fullApt.provider_id : fullApt.client_id;
+                  const targetPrefs = userType === 'client' ? fullApt.provider_prefs : fullApt.client_prefs;
                   const title = userType === 'client' ? 'Reschedule Request' : 'Appointment Rescheduled';
                   const msg = userType === 'client' 
                     ? `${fullApt.client_name} requested to reschedule #${id}.` 
                     : `Provider moved appointment #${id} to a new time.`;
                   
-                  createNotification(targetUser, 'reschedule', title, msg, id);
+                  if (shouldNotify(targetPrefs, 'booking_alerts')) {
+                      createNotification(targetUser, 'reschedule', title, msg, id);
+                  }
                   
                   // 🧠 Alert Provider if RISK CHANGED to HIGH
-                  if (newRiskScore && newRiskScore > 0.7) {
-                      createNotification(fullApt.provider_id, 'reschedule', 'High Risk Reschedule', `⚠️ ${fullApt.client_name}'s rescheduled slot has High No-Show Risk.`, id);
+                  if (newRiskScore && newRiskScore > 0.7 && userType === 'client') {
+                      if (shouldNotify(fullApt.provider_prefs, 'booking_alerts')) {
+                          createNotification(fullApt.provider_id, 'reschedule', 'High Risk Reschedule', `⚠️ ${fullApt.client_name}'s rescheduled slot has High No-Show Risk.`, id);
+                      }
                   }
 
                   await smsService.sendRescheduleNotification(
@@ -859,7 +883,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
    --------------------------------------------- 
    Requirement: 
    1. Data MUST remain in SQL for AI (No DELETE FROM)
-   2. Clients can only delete records older than 6 months.
+   2. Clients & Providers can only delete records older than 6 months.
 --------------------------------------------- */
 router.delete('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -872,8 +896,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
-      // 2. 6-Month History Rule (Applies to Client AND Provider)
-      // Remove specific user type check to apply globally as requested
+      // 2. Universal 6-Month History Rule
       const aptDate = new Date(apt.appointment_date);
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -968,8 +991,13 @@ router.put('/:id/payment', authenticateToken, (req, res) => {
                   WHERE appointment_id = ?`, 
                 [riskScore, paid, baseRisk, paymentRatio, historyFactor, id]);
 
-          db.get(`SELECT provider_id FROM appointments WHERE id=?`, [id], (e, r) => {
-             if(r) createNotification(r.provider_id, 'payment', 'Payment Received', `Payment of KES ${paid} received for Appt #${id}.`, id);
+          db.get(`SELECT provider_id, provider_preferences FROM appointments JOIN users ON appointments.provider_id = users.id WHERE appointments.id=?`, [id], (e, r) => {
+             // Fetch provider preferences to check in_app.payment_alerts
+             db.get(`SELECT notification_preferences FROM users WHERE id=?`, [row.provider_id], (e2, u) => {
+                 if (shouldNotify(u?.notification_preferences, 'payment_alerts')) {
+                     createNotification(row.provider_id, 'payment', 'Payment Received', `Payment of KES ${paid} received for Appt #${id}.`, id);
+                 }
+             });
           });
 
           return res.json({
@@ -1039,7 +1067,11 @@ router.put('/:id/pay-balance', authenticateToken, (req, res) => {
                 WHERE appointment_id = ?`, 
               [riskScore, newPaid, baseRisk, paymentRatio, historyFactor, id]);
 
-        createNotification(row.provider_id, 'payment', 'Balance Paid', `Balance payment of KES ${amount_paid} received for Appt #${id}.`, id);
+        db.get(`SELECT notification_preferences FROM users WHERE id=?`, [row.provider_id], (e2, u) => {
+             if (shouldNotify(u?.notification_preferences, 'payment_alerts')) {
+                 createNotification(row.provider_id, 'payment', 'Balance Paid', `Balance payment of KES ${amount_paid} received for Appt #${id}.`, id);
+             }
+        });
 
         db.get(
           `SELECT c.name, c.phone, c.notification_preferences, s.name AS service_name, a.*
@@ -1094,7 +1126,11 @@ router.post('/:id/request-balance', authenticateToken, (req, res) => {
       function (err2) {
         if (err2) return res.status(500).json({ error: 'Failed to create payment request' });
         
-        createNotification(row.client_id, 'payment', 'Balance Request', `Provider requested balance payment of KES ${amount_requested}.`, id);
+        db.get(`SELECT notification_preferences FROM users WHERE id=?`, [row.client_id], (e2, u) => {
+             if (shouldNotify(u?.notification_preferences, 'payment_alerts')) {
+                 createNotification(row.client_id, 'payment', 'Balance Request', `Provider requested balance payment of KES ${amount_requested}.`, id);
+             }
+        });
         
         res.json({ message: 'Payment request created', request_id: this.lastID });
       }
@@ -1149,7 +1185,9 @@ router.post('/:id/process-refund', authenticateToken, async (req, res) => {
             [result.references.join(','), id] 
           );
 
-          createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountToRefund} has been processed.`, id);
+          if (shouldNotify(apt.client_prefs, 'payment_alerts')) {
+              createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountToRefund} has been processed.`, id);
+          }
 
           await sendRefundNotification(
             { id, payment_reference: apt.payment_reference },
@@ -1223,7 +1261,9 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
               [result.references.join(','), appointmentId]
             );
 
-            createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountPaid} for Appt #${appointmentId} is complete.`, appointmentId);
+            if (shouldNotify(apt.client_prefs, 'payment_alerts')) {
+                createNotification(apt.client_id, 'refund', 'Refund Processed', `Your refund of KES ${amountPaid} for Appt #${appointmentId} is complete.`, appointmentId);
+            }
 
             await sendRefundNotification(
               { id: appointmentId, payment_reference: apt.payment_reference },
@@ -1236,13 +1276,15 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
              console.error("❌ Auto-Refund Failed:", refundError);
              db.run(`UPDATE appointments SET refund_status = 'failed' WHERE id = ?`, [appointmentId]);
              
-             createNotification(
-                 apt.provider_id, 
-                 'refund', 
-                 'Auto-Refund Failed', 
-                 `Automatic refund for Appt #${appointmentId} failed. Please process it manually from dashboard.`, 
-                 appointmentId
-             );
+             if (shouldNotify(apt.provider_prefs, 'payment_alerts')) {
+                 createNotification(
+                     apt.provider_id, 
+                     'refund', 
+                     'Auto-Refund Failed', 
+                     `Automatic refund for Appt #${appointmentId} failed. Please process it manually from dashboard.`, 
+                     appointmentId
+                 );
+             }
              resolve(); 
           }
         }
@@ -1259,7 +1301,9 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
             [amountPaid, appointmentId]
           );
 
-          createNotification(apt.provider_id, 'refund', 'Refund Request', `Client cancelled Appt #${appointmentId}. Please process refund.`, appointmentId);
+          if (shouldNotify(apt.provider_prefs, 'payment_alerts')) {
+              createNotification(apt.provider_id, 'refund', 'Refund Request', `Client cancelled Appt #${appointmentId}. Please process refund.`, appointmentId);
+          }
 
           await sendRefundRequestToProvider(
             { id: appointmentId },
