@@ -10,7 +10,7 @@ import {
 } from "lucide-react"; 
 import "./AppointmentManager.css";
 
-// ===== Helper: make sure addons are an ARRAY =====
+// ... [Keep helper functions: parseAddons, getRiskBadge unchanged] ...
 const parseAddons = (apt) => {
   let selectedAddons =
     apt?.addons || apt?.addon_items || apt?.sub_services || [];
@@ -28,7 +28,6 @@ const parseAddons = (apt) => {
   return selectedAddons;
 };
 
-/* 🧠 Helper: AI Risk Badge Logic */
 const getRiskBadge = (riskScore) => {
   if (riskScore === undefined || riskScore === null) return null;
   
@@ -55,14 +54,39 @@ const getRiskBadge = (riskScore) => {
   }
 };
 
-/* 💳 Printable Payment Info Modal */
-function PaymentInfoModal({ payment, onClose }) {
+/* 💳 Printable Payment Info Modal (Fixed Duplicates) */
+function PaymentInfoModal({ payment, user, onClose }) {
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // 🔄 Fetch and Deduplicate Transactions
+  useEffect(() => {
+    if (payment?.id) {
+      setLoading(true);
+      api.get(`/appointments/${payment.id}/transactions`)
+        .then((res) => {
+          const raw = res.data.transactions || [];
+          // 🧠 Deduplicate by Reference ID
+          const unique = raw.filter((tx, index, self) =>
+            index === self.findIndex((t) => t.reference === tx.reference)
+          );
+          setTransactions(unique);
+        })
+        .catch((err) => console.error("Failed to load transactions", err))
+        .finally(() => setLoading(false));
+    }
+  }, [payment]);
+
   if (!payment) return null;
 
   const printReceipt = () => {
     const total = Number(payment.total_price ?? payment.price ?? 0);
     const paid = Number(payment.amount_paid ?? payment.payment_amount ?? 0);
     const pending = Math.max(total - paid, 0);
+
+    const providerName = user.user_type === 'provider' 
+        ? (user.business_name || user.name) 
+        : (payment.provider_name || payment.provider);
 
     let statusLabel = "Balance Due";
     let statusColor = "#475569"; 
@@ -82,6 +106,38 @@ function PaymentInfoModal({ payment, onClose }) {
       statusBg = "#fee2e2";
     }
 
+    // 🧾 Generate HTML for transactions
+    let transactionHtml = "";
+    if (transactions.length > 0) {
+        transactionHtml = transactions.map((tx, idx) => {
+            // Determine Label: 1st is Deposit, 2nd is Balance (unless refund)
+            let label = "Payment";
+            if (tx.type === 'refund') label = "Refund";
+            else if (idx === 0) label = "Deposit"; 
+            else if (idx === 1) label = "Balance";
+
+            return `
+            <div style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
+                <div class="fin-row sub-transaction" style="font-weight: 600; color: #334155;">
+                    <span>${idx + 1}. ${label} <span style="font-weight: 400; font-size: 11px; color: #64748b;">(${new Date(tx.created_at).toLocaleDateString()})</span></span>
+                    <span style="color: ${tx.type === 'refund' ? '#dc2626' : '#1e293b'}">
+                        ${tx.type === 'refund' ? '-' : ''}KES ${Number(tx.amount).toLocaleString()}
+                    </span>
+                </div>
+                <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-top: 2px;">
+                    Ref: ${tx.reference}
+                </div>
+            </div>`;
+        }).join('');
+    } else {
+        transactionHtml = `
+            <div class="fin-row">
+                <span>Transaction Ref</span>
+                <span>${payment.payment_reference || "N/A"}</span>
+            </div>
+        `;
+    }
+
     const newWindow = window.open("", "_blank");
     newWindow.document.write(`
       <html>
@@ -99,8 +155,10 @@ function PaymentInfoModal({ payment, onClose }) {
             .value { color: #0f172a; font-weight: 600; text-align: right; }
             .divider { border-bottom: 2px dashed #e2e8f0; margin: 25px 0; }
             .financials { background: #f8fafc; padding: 20px; border-radius: 12px; }
-            .fin-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
-            .fin-row.total { margin-top: 15px; border-top: 1px solid #cbd5e1; padding-top: 15px; font-size: 16px; font-weight: 700; }
+            .fin-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
+            .fin-row.total { margin-top: 15px; border-top: 2px solid #cbd5e1; padding-top: 15px; font-size: 16px; font-weight: 700; }
+            .sub-transaction { font-size: 13px; }
+            .history-header { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin: 15px 0 10px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; }
             .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #94a3b8; line-height: 1.6; }
           </style>
         </head>
@@ -111,17 +169,28 @@ function PaymentInfoModal({ payment, onClose }) {
               <p>${new Date().toLocaleString("en-KE", { dateStyle: "full", timeStyle: "short" })}</p>
             </div>
             <div class="status-banner">${statusLabel}</div>
+            
             <div class="row"><span class="label">Service</span><span class="value">${payment.service_name || payment.service}</span></div>
-            <div class="row"><span class="label">Provider</span><span class="value">${payment.provider_name || payment.provider}</span></div>
+            <div class="row"><span class="label">Provider</span><span class="value">${providerName}</span></div>
+            <div class="row"><span class="label">Client</span><span class="value">${payment.client_name || "N/A"}</span></div>
             <div class="row"><span class="label">Date</span><span class="value">${new Date(payment.appointment_date).toLocaleString("en-KE")}</span></div>
-            <div class="row"><span class="label">Reference</span><span class="value">${payment.payment_reference || "N/A"}</span></div>
+            
             <div class="divider"></div>
+            
             <div class="financials">
               <div class="fin-row"><span class="label">Total Billed</span><span class="value">KES ${total.toLocaleString()}</span></div>
-              <div class="fin-row"><span class="label">Total Paid</span><span class="value">KES ${paid.toLocaleString()}</span></div>
-              <div class="fin-row total" style="color: ${pending > 0 ? '#dc2626' : '#15803d'}"><span>Balance Due</span><span>KES ${pending.toLocaleString()}</span></div>
+              
+              <div class="history-header">Payment History</div>
+              ${transactionHtml}
+              
+              <div class="fin-row total">
+                <span>Total Paid</span>
+                <span style="color: #15803d">KES ${paid.toLocaleString()}</span>
+              </div>
+              ${pending > 0 ? `<div class="fin-row total" style="color: #dc2626; border-top: none; margin-top: 5px;"><span>Balance Due</span><span>KES ${pending.toLocaleString()}</span></div>` : ''}
             </div>
-            <div class="footer">Thank you for choosing <strong>${payment.provider_name || "SchedulA"}</strong>.<br/>Please retain this receipt for your records.</div>
+            
+            <div class="footer">Thank you for choosing <strong>${providerName}</strong>.<br/>Please retain this receipt for your records.</div>
           </div>
         </body>
       </html>
@@ -143,31 +212,57 @@ function PaymentInfoModal({ payment, onClose }) {
         </div>
         <div id="receipt-content" className="receipt-body">
           <p><strong>Service:</strong> {payment.service_name || payment.service}</p>
-          <p><strong>Provider:</strong> {payment.provider_name || payment.provider}</p>
+          <p><strong>Provider:</strong> {user.user_type === 'provider' ? (user.business_name || user.name) : (payment.provider_name || payment.provider)}</p>
           <p><strong>Date:</strong> {new Date(payment.appointment_date).toLocaleString("en-KE")}</p>
-          <p><strong>Ref:</strong> {payment.payment_reference || "—"}</p>
+          
+          <div style={{ borderTop: "1px dashed #e2e8f0", margin: "12px 0" }}></div>
+          
+          {/* On-Screen Transaction List */}
+          {loading ? (
+             <p style={{fontSize: '0.85em', color: '#94a3b8', fontStyle: 'italic', padding: '10px 0'}}>Loading history...</p>
+          ) : transactions.length > 0 ? (
+             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', margin: '15px 0', border: '1px solid #f1f5f9' }}>
+                <h5 style={{ fontSize: '0.75em', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px', letterSpacing: '0.5px' }}>Transaction History</h5>
+                {transactions.map((tx, i) => (
+                    <div key={tx.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: i < transactions.length -1 ? '1px dashed #e2e8f0' : 'none', paddingBottom: '4px' }}>
+                        <div style={{display:'flex', flexDirection: 'column'}}>
+                            <span style={{fontSize: '0.85em', fontWeight: '600', color: '#334155'}}>
+                                {tx.type === 'refund' ? 'Refund' : (i === 0 ? "Deposit" : "Balance")}
+                            </span>
+                            <span style={{fontSize: '0.75em', color: '#94a3b8', fontFamily: 'monospace'}}>Ref: {tx.reference}</span>
+                        </div>
+                        <span style={{fontSize: '0.85em', fontWeight: '700', color: tx.type === 'refund' ? '#dc2626' : '#15803d'}}>
+                           {tx.type === 'refund' ? '-' : ''}KES {Number(tx.amount).toLocaleString()}
+                        </span>
+                    </div>
+                ))}
+             </div>
+          ) : (
+             <p><strong>Ref:</strong> {payment.payment_reference || "—"}</p>
+          )}
+
           <p><strong>Status:</strong> 
             <span className={`payment-status ${payment.payment_status === 'paid' ? 'paid' : payment.payment_status === 'deposit-paid' ? 'deposit-paid' : payment.payment_status === 'refunded' ? 'refunded' : 'unpaid'}`}>
               {payment.payment_status === 'paid' ? 'Fully Paid' : payment.payment_status === 'deposit-paid' ? 'Deposit Paid' : payment.payment_status === 'refunded' ? 'Refunded' : 'Unpaid'}
             </span>
           </p>
-          <div style={{ borderTop: "1px dashed #e2e8f0", margin: "8px 0" }}></div>
+          
+          <div style={{ borderTop: "1px dashed #e2e8f0", margin: "12px 0" }}></div>
+          
           <p><strong>Total Billed:</strong> KES {total.toLocaleString()}</p>
           <p><strong>Total Paid:</strong> <span style={{ color: "#16a34a", fontWeight: "bold" }}>KES {paid.toLocaleString()}</span></p>
           <p><strong>Balance:</strong> <span style={{ color: pending > 0 ? "#b91c1c" : "#15803d", fontWeight: "bold" }}> KES {pending.toLocaleString()}</span></p>
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" onClick={printReceipt}>🖨️ Print Receipt</button>
+          <button className="btn btn-primary" onClick={printReceipt} disabled={loading}>🖨️ Print Receipt</button>
         </div>
       </div>
     </div>
   );
 }
 
-/* ===============================
-   MAIN APPOINTMENT MANAGER
-=============================== */
+// ... [Rest of AppointmentManager component remains unchanged] ...
 function AppointmentManager({ user }) {
   const location = useLocation(); 
   const [appointments, setAppointments] = useState({
@@ -585,7 +680,7 @@ function AppointmentManager({ user }) {
                         padding: "6px 10px", 
                         cursor: "pointer", 
                         color: "white", 
-                        borderRadius: "6px",
+                        borderRadius: "6px", 
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "4px"
@@ -947,6 +1042,7 @@ function AppointmentManager({ user }) {
         {selectedPayment && (
           <PaymentInfoModal
             payment={selectedPayment}
+            user={user} 
             onClose={() => setSelectedPayment(null)}
           />
         )}
