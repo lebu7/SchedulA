@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom'; // ✅ Import useLocation
+import { useLocation } from 'react-router-dom'; 
 import ServiceList from './ServiceList';
 import ServiceManager from './ServiceManager';
 import AppointmentManager from './AppointmentManager';
 import Settings from './Settings';
+import ProviderAnalytics from './ProviderAnalytics'; // ✅ Import Analytics Component
 import './Dashboard.css';
 
 function Dashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
-  const location = useLocation(); // ✅ Hook to access navigation state
+  const location = useLocation(); 
 
   // ✅ LISTEN FOR NAVIGATION STATE
   useEffect(() => {
@@ -23,6 +24,8 @@ function Dashboard({ user, setUser }) {
         return user.user_type === 'client' ? <ServiceList user={user} /> : <ServiceManager user={user} />;
       case 'appointments':
         return <AppointmentManager user={user} />;
+      case 'analytics': // ✅ Render Analytics (Protected)
+        return user.user_type === 'provider' ? <ProviderAnalytics /> : null;
       case 'settings':
         return <Settings user={user} setUser={setUser} />;
       case 'overview':
@@ -44,6 +47,14 @@ function Dashboard({ user, setUser }) {
                   <button className="btn btn-primary" onClick={() => setActiveTab('services')}>
                     {user.user_type === 'client' ? 'Find Services' : 'Manage Services'}
                   </button>
+                  
+                  {/* ✅ Analytics Button for Providers */}
+                  {user.user_type === 'provider' && (
+                    <button className="btn btn-secondary" onClick={() => setActiveTab('analytics')}>
+                      View Analytics
+                    </button>
+                  )}
+
                   <button className="btn btn-secondary" onClick={() => setActiveTab('appointments')}>
                     Appointments
                   </button>
@@ -63,6 +74,12 @@ function Dashboard({ user, setUser }) {
       <div className="dashboard">
         <div className="dashboard-tabs">
           <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>Overview</button>
+          
+          {/* ✅ Analytics Tab (Providers Only) */}
+          {user.user_type === 'provider' && (
+            <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
+          )}
+
           <button className={`tab-btn ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Services</button>
           <button className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}>Appointments</button>
           <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>Settings</button>
