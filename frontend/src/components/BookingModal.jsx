@@ -26,9 +26,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // ---------- 1. Availability Logic (Updated for Capacity) ----------
+  // ---------- 1. Availability Logic (Updated for Capacity & User Conflict) ----------
 
-  // Fetch availability when date changes
   useEffect(() => {
     if (selectedDate && serviceMeta?.provider_id) {
       fetchAvailability();
@@ -42,18 +41,43 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError("");
 
     try {
-      const res = await api.get(`/appointments/providers/${serviceMeta.provider_id}/availability`, {
-        params: { date: selectedDate }
+      // 🧠 Run both requests in parallel: 
+      // 1. Provider's availability (for capacity)
+      // 2. User's appointments (to prevent double booking)
+      const [availabilityRes, userRes] = await Promise.all([
+        api.get(`/appointments/providers/${serviceMeta.provider_id}/availability`, {
+          params: { date: selectedDate }
+        }),
+        api.get('/appointments') // Fetches user's history
+      ]);
+
+      const availabilityData = availabilityRes.data;
+
+      // 🧠 Process User's Bookings: Flatten the response object and filter
+      const userAppsObj = userRes.data.appointments || {};
+      // Combine all active lists (pending, scheduled, upcoming)
+      const allUserActiveApps = [
+        ...(userAppsObj.pending || []),
+        ...(userAppsObj.scheduled || []),
+        ...(userAppsObj.upcoming || [])
+      ];
+
+      // Filter for THIS date and THIS service
+      const myBookingsForThisService = allUserActiveApps.filter(apt => {
+        const aptDate = new Date(apt.appointment_date).toDateString();
+        const selDate = new Date(selectedDate).toDateString();
+        // Check if date matches AND service ID matches (preventing double booking same service)
+        return aptDate === selDate && apt.service_id === serviceMeta.id;
       });
 
-      if (res.data.is_closed) {
-        setError(`Provider is closed on this day: ${res.data.closed_reason || 'Day off'}`);
+      if (availabilityData.is_closed) {
+        setError(`Provider is closed on this day: ${availabilityData.closed_reason || 'Day off'}`);
       } else {
-        // Generate grid using the booked_slots from backend
         generateTimeSlots(
-          res.data.opening_time, 
-          res.data.closing_time, 
-          res.data.booked_slots || [] // Ensure array
+          availabilityData.opening_time, 
+          availabilityData.closing_time, 
+          availabilityData.booked_slots || [], 
+          myBookingsForThisService // Pass user's bookings to generator
         );
       }
     } catch (err) {
@@ -63,7 +87,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setLoadingSlots(false);
   };
 
-  const generateTimeSlots = (openTime, closeTime, bookedRanges) => {
+  const generateTimeSlots = (openTime, closeTime, bookedRanges, myBookings) => {
     const generated = [];
     const [openH, openM] = openTime.split(':').map(Number);
     const [closeH, closeM] = closeTime.split(':').map(Number);
@@ -75,36 +99,39 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     end.setHours(closeH, closeM, 0, 0);
 
     const now = new Date(); 
-    
-    // ✅ Get Capacity from service meta (default to 1 if not set)
     const serviceCapacity = serviceMeta.capacity || 1;
 
     while (current < end) {
       const timeString = current.toTimeString().slice(0, 5); // "08:00"
       
-      // Calculate when this specific service would END if started now
+      // Calculate end of this specific slot
       const slotEndTime = new Date(current.getTime() + (serviceMeta.duration || 30) * 60000);
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
-      // ✅ Count overlapping bookings for this slot
+      // 1. Check Global Capacity
       const overlapCount = bookedRanges.filter(booking => {
-        return (timeString >= booking.start && timeString < booking.end) || // Starts inside another
-               (timeStringEnd > booking.start && timeStringEnd <= booking.end) || // Ends inside another
-               (timeString <= booking.start && timeStringEnd >= booking.end); // Envelops another
+        return (timeString >= booking.start && timeString < booking.end) || 
+               (timeStringEnd > booking.start && timeStringEnd <= booking.end) || 
+               (timeString <= booking.start && timeStringEnd >= booking.end); 
       }).length;
 
-      // ✅ Disable only if overlaps >= capacity
-      const isFull = overlapCount >= serviceCapacity;
+      // 2. Check if USER already booked this slot (The new requirement)
+      const isBookedByMe = myBookings.some(myAppt => {
+        // Convert my appt date to time string "HH:MM"
+        const myTime = new Date(myAppt.appointment_date).toTimeString().slice(0, 5);
+        return myTime === timeString;
+      });
 
-      // Check if it's in the past (only relevant for today)
+      // Logic: Unavailable if Capacity Reached OR User already has this slot
+      const isFull = overlapCount >= serviceCapacity;
       const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
 
       generated.push({
         time: timeString,
-        available: !isFull && !isPast
+        available: !isFull && !isPast && !isBookedByMe, // 🧠 Disable if booked by me
+        status: isBookedByMe ? "booked" : (isFull ? "full" : "open") // Helper for UI styling
       });
 
-      // Increment by 30 mins (standard slot interval)
       current.setMinutes(current.getMinutes() + 30);
     }
     setSlots(generated);
@@ -265,7 +292,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content booking-modal" onClick={(e) => e.stopPropagation()}>
-        {/* HEADER */}
         <div className="modal-header">
           <div>
             <h3>Book {serviceMeta?.name}</h3>
@@ -274,7 +300,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           <button className="close-btn" onClick={() => { if (!processingPayment) onClose?.(); }} disabled={processingPayment}>×</button>
         </div>
 
-        {/* BODY */}
         <div className="modal-body">
           <div className="service-quick-info">
             <div className="info-pill"><i className="fa fa-clock-o"></i> ⏱ {serviceMeta?.duration} mins</div>
@@ -301,10 +326,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                           key={slot.time} 
                           type="button" 
                           className={`time-slot ${selectedTime === slot.time ? 'selected' : ''}`} 
+                          // 🧠 Disable if unavailable (Full OR Already booked by user)
                           disabled={!slot.available} 
                           onClick={() => setSelectedTime(slot.time)}
+                          // 🧠 Tooltip Logic
+                          title={slot.status === 'booked' ? "You already booked this slot" : slot.status === 'full' ? "Slot Full" : ""}
                         >
-                          {slot.time}
+                          {slot.status === 'booked' ? 'Booked' : slot.time}
                         </button>
                       ))}
                     </div>
@@ -322,8 +350,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
               // STEP 2: ADDONS & PAYMENT
               <div className="step-2">
                 <div className="two-column-layout">
-                  
-                  {/* LEFT: ADDONS */}
                   <div className="column left-col">
                     <h4 className="section-title">2. Add-ons</h4>
                     <div className="form-group relative-container">
@@ -353,7 +379,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                     </div>
                   </div>
 
-                  {/* RIGHT: PAYMENT */}
                   <div className="column right-col">
                     <h4 className="section-title">3. Payment</h4>
                     <div className="payment-options-box">
@@ -380,7 +405,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                       <div className="breakdown-total"><span>Total</span><span>KES {totalPrice.toLocaleString()}</span></div>
                     </div>
                     
-                    {/* ✅ ADDED POLICY TEXT HERE */}
                     <div className="policy-text" style={{ fontSize: '0.85em', color: '#666', marginTop: '10px', lineHeight: '1.4', background: '#f9f9f9', padding: '8px', borderRadius: '4px', borderLeft: '3px solid #007bff' }}>
                       <strong>Policy:</strong> Refunds are processed for cancellations made <em>before</em> the appointment time. The deposit secures your spot; <strong>no-shows are non-refundable</strong>.
                     </div>
