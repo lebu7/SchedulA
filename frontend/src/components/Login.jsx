@@ -60,6 +60,11 @@ function Login({ onLogin }) {
               onChange={handleChange}
               required
             />
+            <div style={{ textAlign: 'right', marginTop: '5px' }}>
+              <a href="/forgot-password" style={{ fontSize: '0.85em', color: '#2563eb' }}>
+                Forgot Password?
+              </a>
+            </div>
           </div>
           
           <button 

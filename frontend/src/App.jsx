@@ -1,3 +1,4 @@
+/* frontend/src/App.jsx */
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
@@ -7,6 +8,7 @@ import Header from './components/Header'
 import Login from './components/Login'
 import Register from './components/Register'
 import Dashboard from './components/Dashboard'
+import ForgotPassword from './components/ForgotPassword' // 🆕 Import
 
 // Services
 import { authService } from './services/auth'
@@ -62,6 +64,14 @@ function App() {
               path="/register" 
               element={
                 !user ? <Register onLogin={handleLogin} /> : <Navigate to="/dashboard" />
+              } 
+            />
+            
+            {/* 🆕 Forgot Password Route */}
+            <Route 
+              path="/forgot-password" 
+              element={
+                !user ? <ForgotPassword /> : <Navigate to="/dashboard" />
               } 
             />
             

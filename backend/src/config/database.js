@@ -44,6 +44,8 @@ function initializeDatabase() {
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
       notification_preferences TEXT,
+      reset_otp TEXT, -- 🆕 For password reset
+      reset_otp_expires DATETIME, -- 🆕 For password reset expiry
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -230,9 +232,11 @@ function initializeDatabase() {
   /* ---------------------------------------------
      🔍 Ensure missing columns exist (MIGRATIONS)
   --------------------------------------------- */
-  // Users Migrations (New Gender/DOB)
+  // Users Migrations (New Gender/DOB/ResetOTP)
   tryAddColumn("users", "gender", "TEXT");
   tryAddColumn("users", "dob", "DATE");
+  tryAddColumn("users", "reset_otp", "TEXT"); // 🆕
+  tryAddColumn("users", "reset_otp_expires", "DATETIME"); // 🆕
 
   tryAddColumn("users", "opening_time", "TEXT DEFAULT '08:00'");
   tryAddColumn("users", "closing_time", "TEXT DEFAULT '18:00'");
