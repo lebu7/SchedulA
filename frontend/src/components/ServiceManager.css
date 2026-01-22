@@ -1,6 +1,18 @@
-/* ===========================
-   HEADER
-=========================== */
+/* =========================================
+   1. LAYOUT & HEADER
+   ========================================= */
+.service-manager {
+  padding: 30px 0;
+  background-color: #f8fafc;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
 .manager-header {
   display: flex;
   justify-content: space-between;
@@ -8,580 +20,551 @@
   margin-bottom: 30px;
 }
 
+.header-title h2 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 24px;
+}
+.header-title p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
 .header-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
-/* ===========================
-   SERVICE LIST GRID
-=========================== */
-.services-list {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-@media (max-width: 992px) {
-  .services-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
-  .services-list {
-    grid-template-columns: 1fr;
-  }
-}
-/* When business is closed */
-.services-list.dimmed {
-  opacity: 0.4;
-  pointer-events: none; /* disables all clicks and actions */
-  filter: grayscale(0.6);
-  position: relative;
-}
-
-.services-list.dimmed::after {
-  content: "Business Closed";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  font-size: 1.1rem;
-  padding: 16px 24px;
-  border-radius: 8px;
-  text-align: center;
-  z-index: 10;
-}
-
-
-/* ===========================
-   SERVICE ITEM (CARD)
-=========================== */
-.service-item {
-  background: #fff;
-  border: 1px solid #e9ecef;
-  border-radius: 10px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.service-item:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.service-info h4 {
-  margin-bottom: 10px;
-  color: #2c3e50;
-  font-size: 1.2em;
-}
-
-.service-category {
-  color: #888;
-  font-size: 0.95em;
-  margin-bottom: 10px;
-}
-
-.service-description {
-  color: #555;
-  font-size: 0.95em;
-  margin-bottom: 10px;
-}
-
-.service-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 15px;
-}
-
-/* ===========================
-   SERVICE ACTION BUTTONS
-=========================== */
-.service-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: nowrap;
-  margin-top: auto;
-}
-
+/* Global Buttons */
 .btn {
-  flex: 1;
-  text-align: center;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
   border-radius: 8px;
-  cursor: pointer;
   font-weight: 600;
-  padding: 8px 12px;
-  transition: all 0.2s ease;
-  white-space: nowrap;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
 }
 
 .btn-primary {
-  background-color: #007bff;
+  background: #0f172a;
   color: white;
 }
-.btn-primary:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: white;
-}
-.btn-danger:hover:not(:disabled) {
-  background-color: #c82333;
+.btn-primary:hover {
+  background: #334155;
 }
 
 .btn-secondary {
-  background-color: #6c757d;
-  color: white;
+  background: #e2e8f0;
+  color: #475569;
 }
-.btn-secondary:hover:not(:disabled) {
-  background-color: #545b62;
-}
-
-.btn-success {
-  background-color: #28a745;
-  color: white;
-}
-.btn-success:hover:not(:disabled) {
-  background-color: #218838;
+.btn-secondary:hover {
+  background: #cbd5e1;
 }
 
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.btn-close-biz {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.btn-close-biz:hover {
+  background: #fecaca;
 }
 
-/* ===========================
-   CLOSED SERVICE
-=========================== */
-.service-item.closed {
-  opacity: 0.6;
-  pointer-events: none;
-  position: relative;
+.btn-open-biz {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.btn-open-biz:hover {
+  background: #bbf7d0;
 }
 
-.service-item.closed .btn-success {
-  pointer-events: auto;
-  opacity: 1;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  font-weight: 600;
-  transition: background-color 0.3s;
-}
-
-.service-item.closed .btn-success:hover {
-  background-color: #218838;
-}
-
-.closed-badge {
-  color: #dc3545;
-  font-size: 0.9em;
-  margin-left: 8px;
-}
-
-/* ===========================
-   BUSINESS TOGGLE BUTTONS
-=========================== */
-.header-actions .btn-secondary {
-  background-color: #28a745;
-  color: white;
-}
-.header-actions .btn-secondary:hover {
-  background-color: #218838;
-}
-
-.header-actions .btn-secondary.close-business {
-  background-color: #dc3545;
-}
-.header-actions .btn-secondary.close-business:hover {
-  background-color: #c82333;
-}
-
-/* ===========================
-   FORM STYLES
-=========================== */
-.form-row {
+/* =========================================
+   2. PROVIDER SERVICE CARD
+   ========================================= */
+.services-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 25px;
 }
 
-.form-group {
+.provider-service-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+
+.provider-service-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+}
+
+/* Dimmed state when closed */
+.provider-service-card.dimmed {
+  filter: grayscale(100%);
+  opacity: 0.7;
+}
+
+/* Card Header */
+.provider-card-header {
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  color: white;
+}
+
+/* Category Colors (Matches ServiceList) */
+.salon-header {
+  background: linear-gradient(135deg, #ec4899, #be185d);
+}
+.spa-header {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+.barber-header {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+.default-category {
+  background: linear-gradient(135deg, #64748b, #475569);
+}
+
+.header-top h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.cat-badge {
+  display: inline-block;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.header-price {
+  font-size: 16px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+/* Card Body */
+.provider-card-body {
+  padding: 20px;
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-.form-group label {
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #333;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-  padding: 10px 12px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
+.description {
   font-size: 14px;
-  transition: border-color 0.3s ease;
+  color: #64748b;
+  margin-bottom: 15px;
+  line-height: 1.5;
+  min-height: 40px;
 }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #007bff;
-}
-
-/* ===========================
-   MODAL
-=========================== */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+/* Meta Stats */
+.meta-stats {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  gap: 15px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 15px;
 }
-
-.modal-content {
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  position: relative;
-  animation: fadeIn 0.3s ease-in-out;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
+.stat {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 500;
+}
+.status-closed {
+  color: #ef4444;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.status-active {
+  color: #16a34a;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
 }
 
-.close-btn {
+/* Add-ons Section */
+.addons-wrapper {
+  margin-top: auto;
+}
+.toggle-addons-link {
   background: none;
   border: none;
-  font-size: 22px;
-  cursor: pointer;
-  color: #333;
-}
-.close-btn:hover {
-  color: #007bff;
-}
-
-/* ===========================
-   SPINNER
-=========================== */
-.spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  border-top-color: transparent;
-  animation: spin 1s ease-in-out infinite;
-  margin-right: 8px;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ===========================
-   RESPONSIVE DESIGN
-=========================== */
-@media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-  .manager-header {
-    flex-direction: column;
-    gap: 15px;
-    align-items: flex-start;
-  }
-  .service-actions {
-    flex-direction: column;
-  }
-}
-/* ===========================
-   SUB-SERVICES (ADD-ONS) SECTION
-=========================== */
-.subservice-section {
-  background: #f8f9fa;
-  border: 1px solid #e1e5e9;
-  border-radius: 10px;
-  padding: 15px;
-  margin-top: 15px;
-}
-
-.subservice-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.subservice-header h5 {
-  margin: 0;
-  color: #2c3e50;
-  font-size: 1em;
+  color: #2563eb;
+  font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+.toggle-addons-link:hover {
+  text-decoration: underline;
 }
 
-.subservice-list {
+.addons-content {
+  margin-top: 10px;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  animation: slideDown 0.2s ease-out;
+}
+.addons-list-clean {
   list-style: none;
   padding: 0;
   margin: 0;
 }
+.addons-list-clean li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  font-size: 13px;
+}
+.addons-list-clean li:last-child {
+  border-bottom: none;
+}
+.addon-info .name {
+  color: #334155;
+  font-weight: 500;
+}
+.addon-info .price {
+  color: #64748b;
+  margin-left: 6px;
+  font-size: 12px;
+}
+.addon-tools button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 4px;
+  transition: color 0.2s;
+}
+.addon-tools button:hover {
+  color: #3b82f6;
+}
+.addon-tools button:last-child:hover {
+  color: #ef4444;
+}
 
-.subservice-list li {
-  background: #ffffff;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+.add-addon-small-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  background: white;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.add-addon-small-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+/* Card Footer */
+.provider-card-footer {
+  padding: 15px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.subservice-list li span {
-  color: #555;
-  font-size: 14px;
-}
-
-.subservice-actions {
+.right-actions {
   display: flex;
   gap: 8px;
 }
-/* ================================
-   Compact & Stylish Add-on Buttons
-================================ */
-.subservice-actions.compact {
+
+.icon-action-btn {
+  background: white;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   display: flex;
-  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.icon-action-btn:hover {
+  border-color: #334155;
+  color: #1e293b;
+}
+.icon-action-btn.delete:hover {
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
-.icon-btn {
+.toggle-status-btn {
+  padding: 0 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
   border: none;
-  outline: none;
-  padding: 6px 8px;
+}
+.toggle-status-btn.close {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+}
+.toggle-status-btn.close:hover {
+  background: #ffe4e6;
+}
+.toggle-status-btn.open {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+.toggle-status-btn.open:hover {
+  background: #d1fae5;
+}
+.toggle-status-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =========================================
+   3. MODALS (FORM & PREVIEW)
+   ========================================= */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.7);
+
+  /* 🛠️ FIXED: Added Webkit Prefix for Safari */
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: white;
+  width: 100%;
+  max-width: 600px;
+  border-radius: 12px;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+.small-modal {
+  max-width: 400px;
+}
+
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #1e293b;
+}
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.service-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.modal-body-padded {
+  padding: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 14px;
+}
+.form-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 15px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+/* PREVIEW MODAL SPECIFIC */
+.preview-modal-content {
+  background: transparent;
+  width: 100%;
+  max-width: 380px; /* Mobile width for realism */
+  animation: slideUp 0.3s ease;
+}
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  margin-bottom: 10px;
+}
+.preview-header h4 {
+  margin: 0;
+}
+.preview-header button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.icon-btn.edit {
-  background: #e9f5ff;
-  color: #007bff;
-  border: 1px solid #b3d9ff;
+/* Reuse Service List Card Styles for Preview */
+.service-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
-
-.icon-btn.edit:hover {
-  background: #007bff;
-  color: #fff;
-}
-
-.icon-btn.delete {
-  background: #ffe9e9;
-  color: #d9534f;
-  border: 1px solid #ffcccc;
-}
-
-.icon-btn.delete:hover {
-  background: #d9534f;
-  color: white;
-}
-.icon-btn.add {
-  background: #f8f9fa;
-  color: #28a745;
-  border: 1px solid #28a745;
-  font-weight: 600;
-  padding: 7px 10px;
-}
-
-.icon-btn.add:hover {
-  background: #218838;
-  color: #fff;
-}
-
-/* Optional: make add-on rows look more unified */
-.addons-dropdown {
-  margin-top: 10px;
-  background: #fdfdfd;
-  border-radius: 10px;
-  border: 1px solid #eee;
-  padding: 10px;
-}
-
-/* Optional: add a little icon scaling on hover */
-.icon-btn:hover {
-  transform: scale(1.05);
-}
-
-.btn-outline {
-  background: transparent;
-  border: 1px solid #007bff;
-  color: #007bff;
-  font-weight: 500;
-}
-.btn-outline:hover {
-  background: #007bff;
-  color: white;
-}
-
-.add-subservice-btn {
-  margin-top: 10px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-  background: #28a745;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-.add-subservice-btn:hover {
-  background: #218838;
-}
-/* 🔔 Floating top success popup */
-.global-success-popup {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #28a745;
-  color: white;
-  padding: 14px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
-  animation: fadeSlideIn 0.4s ease, fadeOut 0.4s ease 1.8s forwards;
-}
-
-@keyframes fadeSlideIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -20px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-@keyframes fadeOut {
-  to {
-    opacity: 0;
-    transform: translate(-50%, -10px);
-  }
-}
-/* ===========================
-   CLOSED SERVICES (Red Outline + Top-Centered Badge)
-=========================== */
-.closed-service {
-  position: relative;
-  opacity: 0.6;
-  pointer-events: none;
-  border: 2px solid #dc3545 !important; /* red outline */
-  box-shadow: 0 0 8px rgba(220, 53, 69, 0.4);
-  transition: all 0.3s ease;
-}
-
-/* 🔴 Badge displayed at top center */
-.closed-service::after {
-  content: attr(data-status); /* "Business Closed" or "Service Closed" */
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #dc3545;
-  color: #fff;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.5px;
-  z-index: 10;
-}
-
-/* Keep “Open” button usable even when closed */
-.closed-service .btn-success {
-  pointer-events: auto;
-  opacity: 1;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  font-weight: 600;
-  transition: background-color 0.3s;
-}
-
-.closed-service .btn-success:hover {
-  background-color: #218838;
-}
-/* ========== COLLAPSIBLE ADD-ONS SECTION ========== */
-.toggle-addons-btn {
-  background: #007bff;
-  color: white;
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s ease;
-}
-
-.toggle-addons-btn:hover {
-  background: #0056b3;
-}
-
-.addons-dropdown {
-  margin-top: 12px;
-  background: #f8f9fa;
-  border: 1px solid #e1e5e9;
-  border-radius: 10px;
+.service-header-bar {
   padding: 15px;
-  animation: slideDown 0.3s ease forwards;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+}
+.service-main {
+  padding: 15px;
+}
+.meta-badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-right: 6px;
+}
+.meta-badge.category {
+  background: #f1f5f9;
+  color: #475569;
+}
+.meta-badge.duration {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+.service-description {
+  font-size: 14px;
+  color: #64748b;
+  margin: 15px 0;
+}
+.book-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #0f172a;
+  color: white;
+  font-weight: 600;
 }
 
+/* Empty State */
+.no-services-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
 @keyframes slideDown {
   from {
+    transform: translateY(-10px);
     opacity: 0;
-    transform: translateY(-5px);
   }
   to {
-    opacity: 1;
     transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .services-list {
+    grid-template-columns: 1fr;
+  }
+  .form-row-3 {
+    grid-template-columns: 1fr;
   }
 }
