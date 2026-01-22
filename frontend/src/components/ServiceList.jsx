@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // Needed for Edit navigation
+import { useNavigate } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
-  Plus, Power, Edit, Trash2, Eye, Store 
-} from "lucide-react"; // 🧠 Added Provider Icons
+  Plus, Power, Edit, Trash2, Store, Lock, Unlock 
+} from "lucide-react"; 
 import "./ServiceList.css";
 
-// 🧠 Helper: Fisher-Yates Shuffle for true randomness (Client view only)
+// Helper: Fisher-Yates Shuffle
 const shuffleArray = (array) => {
   let currentIndex = array.length, randomIndex;
   while (currentIndex !== 0) {
@@ -25,7 +25,10 @@ function ServiceList({ user }) {
   const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Filters (Client Side mostly)
+  // 🆕 Business Status State (Simulated global toggle)
+  const [isBusinessClosed, setIsBusinessClosed] = useState(false);
+
+  // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [sortOption, setSortOption] = useState("random");
@@ -39,11 +42,11 @@ function ServiceList({ user }) {
 
   useEffect(() => {
     fetchAllServices();
-  }, [user.user_type]); // Re-fetch if user type changes
+  }, [user.user_type]); 
 
   useEffect(() => {
     filterServices();
-  }, [searchTerm, selectedCategory, sortOption, itemsToShow, allServices]);
+  }, [searchTerm, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
 
   const fetchAllServices = async () => {
     try {
@@ -51,8 +54,6 @@ function ServiceList({ user }) {
       const response = await api.get("/services");
       let services = response.data.services || [];
       
-      // If Client: Shuffle for discovery
-      // If Provider: Keep strict order (usually newest first or alphabetical)
       if (user.user_type === 'client') {
         services = shuffleArray(services);
       }
@@ -88,7 +89,6 @@ function ServiceList({ user }) {
   const filterServices = () => {
     let result = [...allServices];
 
-    // 1. Search Filter
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
       result = result.filter((service) => {
@@ -97,12 +97,10 @@ function ServiceList({ user }) {
       });
     }
 
-    // 2. Category Filter
     if (selectedCategory) {
       result = result.filter((service) => service.category === selectedCategory);
     }
 
-    // 3. Sorting Logic
     if (sortOption !== "random") {
         result.sort((a, b) => {
             const priceA = parseFloat(a.price || 0);
@@ -121,7 +119,6 @@ function ServiceList({ user }) {
         });
     }
 
-    // 4. Limit Items (Client only usually)
     if (itemsToShow !== "all" && user.user_type === 'client') {
         result = result.slice(0, parseInt(itemsToShow));
     }
@@ -129,9 +126,9 @@ function ServiceList({ user }) {
     setFilteredServices(result);
   };
 
-  // === CLIENT ACTIONS ===
+  // === ACTIONS ===
   const handleBookClick = (service) => {
-    if (service.is_closed) return;
+    if (service.is_closed || isBusinessClosed) return;
     setSelectedService(service);
     setShowBookingModal(true);
   };
@@ -146,7 +143,6 @@ function ServiceList({ user }) {
     setSelectedService(null);
   };
 
-  // === PROVIDER ACTIONS ===
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this service? This cannot be undone.")) {
       try {
@@ -163,9 +159,7 @@ function ServiceList({ user }) {
   const toggleServiceStatus = async (service) => {
     try {
       const newStatus = !service.is_closed;
-      // Depending on your API, this might be a specific endpoint or a generic PUT
       await api.put(`/services/${service.id}`, { is_closed: newStatus });
-      
       setAllServices(prev => prev.map(s => 
         s.id === service.id ? { ...s, is_closed: newStatus } : s
       ));
@@ -175,15 +169,16 @@ function ServiceList({ user }) {
     }
   };
 
-  const handleCloseBusiness = async () => {
-    if (window.confirm("Are you sure you want to close business for the day? This will mark all services as closed.")) {
-        // Implementation depends on backend, usually loops through services or hits a 'close-all' endpoint
-        alert("Business closed feature coming soon (Backend integration required).");
+  // 🆕 Toggle Business Status
+  const handleToggleBusiness = () => {
+    const action = isBusinessClosed ? "OPEN" : "CLOSE";
+    if (window.confirm(`Are you sure you want to ${action} the business? This will affect availability for all services.`)) {
+        setIsBusinessClosed(!isBusinessClosed);
+        // In a real app, you would send this status to the backend here
     }
   };
 
   const handleEdit = (service) => {
-    // Assuming you have an edit route
     navigate(`/services/edit/${service.id}`, { state: { service } });
   };
 
@@ -196,7 +191,6 @@ function ServiceList({ user }) {
     }
   };
 
-  // === HELPER: UI CLASSES ===
   const getCategoryClass = (category) => {
     if (!category) return "default-category";
     const cat = category.toLowerCase();
@@ -224,66 +218,90 @@ function ServiceList({ user }) {
                          <button className="btn-add-service" onClick={() => navigate('/services/new')}>
                             <Plus size={18} /> Add New Service
                          </button>
-                         <button className="btn-close-business" onClick={handleCloseBusiness}>
-                            <Power size={18} /> Close Business
+                         <button 
+                            className={`btn-close-business ${isBusinessClosed ? 'closed' : ''}`} 
+                            onClick={handleToggleBusiness}
+                         >
+                            <Power size={18} /> {isBusinessClosed ? "Re-open Business" : "Close Business"}
                          </button>
                     </div>
                 </div>
 
+                {isBusinessClosed && (
+                    <div className="business-closed-banner">
+                        ⚠️ Your business is currently marked as <strong>CLOSED</strong>. Clients cannot book any services.
+                    </div>
+                )}
+
                 <div className="services-grid">
-                    {filteredServices.map((service) => (
-                        <div key={service.id} className="provider-card">
-                            {/* Header */}
-                            <div className="provider-card-header">
-                                <h3>{service.name}</h3>
-                                <span className="provider-category-badge">{service.category}</span>
-                            </div>
+                    {filteredServices.map((service) => {
+                        // 🧠 Determine if this specific card should be dimmed
+                        const isDimmed = service.is_closed || isBusinessClosed;
 
-                            {/* Description */}
-                            <p className="provider-card-desc">
-                                {service.description 
-                                    ? (service.description.length > 100 ? service.description.substring(0, 100) + '...' : service.description)
-                                    : "No description provided."}
-                            </p>
+                        return (
+                            <div key={service.id} className={`provider-card ${isDimmed ? 'dimmed-card' : ''}`}>
+                                
+                                {/* Status Badge Overlay */}
+                                {isDimmed && (
+                                    <div className="status-overlay-badge">
+                                        {isBusinessClosed ? "BUSINESS CLOSED" : "SERVICE CLOSED"}
+                                    </div>
+                                )}
 
-                            {/* Stats Row */}
-                            <div className="provider-stats-row">
-                                <div className="stat-item">
-                                    <Clock size={14} style={{marginBottom:'4px'}}/>
-                                    <span>{service.duration}m</span>
+                                <div className="provider-card-header">
+                                    <h3>{service.name}</h3>
+                                    <span className="provider-category-badge">{service.category}</span>
                                 </div>
-                                <div className="stat-item">
-                                    <span style={{fontSize:'12px', fontWeight:'400'}}>Price</span>
-                                    <span>KES {service.price}</span>
+
+                                <p className="provider-card-desc">
+                                    {service.description 
+                                        ? (service.description.length > 100 ? service.description.substring(0, 100) + '...' : service.description)
+                                        : "No description provided."}
+                                </p>
+
+                                <div className="provider-stats-row">
+                                    <div className="stat-item">
+                                        <Clock size={14} style={{marginBottom:'4px'}}/>
+                                        <span>{service.duration}m</span>
+                                    </div>
+                                    <div className="stat-item">
+                                        <span style={{fontSize:'12px', fontWeight:'400'}}>Price</span>
+                                        <span>KES {service.price}</span>
+                                    </div>
+                                    <div className="stat-item">
+                                        <Store size={14} style={{marginBottom:'4px'}}/>
+                                        <span>Cap: {service.capacity || 1}</span>
+                                    </div>
                                 </div>
-                                <div className="stat-item">
-                                    <Store size={14} style={{marginBottom:'4px'}}/>
-                                    <span>Cap: {service.capacity || 1}</span>
+
+                                <button className="btn-view-addons" onClick={() => handleViewAddons(service)}>
+                                    View Add-ons ({subServices[service.id]?.length || 0})
+                                </button>
+
+                                <div className="provider-actions-footer">
+                                    <button className="btn-action btn-edit" onClick={() => handleEdit(service)}>
+                                        <Edit size={14} /> Edit
+                                    </button>
+                                    <button className="btn-action btn-delete" onClick={() => handleDelete(service.id)}>
+                                        <Trash2 size={14} /> Delete
+                                    </button>
+                                    {/* 🧠 Toggle Button Logic: If Business Closed, Button says 'N/A' or allows force open? 
+                                        Here we allow toggling specific service even if business is closed, 
+                                        but visual remains dimmed until business opens. */}
+                                    <button 
+                                        className={`btn-action ${service.is_closed ? 'btn-toggle-open' : 'btn-toggle-close'}`} 
+                                        onClick={() => toggleServiceStatus(service)}
+                                    >
+                                        {service.is_closed ? (
+                                            <><Unlock size={12} /> Open</>
+                                        ) : (
+                                            <><Lock size={12} /> Close</>
+                                        )}
+                                    </button>
                                 </div>
                             </div>
-
-                            {/* Add-ons Button */}
-                            <button className="btn-view-addons" onClick={() => handleViewAddons(service)}>
-                                View Add-ons ({subServices[service.id]?.length || 0})
-                            </button>
-
-                            {/* Bottom Actions */}
-                            <div className="provider-actions-footer">
-                                <button className="btn-action btn-edit" onClick={() => handleEdit(service)}>
-                                    <Edit size={14} /> Edit
-                                </button>
-                                <button className="btn-action btn-delete" onClick={() => handleDelete(service.id)}>
-                                    <Trash2 size={14} /> Delete
-                                </button>
-                                <button 
-                                    className={`btn-action ${service.is_closed ? 'btn-toggle-open' : 'btn-toggle-close'}`} 
-                                    onClick={() => toggleServiceStatus(service)}
-                                >
-                                    {service.is_closed ? 'Open' : 'Close'}
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </>
         ) : (
@@ -368,12 +386,15 @@ function ServiceList({ user }) {
                       {filteredServices.map((service) => {
                         const addons = subServices[service.id] || [];
                         const price = parseFloat(service.price).toFixed(0);
+                        
+                        // 🧠 Client Dimming Logic: Card is dimmed if service OR business is closed
+                        const isDimmed = service.is_closed || isBusinessClosed;
 
                         return (
                           <div
                             key={service.id}
-                            className={`service-card ${service.is_closed ? "closed-service" : ""}`}
-                            data-status={service.is_closed ? "Closed" : ""}
+                            className={`service-card ${isDimmed ? "closed-client-card" : ""}`}
+                            data-status={isBusinessClosed ? "Business Closed" : (service.is_closed ? "Currently Closed" : "")}
                           >
                             <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
                               <div className="header-content">
@@ -388,7 +409,7 @@ function ServiceList({ user }) {
                               </div>
                             </div>
 
-                            <div className="service-main" onClick={() => !service.is_closed && handleBookClick(service)}>
+                            <div className="service-main" onClick={() => !isDimmed && handleBookClick(service)}>
                               <div className="meta-row">
                                   <span className="meta-badge category">{service.category}</span>
                                   <span className="meta-badge duration">
@@ -416,8 +437,10 @@ function ServiceList({ user }) {
                                 <div className="addon-spacer"></div>
                               )}
 
-                              <button className="btn btn-primary book-btn" disabled={service.is_closed}>
-                                {service.is_closed ? "Currently Closed" : "Book Now"}
+                              <button className="btn btn-primary book-btn" disabled={isDimmed}>
+                                {isDimmed 
+                                    ? (isBusinessClosed ? "Business Closed" : "Service Closed") 
+                                    : "Book Now"}
                               </button>
                             </div>
                           </div>
@@ -437,7 +460,6 @@ function ServiceList({ user }) {
             </>
         )}
 
-        {/* Global Modals */}
         {showBookingModal && selectedService && (
           <BookingModal
             service={selectedService}

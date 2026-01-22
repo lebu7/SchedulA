@@ -564,3 +564,70 @@
   color: #ca8a04;
 }
 .btn-toggle-open:hover { background-color: #fef08a; }
+/* =========================================
+   DIMMING & CLOSED LOGIC
+   ========================================= */
+
+/* 1. PROVIDER VIEW: Dimmed but Interactive */
+.dimmed-card {
+  background-color: #f1f5f9; /* Light gray bg */
+  border-color: #cbd5e1;
+}
+
+.dimmed-card .provider-card-header h3,
+.dimmed-card .provider-card-desc,
+.dimmed-card .stat-item {
+  opacity: 0.5; /* Fade text */
+}
+
+/* Badge overlay to clearly show status */
+.status-overlay-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 4px;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* 2. CLIENT VIEW: Dimmed and Non-Interactive */
+.closed-client-card {
+  opacity: 0.6;
+  filter: grayscale(100%);
+  pointer-events: none; /* Disable all clicks for client */
+  position: relative;
+  border: 1px solid #ef4444;
+}
+
+/* Ensure the disabled button looks disabled */
+.closed-client-card .book-btn {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* 3. Banner for Business Closed */
+.business-closed-banner {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* 4. Button State for Toggle Business */
+.btn-close-business.closed {
+  background-color: #22c55e;
+  color: white;
+  border-color: #16a34a;
+}
+.btn-close-business.closed:hover {
+  background-color: #15803d;
+}
