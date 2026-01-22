@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { PaystackButton } from "react-paystack";
 import { useLocation } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
-import { Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock } from "lucide-react"; // 🧠 Added Icons
+import { Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock } from "lucide-react"; 
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -180,6 +180,9 @@ function AppointmentManager({ user }) {
     return user.user_type === "provider" ? "upcoming" : "pending";
   });
 
+  // 🆕 Sub-tab state for Provider Upcoming view
+  const [upcomingSubTab, setUpcomingSubTab] = useState("due");
+
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
@@ -189,7 +192,7 @@ function AppointmentManager({ user }) {
   // Date Filter (History)
   const [dateFilter, setDateFilter] = useState("all"); 
 
-  // 🆕 DEV MODE: Allow modifying future appointments for testing
+  // 🆕 DEV MODE
   const [isDevMode, setIsDevMode] = useState(false);
 
   const [showBooking, setShowBooking] = useState(false);
@@ -210,13 +213,19 @@ function AppointmentManager({ user }) {
         setActiveTab("pending");
         return;
       }
-      const upcomingList = user.user_type === "client" ? appointments.scheduled : appointments.upcoming;
-      const inUpcoming = upcomingList?.some(a => a.id === targetId);
-      if (inUpcoming) {
+      
+      // Check upcoming/due
+      const allUpcoming = [...(appointments.upcoming || []), ...(appointments.scheduled || [])];
+      // Also check if it's a 'due' item hiding in past
+      const pastDue = appointments.past?.filter(a => a.status === 'scheduled') || [];
+      const combinedUpcoming = [...allUpcoming, ...pastDue];
+
+      if (combinedUpcoming.some(a => a.id === targetId)) {
         setActiveTab(user.user_type === "client" ? "scheduled" : "upcoming");
         return;
       }
-      const inHistory = appointments.past?.some(a => a.id === targetId);
+      
+      const inHistory = appointments.past?.some(a => a.id === targetId && a.status !== 'scheduled');
       if (inHistory) {
         setActiveTab("history");
         setHistoryFilter("all"); 
@@ -224,19 +233,6 @@ function AppointmentManager({ user }) {
       }
     }
   }, [loading, appointments, location.state, user.user_type]);
-
-  useEffect(() => {
-    if (!loading && location.state?.targetId) {
-      setTimeout(() => {
-        const element = document.getElementById(`apt-${location.state.targetId}`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          element.classList.add('highlight-target'); 
-          setTimeout(() => element.classList.remove('highlight-target'), 2000);
-        }
-      }, 700); 
-    }
-  }, [loading, activeTab, location.state]);
 
   const fetchAppointments = async () => {
     try {
@@ -249,6 +245,34 @@ function AppointmentManager({ user }) {
       setLoading(false);
     }
   };
+
+  // 🧠 REORGANIZED DATA (Memoized to fix counters)
+  const processedAppointments = useMemo(() => {
+    const rawPending = appointments.pending || [];
+    
+    // 1. Identify "Due" items currently sitting in history
+    const pastDueItems = (appointments.past || []).filter(a => a.status === 'scheduled');
+    
+    // 2. Base Upcoming list
+    const baseUpcoming = user.user_type === 'client' 
+        ? (appointments.scheduled || []) 
+        : (appointments.upcoming || []);
+    
+    // 3. Combine for true "Upcoming" list (Provider sees due items here)
+    const combinedUpcoming = user.user_type === 'provider' 
+        ? [...baseUpcoming, ...pastDueItems] 
+        : baseUpcoming; // Clients usually see due items in history or scheduled depending on logic, keeping simple for now
+
+    // 4. Clean History (Remove the due items we moved)
+    const cleanHistory = (appointments.past || []).filter(a => a.status !== 'scheduled');
+
+    return {
+        pending: rawPending,
+        upcoming: combinedUpcoming,
+        history: cleanHistory
+    };
+  }, [appointments, user.user_type]);
+
 
   const handleDeleteAppointment = async (id) => {
     if (window.confirm("Remove this appointment from your dashboard?")) {
@@ -405,7 +429,6 @@ function AppointmentManager({ user }) {
     );
   };
 
-  // 🆕 Helper Function to Render Single Card (Reusable for split sections)
   const renderAppointmentCard = (apt, type) => {
      const selectedAddons = parseAddons(apt);
      const addonsTotal = selectedAddons.reduce(
@@ -440,9 +463,7 @@ function AppointmentManager({ user }) {
        handleStatusUpdate(apt.id, newStatus);
      };
 
-     // 🛑 Future Restriction Logic
      const isFuture = new Date(apt.appointment_date) > new Date();
-     // If it's a future appointment AND we are NOT in dev mode, disable actions
      const actionsDisabled = isFuture && !isDevMode;
 
      return (
@@ -578,14 +599,12 @@ function AppointmentManager({ user }) {
             <div className="appointment-actions">
             {user.user_type === "client" ? (
                 <>
-                {/* Client Actions (Same as before) */}
                 {(apt.status === "pending" || apt.status === "scheduled") && !apt.refund_status && ( 
                     <>
                         <button className="btn btn-primary small-btn" onClick={() => handleReschedule(apt)}>Reschedule</button>
                         <button className="btn btn-danger small-btn" onClick={() => handleCancelAppointment(apt.id)} disabled={cancelling === apt.id}>Cancel</button>
                     </>
                 )}
-
                 {["cancelled", "no-show", "completed", "rebooked"].includes(apt.status) && (
                     <div className="action-row">
                     {apt.status === 'cancelled' && (
@@ -597,7 +616,6 @@ function AppointmentManager({ user }) {
                 </>
             ) : (
                 <>
-                {/* Provider Actions */}
                 {apt.status === "pending" && type === "pending" && (
                     <div className="status-action-row">
                     <button className="btn-status confirm" onClick={() => handleStatusUpdate(apt.id, "scheduled")} disabled={updating === apt.id}>{updating === apt.id ? "..." : "Confirm"}</button>
@@ -616,9 +634,9 @@ function AppointmentManager({ user }) {
                     </button>
                 )}
 
+                {/* Dropdown for Scheduled items (Upcoming Tab) */}
                 {type === "upcoming" && apt.status === "scheduled" && (
                     <div className="status-dropdown-container">
-                    {/* 🔒 Future Restriction: Disable dropdown if in future unless dev mode is on */}
                     <div style={{display:'flex', alignItems:'center', gap:'8px', width:'100%'}}>
                         {actionsDisabled && <Clock size={16} color="#94a3b8" title="Available when appointment time reached" />}
                         <select
@@ -651,11 +669,79 @@ function AppointmentManager({ user }) {
   };
 
   const renderAppointmentsList = (list, type) => {
-    let displayList = list || [];
+    // 🧠 LOGIC: Split Upcoming Tab for Providers (Pill Tabs)
+    if (type === 'upcoming' && user.user_type === 'provider') {
+        const now = new Date();
+        // Using 'list' which is the pre-processed combined upcoming list
+        const dueAppointments = list.filter(apt => new Date(apt.appointment_date) <= now);
+        const futureAppointments = list.filter(apt => new Date(apt.appointment_date) > now);
 
-    // Filter Logic for History
+        const itemsToDisplay = upcomingSubTab === 'due' ? dueAppointments : futureAppointments;
+
+        return (
+            <div className="appointments-split-view">
+                {/* 🆕 Pill Tabs Header */}
+                <div className="sub-tab-pills" style={{marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center'}}>
+                    <button 
+                        className={`pill-tab ${upcomingSubTab === 'due' ? 'active warning-pill' : ''}`}
+                        onClick={() => setUpcomingSubTab('due')}
+                        style={{
+                            padding: '8px 16px', borderRadius: '20px', border: '1px solid #cbd5e1', 
+                            background: upcomingSubTab === 'due' ? '#fff7ed' : 'white',
+                            color: upcomingSubTab === 'due' ? '#c2410c' : '#64748b',
+                            fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                        }}
+                    >
+                        <AlertTriangle size={16} /> Actions Due ({dueAppointments.length})
+                    </button>
+
+                    <button 
+                        className={`pill-tab ${upcomingSubTab === 'future' ? 'active info-pill' : ''}`}
+                        onClick={() => setUpcomingSubTab('future')}
+                        style={{
+                            padding: '8px 16px', borderRadius: '20px', border: '1px solid #cbd5e1', 
+                            background: upcomingSubTab === 'future' ? '#eff6ff' : 'white',
+                            color: upcomingSubTab === 'future' ? '#2563eb' : '#64748b',
+                            fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                        }}
+                    >
+                        <Calendar size={16} /> Future ({futureAppointments.length})
+                    </button>
+
+                     {/* 🛠️ Dev Mode Toggle (Only show on Future tab or global if preferred) */}
+                     {upcomingSubTab === 'future' && (
+                        <label className="dev-mode-toggle" style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#64748b', cursor:'pointer'}}>
+                            <input 
+                                type="checkbox" 
+                                checked={isDevMode} 
+                                onChange={(e) => setIsDevMode(e.target.checked)} 
+                            />
+                            {isDevMode ? <Unlock size={14} color="#16a34a"/> : <Lock size={14} color="#64748b"/>}
+                            Test Mode
+                        </label>
+                    )}
+                </div>
+
+                {itemsToDisplay.length === 0 ? (
+                    <div className="no-appointments">
+                        {upcomingSubTab === 'due' 
+                            ? "✅ You're all caught up! No actions due." 
+                            : "No upcoming future appointments."}
+                    </div>
+                ) : (
+                    <div className="appointments-list">
+                        {itemsToDisplay.map(apt => renderAppointmentCard(apt, type))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Default Render for other tabs (History / Pending)
+    let displayList = list || [];
+    
+    // History specific filters
     if (type === 'history') {
-      displayList = appointments.past || [];
       if (historyFilter === 'completed') displayList = displayList.filter(apt => apt.status === 'completed');
       else if (historyFilter === 'cancelled') displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
 
@@ -668,64 +754,6 @@ function AppointmentManager({ user }) {
       }
     }
 
-    // 🧠 LOGIC: Split Upcoming Tab for Providers (Due vs Future)
-    if (type === 'upcoming' && user.user_type === 'provider') {
-        const now = new Date();
-        const dueAppointments = displayList.filter(apt => new Date(apt.appointment_date) <= now);
-        const futureAppointments = displayList.filter(apt => new Date(apt.appointment_date) > now);
-
-        return (
-            <div className="appointments-split-view">
-                {/* 1. Due / Overdue Section */}
-                <div className="section-block">
-                    <h3 className="section-title warning">
-                        <AlertTriangle size={18} /> Actions Due / Pending
-                    </h3>
-                    {dueAppointments.length === 0 ? (
-                        <p className="no-data-text">No pending appointments due right now.</p>
-                    ) : (
-                        <div className="appointments-list">
-                            {dueAppointments.map(apt => renderAppointmentCard(apt, type))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="section-divider"></div>
-
-                {/* 2. Future Section with Toggle */}
-                <div className="section-block">
-                    <div className="section-header-row" style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-                        <h3 className="section-title info">
-                            <Calendar size={18} /> Future Appointments
-                        </h3>
-                        
-                        {/* 🛠️ Dev Mode Toggle */}
-                        <label className="dev-mode-toggle" title="Enable to test actions on future appointments">
-                            <input 
-                                type="checkbox" 
-                                checked={isDevMode} 
-                                onChange={(e) => setIsDevMode(e.target.checked)} 
-                            />
-                            <span className="toggle-label">
-                                {isDevMode ? <Unlock size={14} color="#16a34a"/> : <Lock size={14} color="#64748b"/>}
-                                Test Mode
-                            </span>
-                        </label>
-                    </div>
-
-                    {futureAppointments.length === 0 ? (
-                        <p className="no-data-text">No upcoming future appointments.</p>
-                    ) : (
-                        <div className="appointments-list">
-                            {futureAppointments.map(apt => renderAppointmentCard(apt, type))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    }
-
-    // Default Render for other tabs
     if (!displayList || displayList.length === 0)
       return <div className="no-appointments">No appointments found matching your filters.</div>;
 
@@ -751,7 +779,11 @@ function AppointmentManager({ user }) {
 
         <div className="tabs">
           {tabs.map((tab) => {
-            const count = tab === 'history' ? appointments.past?.length : appointments[tab]?.length;
+            // 🧠 Use processed counts for the tab headers
+            const count = tab === 'history' 
+                ? processedAppointments.history.length 
+                : processedAppointments[tab]?.length;
+                
             return (
                 <button
                 key={tab}
@@ -766,14 +798,12 @@ function AppointmentManager({ user }) {
 
         {activeTab === 'history' && (
           <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            {/* Status Pills */}
             <div className="status-filters">
               <button className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} onClick={() => setHistoryFilter('all')}>All Status</button>
               <button className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} onClick={() => setHistoryFilter('completed')}>Completed</button>
               <button className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} onClick={() => setHistoryFilter('cancelled')}>Cancelled</button>
             </div>
 
-            {/* Date Filter Dropdown */}
             <div className="date-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Calendar size={18} color="#64748b" />
                 <select 
@@ -781,13 +811,8 @@ function AppointmentManager({ user }) {
                     onChange={(e) => setDateFilter(e.target.value)}
                     className="date-select"
                     style={{
-                        padding: '6px 12px',
-                        borderRadius: '20px',
-                        border: '1px solid #cbd5e1',
-                        backgroundColor: '#fff',
-                        fontSize: '0.9rem',
-                        cursor: 'pointer',
-                        outline: 'none'
+                        padding: '6px 12px', borderRadius: '20px', border: '1px solid #cbd5e1',
+                        backgroundColor: '#fff', fontSize: '0.9rem', cursor: 'pointer', outline: 'none'
                     }}
                 >
                     <option value="all">All Time</option>
@@ -800,7 +825,7 @@ function AppointmentManager({ user }) {
         )}
 
         <div className="tab-content">
-          {renderAppointmentsList(appointments[activeTab], activeTab)}
+          {renderAppointmentsList(processedAppointments[activeTab], activeTab)}
         </div>
 
         {showBooking && (
