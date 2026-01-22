@@ -15,6 +15,189 @@ import { predictNoShow } from "../services/aiPredictor.js";
 const router = express.Router();
 
 /* ---------------------------------------------
+   🧠 Helper: Calculate No-Show Risk Score
+--------------------------------------------- */
+async function calculateNoShowRisk({
+  client_id,
+  service_id,
+  appointment_date,
+  amount_paid,
+  total_price,
+  deposit_amount,
+}) {
+  try {
+    // 1. Get Client History
+    const clientHistory = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT status, total_price, amount_paid 
+         FROM appointments 
+         WHERE client_id = ? 
+         ORDER BY appointment_date DESC 
+         LIMIT 10`,
+        [client_id],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        }
+      );
+    });
+
+    // 2. Calculate History Metrics
+    const totalAppointments = clientHistory.length;
+    const noShowCount = clientHistory.filter(
+      (a) => a.status === "no-show"
+    ).length;
+    const cancelCount = clientHistory.filter(
+      (a) => a.status === "cancelled"
+    ).length;
+    const lastReceipt = clientHistory[0]?.total_price || 0;
+    const recency = totalAppointments > 0 ? 7 : 30; // Days since last appointment (simplified)
+
+    // 3. Get Service Category
+    const service = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT category FROM services WHERE id = ?`,
+        [service_id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+
+    // 4. Prepare AI Input
+    const appointmentTime = new Date(appointment_date).getHours();
+    let timeOfDay = "morning";
+    if (appointmentTime >= 12 && appointmentTime < 17) timeOfDay = "afternoon";
+    else if (appointmentTime >= 17) timeOfDay = "evening";
+
+    const dayOfWeek = new Date(appointment_date).toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+
+    const aiInput = {
+      timeOfDay,
+      dayOfWeek,
+      category: service?.category || "Misc",
+      recency,
+      lastReceipt,
+      historyNoShow: noShowCount,
+      historyCancel: cancelCount,
+    };
+
+    // 5. Get Base AI Risk Score
+    const baseRisk = await predictNoShow(aiInput);
+
+    // 6. Apply Payment Adjustment
+    const paymentRatio = amount_paid / total_price;
+    let paymentAdjustment = 0;
+
+    if (paymentRatio >= 1.0) {
+      paymentAdjustment = -0.3; // Full payment = -30% risk
+    } else if (paymentRatio >= 0.5) {
+      paymentAdjustment = -0.15; // 50%+ paid = -15% risk
+    } else if (paymentRatio >= deposit_amount / total_price) {
+      paymentAdjustment = 0; // Just deposit = no change
+    }
+
+    // 7. Apply Client History Factor
+    let historyFactor = 0;
+    if (totalAppointments > 0) {
+      const reliabilityScore =
+        1 - (noShowCount + cancelCount) / totalAppointments;
+      if (reliabilityScore >= 0.9)
+        historyFactor = -0.2; // Reliable client
+      else if (reliabilityScore <= 0.5) historyFactor = +0.3; // Unreliable client
+    }
+
+    // 8. Calculate Final Risk Score
+    const finalRisk = Math.max(
+      0,
+      Math.min(1, baseRisk + paymentAdjustment + historyFactor)
+    );
+
+    return {
+      riskScore: finalRisk,
+      baseRisk,
+      paymentRatio,
+      historyFactor,
+    };
+  } catch (error) {
+    console.error("❌ Risk Calculation Error:", error);
+    return {
+      riskScore: 0.5,
+      baseRisk: 0.5,
+      paymentRatio: 0,
+      historyFactor: 0,
+    };
+  }
+}
+
+/* ---------------------------------------------
+   🧠 Helper: Process Multi-Transaction Refund
+--------------------------------------------- */
+async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
+  return new Promise((resolve, reject) => {
+    // Get all payment transactions for this appointment
+    db.all(
+      `SELECT * FROM transactions 
+       WHERE appointment_id = ? 
+       AND type = 'payment' 
+       AND status = 'success' 
+       ORDER BY id ASC`,
+      [appointmentId],
+      async (err, transactions) => {
+        if (err) return reject(err);
+        if (!transactions || transactions.length === 0) {
+          return reject(new Error("No payment transactions found"));
+        }
+
+        let remainingRefund = totalRefundAmount;
+        const refundResults = [];
+
+        // Process refunds in reverse order (latest first)
+        for (
+          let i = transactions.length - 1;
+          i >= 0 && remainingRefund > 0;
+          i--
+        ) {
+          const tx = transactions[i];
+          const refundForThisTx = Math.min(remainingRefund, Number(tx.amount));
+
+          try {
+            const result = await processPaystackRefund(
+              tx.reference,
+              Math.round(refundForThisTx * 100)
+            );
+
+            if (result.success) {
+              refundResults.push({
+                reference: tx.reference,
+                amount: refundForThisTx,
+                refund_reference: result.refund_reference,
+              });
+              remainingRefund -= refundForThisTx;
+            }
+          } catch (error) {
+            console.error(`Refund failed for ${tx.reference}:`, error.message);
+          }
+        }
+
+        if (refundResults.length === 0) {
+          return reject(new Error("All refund attempts failed"));
+        }
+
+        resolve({
+          success: true,
+          refunded: totalRefundAmount - remainingRefund,
+          references: refundResults.map((r) => r.refund_reference),
+        });
+      }
+    );
+  });
+}
+
+/* ---------------------------------------------
    🧠 Helper: Check In-App Notification Preferences
 --------------------------------------------- */
 const shouldNotify = (prefsString, category) => {
@@ -104,14 +287,12 @@ router.get("/", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   🧾 GET Transaction History for Appointment (NEW)
-   Used for printing receipts with multiple payment refs
+   🧾 GET Transaction History for Appointment
 --------------------------------------------- */
 router.get("/:id/transactions", authenticateToken, (req, res) => {
   const { id } = req.params;
   const userId = req.user.userId;
 
-  // Verify ownership first
   db.get(
     `SELECT client_id, provider_id FROM appointments WHERE id = ?`,
     [id],
@@ -138,11 +319,8 @@ router.get("/:id/transactions", authenticateToken, (req, res) => {
   );
 });
 
-// ... [The rest of the file remains exactly as provided previously, including /sms-stats, /availability, etc. No features removed.] ...
-// (I will include the full file content below for direct copy-paste to ensure nothing is lost)
-
 /* ---------------------------------------------
-   📊 GET SMS Statistics (Provider only)
+   📊 GET SMS Statistics
 --------------------------------------------- */
 router.get("/sms-stats", authenticateToken, async (req, res) => {
   try {
@@ -181,7 +359,7 @@ router.get("/sms-stats", authenticateToken, async (req, res) => {
 --------------------------------------------- */
 router.get("/providers/:id/availability", (req, res) => {
   const providerId = req.params.id;
-  const { date } = req.query; // YYYY-MM-DD
+  const { date } = req.query;
 
   if (!date) return res.status(400).json({ error: "Date required" });
 
@@ -241,7 +419,7 @@ router.get("/providers/:id/availability", (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (With Notification Check)
+   ✅ Create appointment
 --------------------------------------------- */
 router.post(
   "/",
@@ -288,7 +466,6 @@ router.post(
         if (!service)
           return res.status(404).json({ error: "Service not found" });
 
-        // Check Provider Closed Days
         const day = appointmentDate.toISOString().split("T")[0];
         db.get(
           "SELECT * FROM provider_closed_days WHERE provider_id = ? AND closed_date = ?",
@@ -299,7 +476,6 @@ router.post(
                 error: `Provider is closed on ${day}.`,
               });
 
-            // Check Provider Business Hours
             db.get(
               `SELECT opening_time, closing_time FROM users WHERE id = ?`,
               [service.provider_id],
@@ -334,7 +510,6 @@ router.post(
                   });
                 }
 
-                // CHECK CAPACITY
                 const newStartISO = appointmentDate.toISOString();
                 const newEndISO = new Date(
                   appointmentDate.getTime() + service.duration * 60000
@@ -364,7 +539,6 @@ router.post(
                       });
                     }
 
-                    // 💰 Calculate Financials
                     let addons_total = 0;
                     if (Array.isArray(addons) && addons.length > 0) {
                       addons_total = addons.reduce(
@@ -381,8 +555,6 @@ router.post(
                     let payment_status =
                       paymentAmt >= total_price ? "paid" : "deposit-paid";
 
-                    // 🧠 AI PREDICTION (Centralized)
-                    // We now destructure all the improved data points
                     const { riskScore, baseRisk, paymentRatio, historyFactor } =
                       await calculateNoShowRisk({
                         client_id,
@@ -393,7 +565,6 @@ router.post(
                         deposit_amount,
                       });
 
-                    // Proceed to Create Appointment
                     const status = "pending";
 
                     db.run(
@@ -430,13 +601,11 @@ router.post(
 
                         const newId = this.lastID;
 
-                        // ✅ Log Transaction
                         db.run(
                           `INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`,
                           [newId, paymentAmt, payment_reference]
                         );
 
-                        // 🧠 Log Enhanced Prediction for Future Analysis
                         db.run(
                           `INSERT INTO ai_predictions (
                             appointment_id, predicted_risk, payment_amount,
@@ -461,7 +630,6 @@ router.post(
                           );
                         }
 
-                        // Notifications & SMS
                         db.get(
                           `SELECT a.*, 
                                     c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
@@ -488,7 +656,6 @@ router.post(
                               notification_preferences: fullApt.provider_prefs,
                             };
 
-                            // 🧠 Check In-App Preferences before notifying
                             if (
                               shouldNotify(
                                 fullApt.client_prefs,
@@ -504,7 +671,6 @@ router.post(
                               );
                             }
 
-                            // 🧠 Alert Provider if Risk is High
                             let alertMsg = `${fullApt.client_name} booked ${service.name}.`;
                             if (fullApt.no_show_risk > 0.7) {
                               alertMsg += ` ⚠️ High No-Show Risk detected (${(fullApt.no_show_risk * 100).toFixed(0)}%).`;
@@ -568,7 +734,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Provider can toggle open/closed status
+   ✅ Provider toggle open/closed
 --------------------------------------------- */
 router.put("/providers/:id/closed", authenticateToken, (req, res) => {
   const providerId = req.params.id;
@@ -591,7 +757,7 @@ router.put("/providers/:id/closed", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider sets global business hours
+   ✅ Provider sets business hours
 --------------------------------------------- */
 router.put(
   "/providers/:id/hours",
@@ -634,7 +800,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ Update appointment (Accept/Cancel/Reschedule) with AI Recalculation
+   ✅ Update appointment
 --------------------------------------------- */
 router.put("/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -658,7 +824,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Appointment status locked." });
     }
 
-    // ✅ RESCHEDULE VALIDATION & AI RE-CALCULATION
     let newRiskScore = null;
 
     if (appointment_date && appointment_date !== apt.appointment_date) {
@@ -668,7 +833,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
           .status(400)
           .json({ error: "New date must be in the future" });
 
-      // 🧠 RE-CALCULATE AI RISK
       const result = await calculateNoShowRisk({
         client_id: apt.client_id,
         service_id: apt.service_id,
@@ -677,9 +841,8 @@ router.put("/:id", authenticateToken, async (req, res) => {
         total_price: apt.total_price,
         deposit_amount: apt.deposit_amount,
       });
-      newRiskScore = result.riskScore; // Extract just the score for simple update
+      newRiskScore = result.riskScore;
 
-      // 🧠 Log Reschedule Prediction
       db.run(
         `INSERT INTO ai_predictions (
             appointment_id, predicted_risk, payment_amount,
@@ -696,7 +859,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
       );
     }
 
-    // Update logic
     const updates = [];
     const params = [];
 
@@ -721,7 +883,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
       params.push(notes);
     }
 
-    // 🧠 Add Risk Score update if calculated
     if (newRiskScore !== null) {
       updates.push("no_show_risk = ?");
       params.push(newRiskScore);
@@ -1051,11 +1212,9 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
   const { payment_reference, amount_paid } = req.body;
 
   if (!payment_reference || !amount_paid || Number(amount_paid) <= 0) {
-    return res
-      .status(400)
-      .json({
-        error: "payment_reference and positive amount_paid are required",
-      });
+    return res.status(400).json({
+      error: "payment_reference and positive amount_paid are required",
+    });
   }
 
   db.get(`SELECT * FROM appointments WHERE id = ?`, [id], async (err, row) => {
@@ -1063,12 +1222,9 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
     if (!row) return res.status(404).json({ error: "Appointment not found" });
 
     if (row.client_id !== userId && row.provider_id !== userId) {
-      return res
-        .status(403)
-        .json({
-          error:
-            "Forbidden: You are not authorized to update this appointment.",
-        });
+      return res.status(403).json({
+        error: "Forbidden: You are not authorized to update this appointment.",
+      });
     }
 
     const prevPaid = Number(row.amount_paid || 0);
@@ -1255,11 +1411,9 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
       if (!apt) return res.status(404).json({ error: "Appointment not found" });
 
       if (apt.refund_status !== "pending") {
-        return res
-          .status(400)
-          .json({
-            error: "No pending refund request found for this appointment",
-          });
+        return res.status(400).json({
+          error: "No pending refund request found for this appointment",
+        });
       }
 
       const amountToRefund = Number(apt.refund_amount || apt.amount_paid || 0);
