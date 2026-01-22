@@ -4,7 +4,10 @@ import { useLocation } from "react-router-dom";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
-import { Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock } from "lucide-react"; 
+import { 
+  Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
+  Search, ArrowUpDown, Filter, X 
+} from "lucide-react"; 
 import "./AppointmentManager.css";
 
 // ===== Helper: make sure addons are an ARRAY =====
@@ -182,6 +185,10 @@ function AppointmentManager({ user }) {
 
   // 🆕 Sub-tab state for Provider Upcoming view
   const [upcomingSubTab, setUpcomingSubTab] = useState("due");
+
+  // 🆕 Search & Sort States
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOption, setSortOption] = useState("date-desc"); // Default: Newest/Future first
 
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
@@ -430,6 +437,7 @@ function AppointmentManager({ user }) {
     );
   };
 
+  // 🆕 Helper Function to Render Single Card (Reusable)
   const renderAppointmentCard = (apt, type) => {
      const selectedAddons = parseAddons(apt);
      const addonsTotal = selectedAddons.reduce(
@@ -467,11 +475,12 @@ function AppointmentManager({ user }) {
      const isFuture = new Date(apt.appointment_date) > new Date();
      const actionsDisabled = isFuture && !isDevMode;
 
-     // 🆕 6-Month Delete Rule Logic (Frontend Check)
+     // 🆕 6-Month Delete Rule Logic (Frontend Check - Applied to EVERYONE)
      const appointmentDate = new Date(apt.appointment_date);
      const sixMonthsAgo = new Date();
      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-     // Only true if appointment is older than 6 months
+     
+     // Can Delete if: older than 6 months OR (dev mode enabled if you want to test)
      const canDelete = appointmentDate <= sixMonthsAgo;
 
      return (
@@ -619,7 +628,7 @@ function AppointmentManager({ user }) {
                         <button className="btn btn-primary small-btn" onClick={() => handleRebook(apt)}>Rebook</button>
                     )}
                     
-                    {/* 🆕 Delete Button - Visible only if older than 6 months */}
+                    {/* 🆕 Delete Button - Visible only if older than 6 months (Universal) */}
                     {canDelete && (
                         <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
                     )}
@@ -671,7 +680,10 @@ function AppointmentManager({ user }) {
 
                 {type === "history" && (
                     <div className="action-row">
-                    <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
+                        {/* 🆕 Provider Delete Button (Universal 6-month rule applied via canDelete) */}
+                        {canDelete && (
+                            <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
+                        )}
                     </div>
                 )}
                 </>
@@ -682,18 +694,64 @@ function AppointmentManager({ user }) {
   };
 
   const renderAppointmentsList = (list, type) => {
-    // 🧠 LOGIC: Split Upcoming Tab for Providers (Pill Tabs)
+    let displayList = list || [];
+
+    // 🆕 1. GLOBAL FILTERING (Search & Sort) - Applies to all tabs
+    // Filter by Search Term
+    if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        displayList = displayList.filter(apt => 
+            apt.service_name.toLowerCase().includes(term) ||
+            (apt.client_name && apt.client_name.toLowerCase().includes(term)) ||
+            (apt.provider_name && apt.provider_name.toLowerCase().includes(term)) ||
+            (apt.notes && apt.notes.toLowerCase().includes(term))
+        );
+    }
+
+    // Sort by Option
+    displayList.sort((a, b) => {
+        const dateA = new Date(a.appointment_date);
+        const dateB = new Date(b.appointment_date);
+        const priceA = a.total_price || 0;
+        const priceB = b.total_price || 0;
+
+        switch (sortOption) {
+            case "date-asc": return dateA - dateB; // Oldest first
+            case "date-desc": return dateB - dateA; // Newest first (Default)
+            case "price-desc": return priceB - priceA; // Expensive first
+            case "price-asc": return priceA - priceB; // Cheapest first
+            default: return 0;
+        }
+    });
+
+    // 🆕 2. HISTORY SPECIFIC FILTERS (Status & Calendar Date)
+    if (type === 'history') {
+      // Status Filter
+      if (historyFilter === 'completed') displayList = displayList.filter(apt => apt.status === 'completed');
+      else if (historyFilter === 'cancelled') displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
+
+      // Date Filter
+      const now = new Date();
+      if (dateFilter === 'this_year') {
+          displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear());
+      } else if (dateFilter === 'this_month') {
+          displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear() && new Date(apt.appointment_date).getMonth() === now.getMonth());
+      } else if (dateFilter === 'last_3_months') {
+        const d = new Date(); d.setDate(d.getDate() - 90);
+        displayList = displayList.filter(apt => new Date(apt.appointment_date) >= d);
+      }
+    }
+
+    // 3. Provider Split Logic (Upcoming Tab)
     if (type === 'upcoming' && user.user_type === 'provider') {
         const now = new Date();
-        // Using 'list' which is the pre-processed combined upcoming list
-        const dueAppointments = list.filter(apt => new Date(apt.appointment_date) <= now);
-        const futureAppointments = list.filter(apt => new Date(apt.appointment_date) > now);
+        const dueAppointments = displayList.filter(apt => new Date(apt.appointment_date) <= now);
+        const futureAppointments = displayList.filter(apt => new Date(apt.appointment_date) > now);
 
         const itemsToDisplay = upcomingSubTab === 'due' ? dueAppointments : futureAppointments;
 
         return (
             <div className="appointments-split-view">
-                {/* 🆕 Pill Tabs Header */}
                 <div className="sub-tab-pills" style={{marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center'}}>
                     <button 
                         className={`pill-tab ${upcomingSubTab === 'due' ? 'active warning-pill' : ''}`}
@@ -721,7 +779,6 @@ function AppointmentManager({ user }) {
                         <Calendar size={16} /> Future ({futureAppointments.length})
                     </button>
 
-                     {/* 🛠️ Dev Mode Toggle (Only show on Future tab or global if preferred) */}
                      {upcomingSubTab === 'future' && (
                         <label className="dev-mode-toggle" style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#64748b', cursor:'pointer'}}>
                             <input 
@@ -750,23 +807,6 @@ function AppointmentManager({ user }) {
         );
     }
 
-    // Default Render for other tabs (History / Pending)
-    let displayList = list || [];
-    
-    // History specific filters
-    if (type === 'history') {
-      if (historyFilter === 'completed') displayList = displayList.filter(apt => apt.status === 'completed');
-      else if (historyFilter === 'cancelled') displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
-
-      const now = new Date();
-      if (dateFilter === 'this_year') displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear());
-      else if (dateFilter === 'this_month') displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear() && new Date(apt.appointment_date).getMonth() === now.getMonth());
-      else if (dateFilter === 'last_3_months') {
-        const d = new Date(); d.setDate(d.getDate() - 90);
-        displayList = displayList.filter(apt => new Date(apt.appointment_date) >= d);
-      }
-    }
-
     if (!displayList || displayList.length === 0)
       return <div className="no-appointments">No appointments found matching your filters.</div>;
 
@@ -786,13 +826,57 @@ function AppointmentManager({ user }) {
   return (
     <div className="appointment-manager">
       <div className="container">
-        <h2>
-          {user.user_type === "provider" ? "Manage Appointments" : "My Appointments"}
-        </h2>
+        
+        {/* 🆕 HEADER & CONTROLS */}
+        <div className="am-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
+            <h2 style={{margin: 0, fontSize: '24px', color: '#1e293b'}}>
+                {user.user_type === "provider" ? "Manage Appointments" : "My Appointments"}
+            </h2>
+            
+            {/* 🆕 Search & Sort Bar (Similar to Service List) */}
+            <div className="am-controls" style={{ display: 'flex', gap: '10px' }}>
+                <div className="search-box" style={{ position: 'relative', width: '220px' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input 
+                        type="text" 
+                        placeholder="Search name, service..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{
+                            width: '100%', padding: '8px 10px 8px 32px', border: '1px solid #cbd5e1', 
+                            borderRadius: '8px', fontSize: '13px', outline: 'none'
+                        }}
+                    />
+                    {searchTerm && (
+                        <X 
+                            size={14} 
+                            onClick={() => setSearchTerm("")} 
+                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: '#94a3b8' }} 
+                        />
+                    )}
+                </div>
+
+                <div className="sort-box" style={{ position: 'relative' }}>
+                    <ArrowUpDown size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none' }} />
+                    <select 
+                        value={sortOption} 
+                        onChange={(e) => setSortOption(e.target.value)}
+                        style={{
+                            padding: '8px 30px 8px 32px', border: '1px solid #cbd5e1', borderRadius: '8px',
+                            background: 'white', fontSize: '13px', color: '#334155', cursor: 'pointer', appearance: 'none'
+                        }}
+                    >
+                        <option value="date-asc">Date: Earliest</option>
+                        <option value="date-desc">Date: Latest</option>
+                        <option value="price-desc">Price: High-Low</option>
+                        <option value="price-asc">Price: Low-High</option>
+                    </select>
+                </div>
+            </div>
+        </div>
 
         <div className="tabs">
           {tabs.map((tab) => {
-            // 🧠 Use processed counts for the tab headers
             const count = tab === 'history' 
                 ? processedAppointments.history.length 
                 : processedAppointments[tab]?.length;
