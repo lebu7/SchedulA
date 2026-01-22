@@ -273,9 +273,11 @@ function AppointmentManager({ user }) {
     // 4. Clean History (Remove the due items we moved)
     const cleanHistory = (appointments.past || []).filter(a => a.status !== 'scheduled');
 
+    // 🚨 FIX: Return 'scheduled' key for clients, pointing to same data as upcoming
     return {
         pending: rawPending,
         upcoming: combinedUpcoming,
+        scheduled: combinedUpcoming, // ✅ FIX: Maps client's 'scheduled' tab to data
         history: cleanHistory
     };
   }, [appointments, user.user_type]);
