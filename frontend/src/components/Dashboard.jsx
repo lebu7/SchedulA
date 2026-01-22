@@ -4,14 +4,14 @@ import ServiceList from './ServiceList';
 import ServiceManager from './ServiceManager';
 import AppointmentManager from './AppointmentManager';
 import Settings from './Settings';
-import ProviderAnalytics from './ProviderAnalytics'; // ✅ Import Analytics Component
+import ProviderAnalytics from './ProviderAnalytics'; 
 import './Dashboard.css';
 
 function Dashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const location = useLocation(); 
 
-  // ✅ LISTEN FOR NAVIGATION STATE
+  // ✅ LISTEN FOR NAVIGATION STATE (e.g. from Header Edit Profile)
   useEffect(() => {
     if (location.state?.tab) {
       setActiveTab(location.state.tab);
@@ -24,7 +24,7 @@ function Dashboard({ user, setUser }) {
         return user.user_type === 'client' ? <ServiceList user={user} /> : <ServiceManager user={user} />;
       case 'appointments':
         return <AppointmentManager user={user} />;
-      case 'analytics': // ✅ Render Analytics (Protected)
+      case 'analytics': 
         return user.user_type === 'provider' ? <ProviderAnalytics /> : null;
       case 'settings':
         return <Settings user={user} setUser={setUser} />;
@@ -33,14 +33,20 @@ function Dashboard({ user, setUser }) {
         return (
           <div className="dashboard-overview">
             <div className="left-column">
-              <div className="card profile-card">
-                <h3>Welcome, {user.name}</h3>
-                <p><strong>Role:</strong> {user.user_type}</p>
-                <p><strong>Email:</strong> {user.email}</p>
-                {user.phone && <p><strong>Phone:</strong> {user.phone}</p>}
-                {user.business_name && <p><strong>Business:</strong> {user.business_name}</p>}
+              
+              {/* ✅ CLEAN WELCOME CARD (Details now in Header Popup) */}
+              <div className="card welcome-card">
+                <div className="welcome-content">
+                  <h2>Welcome back, {user.name.split(' ')[0]}! 👋</h2>
+                  <p className="welcome-sub">
+                    {user.user_type === 'client' 
+                      ? "Ready to book your next appointment?" 
+                      : "Here is what's happening with your business today."}
+                  </p>
+                </div>
               </div>
 
+              {/* Quick Actions */}
               <div className="card quick-actions">
                 <h3>Quick Actions</h3>
                 <div className="action-buttons">
@@ -48,7 +54,6 @@ function Dashboard({ user, setUser }) {
                     {user.user_type === 'client' ? 'Find Services' : 'Manage Services'}
                   </button>
                   
-                  {/* ✅ Analytics Button for Providers */}
                   {user.user_type === 'provider' && (
                     <button className="btn btn-secondary" onClick={() => setActiveTab('analytics')}>
                       View Analytics
@@ -75,7 +80,6 @@ function Dashboard({ user, setUser }) {
         <div className="dashboard-tabs">
           <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>Overview</button>
           
-          {/* ✅ Analytics Tab (Providers Only) */}
           {user.user_type === 'provider' && (
             <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
           )}

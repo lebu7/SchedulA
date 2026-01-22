@@ -19,7 +19,14 @@ const Settings = ({ user, setUser }) => {
   const [message, setMessage] = useState({ type: '', text: '' });
 
   // Profile States
-  const [profile, setProfile] = useState({ name: '', phone: '', business_name: '' });
+  const [profile, setProfile] = useState({ 
+    name: '', 
+    phone: '', 
+    business_name: '', 
+    gender: '', 
+    dob: '' 
+  });
+  
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   
   // SMS Preferences (Existing)
@@ -49,7 +56,9 @@ const Settings = ({ user, setUser }) => {
       setProfile({ 
         name: user.name || '', 
         phone: user.phone || '', 
-        business_name: user.business_name || '' 
+        business_name: user.business_name || '',
+        gender: user.gender || '', 
+        dob: user.dob ? user.dob.split('T')[0] : '' 
       });
       setHours({ 
         opening_time: user.opening_time || '08:00', 
@@ -96,6 +105,7 @@ const Settings = ({ user, setUser }) => {
     }
 
     try {
+      // ✅ Now sends gender and dob to backend
       const res = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
       showMsg('success', 'Profile updated successfully!');
       
@@ -209,6 +219,34 @@ const Settings = ({ user, setUser }) => {
                 <input type="tel" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} placeholder="0712345678" required />
                 <small style={{color: '#666', display: 'block', marginTop: '5px'}}>We will format this to +254 automatically.</small>
               </div>
+
+              {/* ✅ GENDER FIELD (DISABLED) */}
+              <div className="form-group">
+                <label>Gender <small style={{color:'#888'}}>(Cannot be changed)</small></label>
+                <select 
+                  value={profile.gender} 
+                  disabled 
+                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+
+              {/* ✅ DOB FIELD (DISABLED) */}
+              <div className="form-group">
+                <label>Date of Birth <small style={{color:'#888'}}>(Cannot be changed)</small></label>
+                <input 
+                  type="date" 
+                  value={profile.dob} 
+                  disabled 
+                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}
+                />
+              </div>
+
               {user.user_type === 'provider' && (
                 <div className="form-group">
                   <label>Business Name</label>
