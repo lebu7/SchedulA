@@ -855,7 +855,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Soft delete appointment
+   ✅ Soft delete appointment (Updated for AI)
+   Requirement 1: Data stays in SQL (removed 'DELETE FROM' block)
+   Requirement 2: Clients can only delete records older than 6 months.
 --------------------------------------------- */
 router.delete('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -863,24 +865,40 @@ router.delete('/:id', authenticateToken, (req, res) => {
   const userType = req.user.user_type;
   const delField = userType === 'client' ? 'client_deleted' : 'provider_deleted';
 
-  db.run(
-    `UPDATE appointments SET ${delField} = 1 WHERE id = ? AND ${userType}_id = ?`,
-    [id, userId],
-    function (err) {
-      if (err) return res.status(500).json({ error: 'Failed to delete appointment' });
-      if (this.changes === 0)
-        return res.status(404).json({ error: 'Appointment not found' });
-      db.get(
-        'SELECT client_deleted, provider_deleted FROM appointments WHERE id = ?',
-        [id],
-        (e, row) => {
-          if (row && row.client_deleted && row.provider_deleted)
-            db.run('DELETE FROM appointments WHERE id = ?', [id]);
+  // 1. Fetch appointment first to check dates
+  db.get('SELECT appointment_date, status FROM appointments WHERE id = ? AND (client_id = ? OR provider_id = ?)', [id, userId, userId], (err, apt) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!apt) return res.status(404).json({ error: 'Appointment not found' });
+
+      // 2. Client 6-Month History Rule
+      if (userType === 'client') {
+          const aptDate = new Date(apt.appointment_date);
+          const sixMonthsAgo = new Date();
+          sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+          // If the appointment is in the future OR happened less than 6 months ago
+          if (aptDate > sixMonthsAgo) {
+              return res.status(403).json({
+                  error: 'To ensure accurate service history, appointments can only be removed if they are older than 6 months.'
+              });
+          }
+      }
+
+      // 3. Perform Soft Delete ONLY (Preserves data for AI)
+      db.run(
+        `UPDATE appointments SET ${delField} = 1 WHERE id = ? AND ${userType}_id = ?`,
+        [id, userId],
+        function (err2) {
+          if (err2) return res.status(500).json({ error: 'Failed to remove appointment' });
+          
+          // ⚠️ Data Preservation: 
+          // The block that used to perform "DELETE FROM appointments" is explicitly REMOVED 
+          // here to satisfy the requirement that data persists for AI training.
+          
           res.json({ message: 'Appointment removed from dashboard' });
         }
       );
-    }
-  );
+  });
 });
 
 /* ---------------------------------------------
