@@ -261,7 +261,7 @@ function AppointmentManager({ user }) {
     // 3. Combine for true "Upcoming" list (Provider sees due items here)
     const combinedUpcoming = user.user_type === 'provider' 
         ? [...baseUpcoming, ...pastDueItems] 
-        : baseUpcoming; // Clients usually see due items in history or scheduled depending on logic, keeping simple for now
+        : baseUpcoming; 
 
     // 4. Clean History (Remove the due items we moved)
     const cleanHistory = (appointments.past || []).filter(a => a.status !== 'scheduled');
@@ -280,8 +280,9 @@ function AppointmentManager({ user }) {
         await api.delete(`/appointments/${id}`);
         await fetchAppointments();
         alert("Appointment deleted.");
-      } catch {
-        alert("Failed to delete appointment.");
+      } catch (err) {
+        // Show the backend error if available (e.g., 6 months rule)
+        alert(err.response?.data?.error || "Failed to delete appointment.");
       }
     }
   };
@@ -466,6 +467,13 @@ function AppointmentManager({ user }) {
      const isFuture = new Date(apt.appointment_date) > new Date();
      const actionsDisabled = isFuture && !isDevMode;
 
+     // 🆕 6-Month Delete Rule Logic (Frontend Check)
+     const appointmentDate = new Date(apt.appointment_date);
+     const sixMonthsAgo = new Date();
+     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+     // Only true if appointment is older than 6 months
+     const canDelete = appointmentDate <= sixMonthsAgo;
+
      return (
         <div
             key={apt.id}
@@ -610,7 +618,12 @@ function AppointmentManager({ user }) {
                     {apt.status === 'cancelled' && (
                         <button className="btn btn-primary small-btn" onClick={() => handleRebook(apt)}>Rebook</button>
                     )}
-                    <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
+                    
+                    {/* 🆕 Delete Button - Visible only if older than 6 months */}
+                    {canDelete && (
+                        <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
+                    )}
+                    
                     </div>
                 )}
                 </>

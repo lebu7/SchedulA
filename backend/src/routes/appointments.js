@@ -799,7 +799,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
           async (err3, fullApt) => {
             if (!err3 && fullApt) {
               const clientObj = { name: fullApt.client_name, phone: fullApt.client_phone, notification_preferences: fullApt.client_prefs };
-              const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone };
+              const providerObj = { name: fullApt.provider_name, business_name: fullApt.business_name, phone: fullApt.provider_phone, notification_preferences: fullApt.provider_prefs };
 
               if (status === 'scheduled' && apt.status === 'pending') {
                 createNotification(fullApt.client_id, 'booking', 'Booking Confirmed', `Your booking for ${fullApt.service_name} has been confirmed.`, id);
@@ -855,9 +855,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Soft delete appointment (Updated for AI)
-   Requirement 1: Data stays in SQL (removed 'DELETE FROM' block)
-   Requirement 2: Clients can only delete records older than 6 months.
+   ✅ Soft delete appointment (WITH 6-MONTH CHECK & NO DATA LOSS)
+   --------------------------------------------- 
+   Requirement: 
+   1. Data MUST remain in SQL for AI (No DELETE FROM)
+   2. Clients can only delete records older than 6 months.
 --------------------------------------------- */
 router.delete('/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -870,30 +872,37 @@ router.delete('/:id', authenticateToken, (req, res) => {
       if (err) return res.status(500).json({ error: 'Database error' });
       if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
-      // 2. Client 6-Month History Rule
-      if (userType === 'client') {
-          const aptDate = new Date(apt.appointment_date);
-          const sixMonthsAgo = new Date();
-          sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      // 2. 6-Month History Rule (Applies to Client AND Provider)
+      // Remove specific user type check to apply globally as requested
+      const aptDate = new Date(apt.appointment_date);
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-          // If the appointment is in the future OR happened less than 6 months ago
-          if (aptDate > sixMonthsAgo) {
-              return res.status(403).json({
-                  error: 'To ensure accurate service history, appointments can only be removed if they are older than 6 months.'
-              });
-          }
+      // If the appointment is in the future OR happened less than 6 months ago
+      if (aptDate > sixMonthsAgo) {
+          return res.status(403).json({
+              error: 'To ensure accurate history for AI predictions, appointments can only be removed from your dashboard if they are older than 6 months.'
+          });
       }
 
-      // 3. Perform Soft Delete ONLY (Preserves data for AI)
+      // 3. Perform Soft Delete ONLY (Preserve data for AI)
       db.run(
         `UPDATE appointments SET ${delField} = 1 WHERE id = ? AND ${userType}_id = ?`,
         [id, userId],
         function (err2) {
           if (err2) return res.status(500).json({ error: 'Failed to remove appointment' });
           
-          // ⚠️ Data Preservation: 
-          // The block that used to perform "DELETE FROM appointments" is explicitly REMOVED 
-          // here to satisfy the requirement that data persists for AI training.
+          // 4. Hard Delete Check (Only if > 1 year old AND both parties deleted)
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+          if (aptDate < oneYearAgo) {
+             db.get('SELECT client_deleted, provider_deleted FROM appointments WHERE id = ?', [id], (e3, row) => {
+                 if (row && row.client_deleted && row.provider_deleted) {
+                     db.run('DELETE FROM appointments WHERE id = ?', [id]);
+                 }
+             });
+          }
           
           res.json({ message: 'Appointment removed from dashboard' });
         }
