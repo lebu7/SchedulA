@@ -95,21 +95,36 @@ function ForgotPassword() {
     <div className="auth-container">
       <div className="card">
         <h2>Forgot Password</h2>
+        
+        {/* Messages */}
         {error && <div className="error-message">{error}</div>}
-        {message && <div className="success-message" style={{color: 'green', marginBottom: '10px'}}>{message}</div>}
+        {message && <div className="success-message">{message}</div>}
 
         {step === 1 && (
           <form onSubmit={handleRequestOTP}>
-            <p style={{fontSize: '0.9em', color: '#666', marginBottom: '15px'}}>
+            <p className="instruction-text">
               Enter your registered email and phone number to receive a reset code.
             </p>
             <div className="form-group">
               <label>Email:</label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange} required />
+              <input 
+                type="email" 
+                name="email" 
+                value={formData.email} 
+                onChange={handleChange} 
+                required 
+              />
             </div>
             <div className="form-group">
               <label>Phone Number:</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder=")07..." required />
+              <input 
+                type="tel" 
+                name="phone" 
+                value={formData.phone} 
+                onChange={handleChange} 
+                placeholder="+254..." 
+                required 
+              />
             </div>
             <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? 'Sending...' : 'Send OTP'}
@@ -119,28 +134,59 @@ function ForgotPassword() {
 
         {step === 2 && (
           <form onSubmit={handleResetPassword}>
+            <p className="instruction-text">
+              Enter the 6-digit code sent to your phone and your new password.
+            </p>
             <div className="form-group">
               <label>Enter OTP:</label>
-              <input type="text" name="otp" value={formData.otp} onChange={handleChange} required placeholder="6-digit code" />
+              <input 
+                type="text" 
+                name="otp" 
+                value={formData.otp} 
+                onChange={handleChange} 
+                required 
+                placeholder="6-digit code" 
+                className="otp-input"
+              />
             </div>
             <div className="form-group">
               <label>New Password:</label>
-              <input type="password" name="newPassword" value={formData.newPassword} onChange={handleChange} required minLength="8" />
+              <input 
+                type="password" 
+                name="newPassword" 
+                value={formData.newPassword} 
+                onChange={handleChange} 
+                required 
+                minLength="8" 
+              />
             </div>
             <div className="form-group">
               <label>Confirm Password:</label>
-              <input type="password" name="confirmNewPassword" value={formData.confirmNewPassword} onChange={handleChange} required minLength="8" />
+              <input 
+                type="password" 
+                name="confirmNewPassword" 
+                value={formData.confirmNewPassword} 
+                onChange={handleChange} 
+                required 
+                minLength="8" 
+              />
             </div>
             
             <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? 'Resetting...' : 'Reset Password'}
             </button>
 
-            <div style={{marginTop: '15px', textAlign: 'center'}}>
+            <div className="resend-container">
               {resendTimer > 0 ? (
-                <span style={{color: '#999', fontSize: '0.9em'}}>Resend code in {Math.floor(resendTimer / 60)}:{(resendTimer % 60).toString().padStart(2, '0')}</span>
+                <span className="timer-text">
+                  Resend code in {Math.floor(resendTimer / 60)}:{(resendTimer % 60).toString().padStart(2, '0')}
+                </span>
               ) : (
-                <button type="button" onClick={handleRequestOTP} className="btn-link" style={{background:'none', border:'none', color:'#2563eb', cursor:'pointer', textDecoration:'underline'}}>
+                <button 
+                  type="button" 
+                  onClick={handleRequestOTP} 
+                  className="btn-link"
+                >
                   Resend Code
                 </button>
               )}
@@ -148,7 +194,7 @@ function ForgotPassword() {
           </form>
         )}
 
-        <p style={{marginTop: '20px'}}>
+        <p className="back-link">
           <a href="/login">Back to Login</a>
         </p>
       </div>
