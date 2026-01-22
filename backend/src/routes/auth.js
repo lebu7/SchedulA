@@ -153,11 +153,15 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Login
+   ✅ Login (Email OR Phone)
 --------------------------------------------- */
 router.post(
   "/login",
-  [body("email").isEmail().normalizeEmail(), body("password").exists()],
+  [
+    // Removed isEmail() check to allow phone numbers too
+    body("identifier").exists().withMessage("Email or Phone is required"),
+    body("password").exists(),
+  ],
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -165,11 +169,12 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { email, password } = req.body;
+      // 'identifier' can be email OR phone
+      const { identifier, password } = req.body;
 
       db.get(
-        "SELECT * FROM users WHERE email = ?",
-        [email],
+        "SELECT * FROM users WHERE email = ? OR phone = ?",
+        [identifier, identifier],
         async (err, user) => {
           if (err) return res.status(500).json({ error: "Database error" });
           if (!user)

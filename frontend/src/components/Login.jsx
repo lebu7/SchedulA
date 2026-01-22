@@ -2,8 +2,9 @@ import React, { useState } from 'react'
 import { authService } from '../services/auth'
 
 function Login({ onLogin }) {
+  // 🆕 Changed 'email' to 'identifier' to accept both Email and Phone
   const [formData, setFormData] = useState({
-    email: '',
+    identifier: '',
     password: ''
   })
   const [error, setError] = useState('')
@@ -39,12 +40,13 @@ function Login({ onLogin }) {
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Email:</label>
+            <label>Email or Phone Number:</label>
             <input
-              type="email"
-              name="email"
-              value={formData.email}
+              type="text" 
+              name="identifier" 
+              value={formData.identifier}
               onChange={handleChange}
+              placeholder="e.g. user@example.com or 07..."
               required
             />
           </div>
