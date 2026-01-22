@@ -1,76 +1,290 @@
+/* =========================================
+   1. GENERAL LAYOUT & HEADER CONTROLS
+   ========================================= */
 .appointment-manager {
-  padding: 20px 0;
+  padding: 20px 0 60px;
+  background-color: #f8fafc;
+  min-height: 100vh;
 }
 
-/* Tabs */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+/* Header Row (Title + Search/Sort) */
+.am-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.am-header-row h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #1e293b;
+  font-weight: 700;
+}
+
+/* Controls Container */
+.am-controls {
+  display: flex;
+  gap: 10px;
+}
+
+/* Search Box Styling */
+.search-box {
+  position: relative;
+  width: 240px;
+}
+
+.search-box .icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 9px 30px 9px 34px; /* Left padding for icon, right for clear btn */
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s;
+  color: #334155;
+  background: white;
+}
+
+.search-box input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-box .clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #94a3b8;
+  transition: color 0.2s;
+}
+
+.search-box .clear-btn:hover {
+  color: #ef4444;
+}
+
+/* Sort Box Styling */
+.sort-box {
+  position: relative;
+}
+
+.sort-box .icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sort-box select {
+  padding: 9px 12px 9px 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  appearance: none; /* Hides default arrow */
+  transition: all 0.2s;
+  font-weight: 500;
+  min-width: 160px;
+}
+
+.sort-box select:hover {
+  border-color: #94a3b8;
+}
+
+.sort-box select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  outline: none;
+}
+
+/* =========================================
+   2. TABS & FILTERS
+   ========================================= */
 .tabs {
   display: flex;
   gap: 10px;
-  margin-bottom: 20px; /* Reduced to make space for filters */
+  margin-bottom: 20px;
   flex-wrap: wrap;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 15px;
 }
 
 .tab-btn {
-  background: #f1f5f9;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
+  background: transparent;
+  color: #64748b;
+  border: 1px solid transparent;
   border-radius: 8px;
-  padding: 10px 18px;
+  padding: 8px 16px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: #f1f5f9;
+  color: #334155;
 }
 
 .tab-btn.active {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
-  box-shadow: 0 3px 10px rgba(0, 123, 255, 0.3);
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #dbeafe;
 }
 
-/* ✅ HISTORY FILTERS */
+/* History Specific Filters */
 .history-filters {
   display: flex;
-  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
   margin-bottom: 25px;
-  padding-left: 4px;
+  background: white;
+  padding: 10px 15px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
   animation: fadeIn 0.3s ease;
+}
+
+.status-filters {
+  display: flex;
+  gap: 8px;
 }
 
 .filter-pill {
   background: transparent;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e2e8f0;
   color: #64748b;
   border-radius: 20px;
-  padding: 6px 16px;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .filter-pill:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  border-color: #cbd5e1;
+  color: #1e293b;
 }
 
 .filter-pill.active {
   background: #334155;
   color: #fff;
   border-color: #334155;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Date Dropdown in History */
+.date-select {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background-color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  color: #334155;
 }
 
-/* Appointments Grid */
+.date-select:focus {
+  border-color: #3b82f6;
+}
+
+/* Provider Sub-Tabs (Due vs Future) */
+.sub-tab-pills {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #f8fafc;
+  padding: 4px;
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.pill-tab {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.pill-tab:hover {
+  background: #e2e8f0;
+}
+
+.pill-tab.active.warning-pill {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #ffedd5;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.pill-tab.active.info-pill {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* Dev Mode Toggle */
+.dev-mode-toggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
+}
+
+.dev-mode-toggle input {
+  cursor: pointer;
+}
+
+/* =========================================
+   3. APPOINTMENT CARDS
+   ========================================= */
 .appointments-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 20px;
 }
 
@@ -78,336 +292,327 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 25px;
-  border: 1px solid #e9ecef;
-  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
   background: white;
-  transition: 0.3s;
-  min-height: 260px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
 }
 
 .appointment-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
   transform: translateY(-3px);
+  border-color: #cbd5e1;
 }
 
 .appointment-info h4 {
-  margin-bottom: 10px;
-  color: #2c3e50;
-  font-size: 1.2em;
+  margin: 5px 0 10px;
+  color: #1e293b;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .appointment-info p {
-  margin-bottom: 5px;
-  color: #555;
-  font-size: 14px;
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.appointment-info strong {
+  color: #334155;
+  font-weight: 600;
+}
+
+/* Highlight Animation */
+.highlight-target {
+  animation: pulse-highlight 2s ease-in-out;
+  border: 2px solid #3b82f6;
+}
+
+@keyframes pulse-highlight {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+/* Highlight Pending */
+.highlight-pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.highlight-pending h4 {
+  color: #b45309;
 }
 
 /* Buttons & Actions */
 .appointment-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 10px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px dashed #e2e8f0;
 }
 
 .action-row {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.right-aligned {
+  gap: 10px;
   justify-content: flex-end;
 }
 
 .small-btn {
   font-size: 13px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 8px;
-  width: fit-content;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
 .btn-primary.small-btn {
-  background: #007bff;
+  background: #0f172a;
   color: white;
   border: none;
 }
+.btn-primary.small-btn:hover { background: #334155; }
 
 .btn-danger.small-btn {
-  background: #dc3545;
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+}
+.btn-danger.small-btn:hover { background: #ffe4e6; }
+
+.btn-success.small-btn {
+  background: #16a34a;
   color: white;
   border: none;
 }
+.btn-success.small-btn:hover { background: #15803d; }
 
-.small-btn:hover {
-  opacity: 0.9;
-  transform: scale(1.02);
-}
-
-/* Status */
+/* Status Badges */
 .status-badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: bold;
-  margin-top: 6px;
-  text-transform: uppercase;
-}
-
-.status-badge.blue { background-color: #dbeafe; color: #1e40af; }
-.status-badge.green { background-color: #d1fae5; color: #065f46; }
-.status-badge.red { background-color: #fee2e2; color: #b91c1c; }
-.status-badge.orange { background-color: #ffedd5; color: #c2410c; }
-.status-badge.gray { background-color: #f1f5f9; color: #334155; }
-.status-badge.purple { background-color: #ede9fe; color: #6d28d9; }
-
-/* Refund Badges */
-.refund-status-badge {
   display: inline-block;
   padding: 4px 10px;
-  border-radius: 16px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  margin-top: 6px;
-  letter-spacing: 0.5px;
+  margin-bottom: 8px;
 }
 
-.refund-status-badge.completed { background-color: #d1fae5; color: #065f46; }
-.refund-status-badge.processing { background-color: #dbeafe; color: #1e40af; }
-.refund-status-badge.pending { background-color: #fef3c7; color: #92400e; }
-.refund-status-badge.failed { background-color: #fee2e2; color: #b91c1c; }
+.status-badge.scheduled { background: #eff6ff; color: #2563eb; }
+.status-badge.completed { background: #f0fdf4; color: #16a34a; }
+.status-badge.cancelled { background: #fef2f2; color: #dc2626; }
+.status-badge.no-show { background: #fff7ed; color: #ea580c; }
+.status-badge.pending { background: #fffbeb; color: #d97706; }
+.status-badge.rebooked { background: #faf5ff; color: #7c3aed; }
+
+/* Refund Badges */
+.refund-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  margin-right: 8px;
+}
+
+.refund-status-badge.completed { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.refund-status-badge.processing { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+.refund-status-badge.pending { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.refund-status-badge.failed { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
 
 /* Empty State */
 .no-appointments {
   text-align: center;
-  padding: 60px 40px;
-  background: #f8f9fa;
+  padding: 60px 20px;
+  background: white;
   border-radius: 12px;
-  border: 2px dashed #dee2e6;
-  grid-column: span 3;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+  grid-column: 1 / -1;
+  font-size: 14px;
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-  .appointments-list { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (max-width: 768px) {
-  .appointments-list { grid-template-columns: 1fr; }
-  .appointment-card { padding: 20px; }
-  .action-row { justify-content: flex-end; }
-  .status-action-row { flex-direction: column; }
-  .btn-status { width: 100%; }
-}
-
-@media (max-width: 480px) {
-  .appointment-card { padding: 18px; }
-  .small-btn { width: 100%; }
-  .action-row { flex-direction: column; align-items: stretch; }
-  .history-filters { overflow-x: auto; padding-bottom: 5px; } /* Scroll on mobile */
-  .filter-pill { white-space: nowrap; }
-}
-
-/* Provider Status Buttons */
+/* =========================================
+   4. PROVIDER ACTION BUTTONS
+   ========================================= */
 .status-action-row {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 10px;
+  width: 100%;
 }
 
 .btn-status {
   flex: 1;
-  padding: 10px 14px;
+  padding: 10px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.25s ease;
   border: none;
+  transition: all 0.2s;
 }
 
 .btn-status.confirm {
-  background-color: #16a34a;
-  color: white;
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
 }
-
-.btn-status.confirm:hover {
-  background-color: #15803d;
-  transform: scale(1.03);
-}
+.btn-status.confirm:hover { background-color: #bbf7d0; }
 
 .btn-status.reject {
-  background-color: #dc2626;
-  color: white;
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
 }
+.btn-status.reject:hover { background-color: #fecaca; }
 
-.btn-status.reject:hover {
-  background-color: #b91c1c;
-  transform: scale(1.03);
-}
-
-/* Compact dropdown style */
+/* Status Dropdown */
 .status-dropdown-container {
   margin-top: 8px;
 }
 
 .status-select {
   width: 100%;
-  padding: 10px;
-  border: 2px solid #e5e7eb;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  font-size: 14px;
-  background: #f9fafb;
-  transition: 0.3s;
-}
-
-.status-select:hover {
-  border-color: #93c5fd;
-}
-
-.status-select:focus {
-  border-color: #007bff;
+  font-size: 13px;
+  background: white;
+  color: #334155;
+  cursor: pointer;
   outline: none;
 }
 
-/* === ADDONS SECTION === */
-.addons-container {
-  margin-top: 12px;
-  background: #f9fafb;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 10px 14px;
+.status-select.disabled-select {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
-.addons-container h5 {
-  margin-bottom: 8px;
-  color: #007bff;
-  font-size: 14px;
+/* =========================================
+   5. FINANCIALS & ADDONS
+   ========================================= */
+.addons-container {
+  margin-top: 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.addons-heading {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
   font-weight: 700;
 }
 
 .addon-list {
   list-style: none;
-  margin: 0;
   padding: 0;
+  margin: 0;
 }
 
 .addon-item {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
-  padding: 4px 0;
-  border-bottom: 1px dashed #e2e8f0;
-}
-
-.addon-item:last-child {
-  border-bottom: none;
-}
-
-.addon-name {
-  color: #374151;
-  font-weight: 500;
+  font-size: 12px;
+  color: #334155;
+  margin-bottom: 4px;
 }
 
 .addon-price {
-  color: #007bff;
   font-weight: 600;
+  color: #0f172a;
 }
 
 .no-addons-text {
-  font-size: 13px;
-  color: #6b7280;
+  font-size: 12px;
+  color: #94a3b8;
   font-style: italic;
-  margin-top: 6px;
+  margin: 0;
 }
 
 .total-cost-box {
+  margin-top: 12px;
+  padding: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+}
+
+.total-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: rgba(26, 77, 46, 0.05); /* soft green tint */
-  border: 1px solid #1a4d2e33;
-  border-radius: 6px;
-  padding: 6px 10px;
-  margin-top: 6px;
-  margin-bottom: 14px; 
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: #166534;
 }
 
-.total-label {
-  color: #1a4d2e;
-  font-weight: 600;
-}
-
-.total-amount {
-  color: #1a4d2e;
+.total-row.total-final {
   font-weight: 700;
+  font-size: 14px;
+  border-bottom: 1px dashed #86efac;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
 }
 
-/* === Pending appointment highlight === */
-.highlight-pending h4 {
-  color: #92400e;
-}
-
-.highlight-pending .status-badge.gray {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-/* 💳 Payment Details in Cards */
+/* Payment Details Text */
 .payment-details {
-  margin-top: 8px;
-  line-height: 1.6;
+  font-size: 13px;
+  color: #475569;
+  margin: 10px 0;
 }
 
-.payment-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.receipt-wrapper:hover {
+  text-decoration: underline;
 }
 
-.receipt-icon {
-  cursor: pointer;
-  color: #16a34a;
-  transition: all 0.2s ease-in-out;
-}
-
-.receipt-icon:hover {
-  transform: scale(1.1);
-  color: #15803d;
-}
-
-/* 🧾 Receipt Modal Styling (New) */
+/* =========================================
+   6. MODALS (RECEIPT & OTHERS)
+   ========================================= */
 .payment-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
-  -webkit-backdrop-filter: blur(2px); /* ✅ Fixed for Safari/iOS */
-  backdrop-filter: blur(2px);
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .payment-modal {
-  background: #fff;
-  padding: 0; /* Reset padding for header/body split */
+  background: white;
+  width: 90%;
+  max-width: 400px;
   border-radius: 16px;
-  width: 400px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  text-align: left;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  animation: fadeIn 0.25s ease-in-out;
+  animation: scaleIn 0.2s ease;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 .modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -416,146 +621,132 @@
 
 .modal-header h3 {
   margin: 0;
-  font-size: 1.1rem;
-  color: #1e293b;
+  font-size: 16px;
+  color: #0f172a;
 }
 
 .close-btn {
   background: none;
   border: none;
-  font-size: 1.5rem;
-  color: #64748b;
+  font-size: 20px;
+  color: #94a3b8;
   cursor: pointer;
   padding: 0;
   line-height: 1;
 }
 
-.close-btn:hover {
-  color: #0f172a;
-}
-
-/* Receipt Body - The Details List */
 .receipt-body {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  padding: 20px;
 }
 
 .receipt-body p {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #334155;
   border-bottom: 1px dashed #e2e8f0;
-  padding-bottom: 12px;
-  margin-bottom: 4px;
-  font-size: 0.95rem;
+  padding-bottom: 8px;
 }
 
 .receipt-body p:last-child {
   border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
 }
 
 .receipt-body strong {
-  color: #64748b; /* Muted label color */
+  color: #64748b;
   font-weight: 500;
 }
 
 .modal-footer {
-  padding: 16px 24px;
+  padding: 16px 20px;
   background: #f8fafc;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  border-top: 1px solid #f1f5f9;
+  gap: 10px;
+  border-top: 1px solid #e2e8f0;
 }
 
-/* 💳 Payment Status Badges */
-.payment-status {
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 99px; /* Pill shape */
-  font-size: 0.8rem;
-  display: inline-flex;
-  align-items: center;
-  text-transform: capitalize;
-  letter-spacing: 0.02em;
+/* =========================================
+   7. RESPONSIVE ADJUSTMENTS
+   ========================================= */
+@media (max-width: 768px) {
+  .am-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .am-controls {
+    width: 100%;
+    flex-direction: column;
+  }
+  
+  .search-box, .sort-box, .sort-box select {
+    width: 100%;
+  }
+  
+  .history-filters {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .appointments-list {
+    grid-template-columns: 1fr;
+  }
 }
 
-/* FULL PAYMENT — GREEN */
-.payment-status.paid {
-  background-color: #dcfce7;
-  color: #166534;
+@media (min-width: 769px) and (max-width: 1024px) {
+  .appointments-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
-
-/* PARTIAL PAYMENT / DEPOSIT — ORANGE */
-.payment-status.deposit-paid {
-  background-color: #fff7ed;
-  color: #9a3412;
-}
-
-/* UNPAID -> "BALANCE DUE" (Replacing Text via CSS) */
-.payment-status.unpaid {
-  background-color: #f1f5f9; /* Slate-100 (Neutral) */
-  color: #475569;            /* Slate-600 */
-  font-size: 0 !important;   /* Hide the original "Unpaid" text */
-  padding: 4px 12px;
-}
-
-.payment-status.unpaid::after {
-  content: "Balance Due";    /* Inject clearer text */
-  font-size: 0.8rem;
-  display: block;
-}
-
-/* Hover effects */
-.payment-status:hover {
-  filter: brightness(0.97);
-  transform: scale(1.02);
-  transition: 0.2s ease;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* AI Risk Badges */
+/* AI Risk Badges - High Visibility Update */
 .risk-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  gap: 6px;
+  font-size: 0.75rem; /* 12px */
+  font-weight: 700;
   padding: 4px 10px;
-  border-radius: 12px;
-  margin-top: 4px;
+  border-radius: 6px;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Subtle shadow for depth */
 }
 
+/* LOW RISK - Vibrant Green */
 .risk-badge.low {
-  background-color: #d1fae5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+  background-color: #dcfce7; /* Light Green */
+  color: #14532d;            /* Dark Forest Green */
+  border: 1px solid #22c55e; /* Strong Green Border */
 }
 
+/* MEDIUM RISK - High Contrast Amber */
 .risk-badge.medium {
-  background-color: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+  background-color: #fffbeb; /* Light Yellow */
+  color: #b45309;            /* Dark Amber text */
+  border: 1px solid #f59e0b; /* Golden Border */
 }
 
+/* HIGH RISK - Urgent Red */
 .risk-badge.high {
-  background-color: #fee2e2;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
+  background-color: #fef2f2; /* Light Red */
+  color: #991b1b;            /* Dark Red Text */
+  border: 1px solid #ef4444; /* Bright Red Border */
   animation: pulse-red 2s infinite;
 }
 
+/* Ensure icons inside badges match the text color */
+.risk-badge svg {
+  stroke-width: 2.5px;
+  width: 14px;
+  height: 14px;
+}
+
 @keyframes pulse-red {
-  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
