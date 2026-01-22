@@ -1,34 +1,34 @@
 /* backend/config/database.js */
-import sqlite3 from 'sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+import sqlite3 from "sqlite3";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Ensure database directory exists
-const dbDir = path.join(__dirname, '../../database');
+const dbDir = path.join(__dirname, "../../database");
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
-  console.log('📁 Created database directory');
+  console.log("📁 Created database directory");
 }
 
-const dbPath = path.join(dbDir, 'schedula.db');
+const dbPath = path.join(dbDir, "schedula.db");
 console.log(`📊 Database path: ${dbPath}`);
 
 export const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error('❌ Error opening database:', err.message);
+    console.error("❌ Error opening database:", err.message);
   } else {
-    console.log('✅ Connected to SQLite database successfully');
+    console.log("✅ Connected to SQLite database successfully");
     initializeDatabase();
   }
 });
 
 function initializeDatabase() {
   /* ---------------------------------------------
-     🧱 USERS TABLE
+     🧱 USERS TABLE (Updated with gender/dob)
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -37,6 +37,8 @@ function initializeDatabase() {
       password TEXT NOT NULL,
       name TEXT NOT NULL,
       phone TEXT,
+      gender TEXT, -- 🆕
+      dob DATE,    -- 🆕
       user_type TEXT CHECK(user_type IN ('client', 'provider')) NOT NULL,
       business_name TEXT,
       opening_time TEXT DEFAULT '08:00',
@@ -111,9 +113,9 @@ function initializeDatabase() {
 
   /* ---------------------------------------------
      💰 TRANSACTIONS TABLE
-     Tracks individual payments to allow correct refunds
   --------------------------------------------- */
-  db.run(`
+  db.run(
+    `
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       appointment_id INTEGER NOT NULL,
@@ -124,36 +126,38 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (appointment_id) REFERENCES appointments(id)
     )
-  `, (err) => {
-    if (!err) {
-      // 🔄 Backfill Migration: Safe attempt
-      db.get("SELECT count(*) as count FROM transactions", [], (e, row) => {
-        if (!e && row.count === 0) {
-          console.log("⚙️ Backfilling transactions from existing appointments...");
-          db.run(`
+  `,
+    (err) => {
+      if (!err) {
+        db.get("SELECT count(*) as count FROM transactions", [], (e, row) => {
+          if (!e && row.count === 0) {
+            console.log(
+              "⚙️ Backfilling transactions from existing appointments..."
+            );
+            db.run(`
             INSERT INTO transactions (appointment_id, amount, reference, type, status)
             SELECT id, amount_paid, payment_reference, 'payment', 'success'
             FROM appointments
             WHERE payment_reference IS NOT NULL AND amount_paid > 0
           `);
-        }
-      });
+          }
+        });
+      }
     }
-  });
+  );
 
   /* ---------------------------------------------
-     🧠 AI PREDICTIONS TRACKING TABLE (NEW)
-     Logs AI accuracy for future model improvement
+     🧠 AI PREDICTIONS TABLE
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS ai_predictions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       appointment_id INTEGER NOT NULL,
       predicted_risk REAL NOT NULL,
-      base_risk_before_payment REAL, -- 🆕
-      payment_ratio REAL,            -- 🆕
-      client_history_factor REAL,    -- 🆕
-      actual_outcome TEXT, -- 'no-show', 'completed', 'cancelled'
+      base_risk_before_payment REAL,
+      payment_ratio REAL,
+      client_history_factor REAL,
+      actual_outcome TEXT,
       payment_amount REAL,
       prediction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (appointment_id) REFERENCES appointments(id)
@@ -171,44 +175,30 @@ function initializeDatabase() {
       title TEXT NOT NULL,
       message TEXT NOT NULL,
       is_read BOOLEAN DEFAULT 0,
-      reference_id INTEGER, -- e.g., appointment_id related to this notif
+      reference_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
 
   /* ---------------------------------------------
-     📱 SMS LOGS TABLE (AUTO-MIGRATION)
+     📱 SMS LOGS TABLE
   --------------------------------------------- */
   db.get(
     `SELECT sql FROM sqlite_master WHERE type='table' AND name='sms_logs'`,
     [],
     (err, row) => {
       if (err) return;
-
       if (!row) {
         createSMSLogsTable();
         return;
       }
-
       if (!row.sql.includes("'refund'")) {
-        console.log('⚙️ Migrating sms_logs table to support refund types...');
+        console.log("⚙️ Migrating sms_logs table...");
         db.serialize(() => {
           db.run("PRAGMA foreign_keys=off;");
           db.run("ALTER TABLE sms_logs RENAME TO sms_logs_old;");
-          
-          db.run(`
-            CREATE TABLE sms_logs (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              recipient_phone TEXT NOT NULL,
-              message_type TEXT CHECK(message_type IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance', 'refund', 'refund_request')),
-              message_content TEXT,
-              status TEXT CHECK(status IN ('sent', 'failed', 'error')),
-              details TEXT,
-              sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          `);
-
+          createSMSLogsTable();
           db.run(`
             INSERT INTO sms_logs (id, recipient_phone, message_type, message_content, status, details, sent_at)
             SELECT id, recipient_phone, 
@@ -216,10 +206,8 @@ function initializeDatabase() {
                    message_content, status, details, sent_at
             FROM sms_logs_old
           `);
-
           db.run("DROP TABLE sms_logs_old;");
           db.run("PRAGMA foreign_keys=on;");
-          console.log("✅ SMS Logs table migration completed.");
         });
       }
     }
@@ -236,60 +224,64 @@ function initializeDatabase() {
         details TEXT,
         sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `, (err) => {
-      if (err) console.error('❌ Error creating sms_logs table:', err.message);
-      else console.log('✅ SMS logs table ready');
-    });
+    `);
   }
 
   /* ---------------------------------------------
      🔍 Ensure missing columns exist (MIGRATIONS)
   --------------------------------------------- */
-  tryAddColumn('users', 'opening_time', "TEXT DEFAULT '08:00'");
-  tryAddColumn('users', 'closing_time', "TEXT DEFAULT '18:00'");
-  tryAddColumn('users', 'notification_preferences', "TEXT");
+  // Users Migrations (New Gender/DOB)
+  tryAddColumn("users", "gender", "TEXT");
+  tryAddColumn("users", "dob", "DATE");
 
-  tryAddColumn('services', 'opening_time', "TEXT DEFAULT '08:00'");
-  tryAddColumn('services', 'closing_time', "TEXT DEFAULT '18:00'");
-  tryAddColumn('services', 'slot_interval', "INTEGER DEFAULT 30");
-  tryAddColumn('services', 'is_closed', "INTEGER DEFAULT 0");
-  tryAddColumn('services', 'closed_by_business', "INTEGER DEFAULT 0");
-  tryAddColumn('services', 'capacity', "INTEGER DEFAULT 1"); 
+  tryAddColumn("users", "opening_time", "TEXT DEFAULT '08:00'");
+  tryAddColumn("users", "closing_time", "TEXT DEFAULT '18:00'");
+  tryAddColumn("users", "notification_preferences", "TEXT");
 
-  tryAddColumn('appointments', 'reminder_sent', "INTEGER DEFAULT 0");
-  tryAddColumn('appointments', 'payment_status', "TEXT DEFAULT 'unpaid'");
-  tryAddColumn('appointments', 'payment_reference', "TEXT");
-  tryAddColumn('appointments', 'amount_paid', "REAL DEFAULT 0");
-  tryAddColumn('appointments', 'total_price', "REAL DEFAULT 0");
-  tryAddColumn('appointments', 'deposit_amount', "REAL DEFAULT 0");
-  tryAddColumn('appointments', 'addons_total', "REAL DEFAULT 0");
-  tryAddColumn('appointments', 'addons', "TEXT DEFAULT '[]'");
+  tryAddColumn("services", "opening_time", "TEXT DEFAULT '08:00'");
+  tryAddColumn("services", "closing_time", "TEXT DEFAULT '18:00'");
+  tryAddColumn("services", "slot_interval", "INTEGER DEFAULT 30");
+  tryAddColumn("services", "is_closed", "INTEGER DEFAULT 0");
+  tryAddColumn("services", "closed_by_business", "INTEGER DEFAULT 0");
+  tryAddColumn("services", "capacity", "INTEGER DEFAULT 1");
 
-  tryAddColumn('appointments', 'refund_status', "TEXT DEFAULT NULL");
-  tryAddColumn('appointments', 'refund_reference', "TEXT");
-  tryAddColumn('appointments', 'refund_amount', "REAL DEFAULT 0");
-  tryAddColumn('appointments', 'refund_initiated_at', "DATETIME");
-  tryAddColumn('appointments', 'refund_completed_at', "DATETIME");
-  
-  // 🧠 Ensure AI columns are added if missing
-  tryAddColumn('appointments', 'no_show_risk', "REAL DEFAULT 0");
-  
-  // 🧠 Ensure AI Prediction Table columns exist (for migration)
-  tryAddColumn('ai_predictions', 'base_risk_before_payment', "REAL");
-  tryAddColumn('ai_predictions', 'payment_ratio', "REAL");
-  tryAddColumn('ai_predictions', 'client_history_factor', "REAL");
+  tryAddColumn("appointments", "reminder_sent", "INTEGER DEFAULT 0");
+  tryAddColumn("appointments", "payment_status", "TEXT DEFAULT 'unpaid'");
+  tryAddColumn("appointments", "payment_reference", "TEXT");
+  tryAddColumn("appointments", "amount_paid", "REAL DEFAULT 0");
+  tryAddColumn("appointments", "total_price", "REAL DEFAULT 0");
+  tryAddColumn("appointments", "deposit_amount", "REAL DEFAULT 0");
+  tryAddColumn("appointments", "addons_total", "REAL DEFAULT 0");
+  tryAddColumn("appointments", "addons", "TEXT DEFAULT '[]'");
+  tryAddColumn("appointments", "refund_status", "TEXT DEFAULT NULL");
+  tryAddColumn("appointments", "refund_reference", "TEXT");
+  tryAddColumn("appointments", "refund_amount", "REAL DEFAULT 0");
+  tryAddColumn("appointments", "refund_initiated_at", "DATETIME");
+  tryAddColumn("appointments", "refund_completed_at", "DATETIME");
+  tryAddColumn("appointments", "no_show_risk", "REAL DEFAULT 0");
 
-  console.log('🎯 Database initialization completed');
+  tryAddColumn("ai_predictions", "base_risk_before_payment", "REAL");
+  tryAddColumn("ai_predictions", "payment_ratio", "REAL");
+  tryAddColumn("ai_predictions", "client_history_factor", "REAL");
+
+  console.log("🎯 Database initialization completed");
 }
 
 function tryAddColumn(table, column, definition) {
   db.all(`PRAGMA table_info(${table})`, (err, rows) => {
     if (err) return;
-    const exists = rows.some(r => r.name === column);
+    const exists = rows.some((r) => r.name === column);
     if (!exists) {
-      db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`, (alterErr) => {
-        if (alterErr) console.error(`⚠️ Failed to add column ${column} to ${table}:`, alterErr.message);
-      });
+      db.run(
+        `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+        (alterErr) => {
+          if (alterErr)
+            console.error(
+              `⚠️ Failed to add column ${column} to ${table}:`,
+              alterErr.message
+            );
+        }
+      );
     }
   });
 }
