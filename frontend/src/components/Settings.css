@@ -64,7 +64,7 @@
 }
 
 .tab-btn.active::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: -2px;
   left: 0;
@@ -79,7 +79,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 25px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
   animation: fadeIn 0.3s ease-in-out;
 }
 
@@ -134,7 +134,7 @@
 .pill-btn.active {
   background-color: white;
   color: #2563eb;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Profile Layout */
@@ -249,7 +249,7 @@
   height: 24px;
 }
 
-.switch input { 
+.switch input {
   opacity: 0;
   width: 0;
   height: 0;
@@ -263,7 +263,7 @@
   right: 0;
   bottom: 0;
   background-color: #cbd5e1;
-  transition: .4s;
+  transition: 0.4s;
   border-radius: 24px;
 }
 
@@ -275,7 +275,7 @@
   left: 3px;
   bottom: 3px;
   background-color: white;
-  transition: .4s;
+  transition: 0.4s;
   border-radius: 50%;
 }
 
@@ -294,8 +294,14 @@ input:disabled + .slider {
 
 /* Animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .fade-in {
@@ -308,14 +314,48 @@ input:disabled + .slider {
     grid-template-columns: 1fr;
     gap: 30px;
   }
-  
+
   .settings-tabs {
     gap: 15px;
     overflow-x: auto;
     padding-bottom: 5px;
   }
-  
+
   .tab-btn {
     white-space: nowrap;
   }
+}
+/* frontend/src/components/Settings.css */
+
+.suburb-dropdown {
+  padding: 8px 12px;
+  font-size: 13px;
+  height: auto;
+  width: 80%;
+  max-width: 300px; /* 👈 Restricts width so it doesn't cover the whole screen */
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: white;
+  color: #334155;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.suburb-dropdown:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Style the headers (A, B, C...) inside the dropdown */
+.suburb-dropdown optgroup {
+  font-style: normal;
+  font-weight: 700;
+  color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+.suburb-dropdown option {
+  padding: 4px;
+  color: #1e293b;
 }

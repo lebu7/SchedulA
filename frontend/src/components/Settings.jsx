@@ -4,59 +4,69 @@ import api from '../services/auth';
 import { MessageSquare, Bell, Clock, User, Briefcase } from 'lucide-react'; 
 import './Settings.css';
 
+// 🏙️ Nairobi Suburbs Data
+const NAIROBI_SUBURBS = {
+  A: ["Airbase"],
+  B: ["Baba Dogo"],
+  C: ["California", "Chokaa", "Clay City"],
+  D: ["Dagoretti", "Dandora", "Donholm"],
+  E: ["Eastleigh"],
+  G: ["Gikomba/Kamukunji", "Githurai"],
+  H: ["Huruma"],
+  I: ["Imara Daima", "Industrial Area"],
+  J: ["Jamhuri"],
+  K: ["Kabiro", "Kahawa", "Kahawa West", "Kamulu", "Kangemi", "Kariobangi", "Kasarani", "Kawangware", "Kayole", "Kiamaiko", "Kibra", "Kileleshwa", "Kitisuru", "Komarock"],
+  L: ["Landimawe", "Langata", "Lavington", "Lucky Summer"],
+  M: ["Makadara", "Makongeni", "Maringo/Hamza", "Mathare Hospital", "Mathare North", "Mbagathi Way", "Mlango Kubwa", "Mombasa Road", "Mountain View", "Mowlem", "Muthaiga", "Mwiki"],
+  N: ["Nairobi South", "Nairobi West", "Njiru"],
+  P: ["Pangani", "Parklands/Highridge", "Pumwani"],
+  R: ["Ridgeways", "Roysambu", "Ruai", "Ruaraka", "Runda"],
+  S: ["Saika", "South B", "South C"],
+  T: ["Thome"],
+  U: ["Umoja", "Upperhill", "Utalii", "Utawala"],
+  W: ["Westlands", "Woodley/Kenyatta Golf Course"],
+  Z: ["Zimmerman", "Ziwani/Kariokor"]
+};
+
 const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
   
-  // ✅ FIX: Initialize active tab with validation (prevents loading 'pending' or 'appointments' tabs from stale state)
   const [activeTab, setActiveTab] = useState(() => {
       const validTabs = ['profile', 'notifications', 'hours'];
-      // Only use the subTab from state if it belongs to Settings
       if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
           return location.state.subTab;
       }
       return 'profile';
   });
 
-  // 🆕 Sub-tab state for Notifications (SMS vs In-App)
   const [notifSubTab, setNotifSubTab] = useState('sms');
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Profile States
   const [profile, setProfile] = useState({ 
     name: '', 
     phone: '', 
     business_name: '', 
     gender: '', 
-    dob: '' 
+    dob: '',
+    suburb: '',           
+    business_address: '', 
+    google_maps_link: '' 
   });
-  
+
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [passwordError, setPasswordError] = useState(''); 
   
-  // SMS Preferences (Existing)
   const [notifications, setNotifications] = useState({
-    confirmation: true, 
-    acceptance: true, 
-    reminder: true, 
-    cancellation: true, 
-    receipt: true, 
-    new_request: true,
-    refund: true 
+    confirmation: true, acceptance: true, reminder: true, cancellation: true, receipt: true, new_request: true, refund: true 
   });
 
-  // 🧠 In-App Preferences (New State)
   const [inAppPrefs, setInAppPrefs] = useState({
-    booking_alerts: true,
-    system_updates: true,
-    payment_alerts: true,
-    reminders: true
+    booking_alerts: true, system_updates: true, payment_alerts: true, reminders: true
   });
   
   const [hours, setHours] = useState({ opening_time: '08:00', closing_time: '18:00' });
 
-  // Sync state with User prop
   useEffect(() => {
     if (user) {
       setProfile({ 
@@ -64,7 +74,10 @@ const Settings = ({ user, setUser }) => {
         phone: user.phone || '', 
         business_name: user.business_name || '',
         gender: user.gender || '', 
-        dob: user.dob ? user.dob.split('T')[0] : '' 
+        dob: user.dob ? user.dob.split('T')[0] : '',
+        suburb: user.suburb || '',                 
+        business_address: user.business_address || '', 
+        google_maps_link: user.google_maps_link || ''
       });
       setHours({ 
         opening_time: user.opening_time || '08:00', 
@@ -76,10 +89,7 @@ const Settings = ({ user, setUser }) => {
         if (typeof prefs === 'string') {
             try { prefs = JSON.parse(prefs); } catch (e) { prefs = {}; }
         }
-        // Merge SMS defaults
         setNotifications(prev => ({ ...prev, ...prefs }));
-        
-        // Merge In-App defaults if they exist in the JSON
         if (prefs.in_app) {
             setInAppPrefs(prev => ({ ...prev, ...prefs.in_app }));
         }
@@ -87,7 +97,6 @@ const Settings = ({ user, setUser }) => {
     }
   }, [user]);
 
-  // ✅ LISTEN: Also update if location state changes while mounted (with validation)
   useEffect(() => {
     const validTabs = ['profile', 'notifications', 'hours'];
     if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
@@ -100,7 +109,6 @@ const Settings = ({ user, setUser }) => {
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
 
-  // 🔒 Password Validation Logic
   const checkPasswordRequirements = (password) => {
     const minLength = 8;
     const hasUpperCase = /[A-Z]/.test(password);
@@ -148,14 +156,12 @@ const Settings = ({ user, setUser }) => {
     e.preventDefault();
     setPasswordError(''); 
 
-    // 1. Validate Password Strength
     const validationError = checkPasswordRequirements(passwords.new);
     if (validationError) {
       setPasswordError(validationError);
       return;
     }
 
-    // 2. Validate Match
     if (passwords.new !== passwords.confirm) {
       showMsg('error', 'New passwords do not match');
       return;
@@ -172,16 +178,13 @@ const Settings = ({ user, setUser }) => {
     setLoading(false);
   };
 
-  // Toggle SMS Settings
   const handleNotificationToggle = async (key) => {
     if (key === 'confirmation' || key === 'refund') return; 
-    
     const newPrefs = { ...notifications, [key]: !notifications[key] };
     setNotifications(newPrefs);
     savePreferences({ ...newPrefs, in_app: inAppPrefs });
   };
 
-  // Toggle In-App Settings
   const handleInAppToggle = async (key) => {
     const newInApp = { ...inAppPrefs, [key]: !inAppPrefs[key] };
     setInAppPrefs(newInApp);
@@ -201,23 +204,30 @@ const Settings = ({ user, setUser }) => {
     }
   };
 
-  const handleHoursUpdate = async (e) => {
+  const handleBusinessInfoUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await api.put('/auth/business-hours', hours);
-      showMsg('success', 'Business hours updated!');
-      const updatedUser = { ...user, ...hours };
+      
+      let formattedPhone = profile.phone.trim(); 
+      if (formattedPhone.startsWith('0')) formattedPhone = '+254' + formattedPhone.substring(1);
+      else if (formattedPhone.startsWith('254')) formattedPhone = '+' + formattedPhone;
+
+      const profileRes = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
+
+      showMsg('success', 'Business settings updated!');
+      const updatedUser = { ...user, ...hours, ...profileRes.data.user };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
     } catch (err) { 
-      showMsg('error', err.response?.data?.error || 'Failed to update hours'); 
+      showMsg('error', err.response?.data?.error || 'Failed to update settings'); 
     }
     setLoading(false);
   };
 
-  // Helper style for red borders
-  const errorInputStyle = { border: '1px solid red', backgroundColor: '#fff0f0' };
+  // 🤏 Small Input Style for Compact Location Form
+  const smallInputStyle = { padding: '8px 10px', fontSize: '13px', height: 'auto' };
 
   return (
     <div className="settings-container">
@@ -234,7 +244,7 @@ const Settings = ({ user, setUser }) => {
         </button>
         {user?.user_type === 'provider' && (
           <button className={`tab-btn ${activeTab === 'hours' ? 'active' : ''}`} onClick={() => setActiveTab('hours')}>
-              <Briefcase size={16} /> Business Hours
+              <Briefcase size={16} /> Business Info
           </button>
         )}
       </div>
@@ -255,7 +265,6 @@ const Settings = ({ user, setUser }) => {
                 <small style={{color: '#666', display: 'block', marginTop: '5px'}}>We will format this to +254 automatically.</small>
               </div>
 
-              {/* ✅ GENDER FIELD (DISABLED) */}
               <div className="form-group">
                 <label>Gender <small style={{color:'#888'}}>(Cannot be changed)</small></label>
                 <select 
@@ -271,7 +280,6 @@ const Settings = ({ user, setUser }) => {
                 </select>
               </div>
 
-              {/* ✅ DOB FIELD (DISABLED) */}
               <div className="form-group">
                 <label>Date of Birth <small style={{color:'#888'}}>(Cannot be changed)</small></label>
                 <input 
@@ -311,7 +319,7 @@ const Settings = ({ user, setUser }) => {
                     if (passwordError) setPasswordError('');
                   }} 
                   required 
-                  style={passwordError ? errorInputStyle : {}}
+                  style={passwordError ? { border: '1px solid red', backgroundColor: '#fff0f0' } : {}}
                 />
                 <div style={{ marginTop: '5px', fontSize: '0.85rem' }}>
                   {passwordError ? (
@@ -411,21 +419,76 @@ const Settings = ({ user, setUser }) => {
         </div>
       )}
 
-      {/* === BUSINESS HOURS TAB === */}
+      {/* === BUSINESS INFO TAB (HOURS + LOCATION) === */}
       {activeTab === 'hours' && (
         <div className="settings-section">
-          <h3>Business Hours</h3>
-          <p className="section-desc">Set your operating hours to control availability.</p>
-          <form onSubmit={handleHoursUpdate} style={{ maxWidth: '400px' }}>
-             <div className="form-group">
-               <label>Opening Time <Clock size={14} style={{marginLeft:'5px', color:'#666'}} /></label>
-               <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} />
+          <h3>Business Info & Hours</h3>
+          <p className="section-desc">Manage your operational details and location.</p>
+          
+          <form onSubmit={handleBusinessInfoUpdate} className="settings-form">
+             
+             {/* 🆕 Single Dropdown Location Section */}
+             <div style={{marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
+                <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>📍 Location</h4>
+                
+                {/* 1. Suburb Dropdown (Grouped by Letter) */}
+                <div className="form-group">
+                    <label>Suburb</label>
+                    <select 
+                        value={profile.suburb} 
+                        onChange={(e) => setProfile(p => ({ ...p, suburb: e.target.value }))}
+                        className="suburb-dropdown" 
+                    >
+                        <option value="">Select Suburb</option>
+                        {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
+                            <optgroup key={letter} label={letter}>
+                                {NAIROBI_SUBURBS[letter].map(sub => (
+                                    <option key={sub} value={sub}>{sub}</option>
+                                ))}
+                            </optgroup>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="form-group">
+                    <label>Business Address / Landmark</label>
+                    <input 
+                        type="text" 
+                        value={profile.business_address} 
+                        onChange={e => setProfile({...profile, business_address: e.target.value})} 
+                        placeholder="e.g. 2nd Floor, City Mall"
+                        style={smallInputStyle} // 🤏 Compact Style
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label>Google Maps Link <small style={{color:'#64748b'}}>(Optional)</small></label>
+                    <input 
+                        type="url" 
+                        value={profile.google_maps_link} 
+                        onChange={e => setProfile({...profile, google_maps_link: e.target.value})} 
+                        placeholder="http://maps.google.com/..."
+                        style={smallInputStyle} // 🤏 Compact Style
+                    />
+                </div>
              </div>
-             <div className="form-group">
-               <label>Closing Time <Clock size={14} style={{marginLeft:'5px', color:'#666'}} /></label>
-               <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} />
+
+             {/* Hours Section */}
+             <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>⏰ Operating Hours</h4>
+             <div className="form-group-row" style={{display:'flex', gap:'15px'}}>
+                <div className="form-group" style={{flex:1}}>
+                <label>Opening Time</label>
+                <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} style={smallInputStyle} />
+                </div>
+                <div className="form-group" style={{flex:1}}>
+                <label>Closing Time</label>
+                <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} style={smallInputStyle} />
+                </div>
              </div>
-             <button type="submit" className="save-btn" disabled={loading}>Save Business Hours</button>
+
+             <button type="submit" className="save-btn" disabled={loading}>
+                {loading ? 'Saving...' : 'Save All Changes'}
+             </button>
           </form>
         </div>
       )}

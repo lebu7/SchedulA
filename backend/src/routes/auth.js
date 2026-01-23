@@ -260,18 +260,6 @@ router.post(
               new Date(now.getTime() - 2 * 60 * 1000)
           ) {
             // Optional: Allow resend only after 2 minutes. For now, we'll overwrite.
-            // But to follow requirements: "a new one can be resent after 2 minutes"
-            // This logic implies we should check if the *previous* one is still valid and not expired by more than 1 min?
-            // Actually, "Code expires in a minute". "Resend after 2 minutes".
-            // Let's just generate a new one. The frontend handles the timer usually.
-            // If we want to enforce server-side cooldown:
-            const lastSent = new Date(user.reset_otp_expires).getTime() - 60000; // Assuming expires was set to now + 60s
-            // If expiry is in the future, it means less than 1 min has passed.
-            // If expiry is in the past, but less than 1 min ago, it means less than 2 mins total passed.
-            // Requirements: "Code expires in a minute, and a new one can be resent after 2 minutes"
-            // Implementation: We set expire time to NOW + 1 min.
-            // We can check if `reset_otp_expires` > NOW - 1 min (which is 2 mins from creation)
-            // Actually, simplest is just generate and send. Frontend handles the UI timer.
           }
 
           // Generate 6-digit OTP
@@ -386,11 +374,12 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Get Profile
+   ✅ Get Profile (Updated for Location & Suburb)
 --------------------------------------------- */
 router.get("/profile", authenticateToken, (req, res) => {
   db.get(
     `SELECT id, email, name, phone, gender, dob, user_type, business_name, 
+            business_address, suburb, google_maps_link, 
             opening_time, closing_time, notification_preferences, created_at 
      FROM users WHERE id = ?`,
     [req.user.userId],
@@ -411,7 +400,7 @@ router.get("/profile", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE PROFILE
+   ✅ UPDATE PROFILE (Updated for Location & Suburb)
 --------------------------------------------- */
 router.put(
   "/profile",
@@ -421,16 +410,44 @@ router.put(
     body("phone")
       .matches(/^\+254\d{9}$/)
       .withMessage("Phone must start with +254 and have 9 digits"),
+    // Optional: Validate that maps link is a URL if provided
+    body("google_maps_link")
+      .optional()
+      .isURL()
+      .withMessage("Must be a valid URL"),
   ],
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty())
       return res.status(400).json({ errors: errors.array() });
 
-    const { name, phone, business_name, gender, dob } = req.body;
+    const {
+      name,
+      phone,
+      business_name,
+      gender,
+      dob,
+      business_address,
+      suburb,
+      google_maps_link,
+    } = req.body;
+
     db.run(
-      `UPDATE users SET name = ?, phone = ?, business_name = ?, gender = ?, dob = ? WHERE id = ?`,
-      [name, phone, business_name || null, gender, dob, req.user.userId],
+      `UPDATE users 
+       SET name = ?, phone = ?, business_name = ?, gender = ?, dob = ?,
+           business_address = ?, suburb = ?, google_maps_link = ? 
+       WHERE id = ?`,
+      [
+        name,
+        phone,
+        business_name || null,
+        gender,
+        dob,
+        business_address || null,
+        suburb || null,
+        google_maps_link || null,
+        req.user.userId,
+      ],
       function (err) {
         if (err)
           return res.status(500).json({ error: "Failed to update profile" });
@@ -445,7 +462,16 @@ router.put(
 
         res.json({
           message: "Profile updated",
-          user: { name, phone, business_name, gender, dob },
+          user: {
+            name,
+            phone,
+            business_name,
+            gender,
+            dob,
+            business_address,
+            suburb,
+            google_maps_link,
+          },
         });
       }
     );

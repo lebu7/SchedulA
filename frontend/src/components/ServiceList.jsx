@@ -4,7 +4,7 @@ import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
-  Plus, Power, Edit, Trash2, Store, Lock, Unlock 
+  Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin 
 } from "lucide-react"; 
 import "./ServiceList.css";
 
@@ -30,6 +30,7 @@ function ServiceList({ user }) {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchLocation, setSearchLocation] = useState(""); // 🆕 Location Filter
   const [selectedCategory, setSelectedCategory] = useState("");
   const [sortOption, setSortOption] = useState("random");
   const [itemsToShow, setItemsToShow] = useState(20);
@@ -46,11 +47,12 @@ function ServiceList({ user }) {
 
   useEffect(() => {
     filterServices();
-  }, [searchTerm, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
+  }, [searchTerm, searchLocation, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
 
   const fetchAllServices = async () => {
     try {
       setLoading(true);
+      // Fetch all services initially. Backend now supports filtering, but we'll fetch all and filter locally for speed
       const response = await api.get("/services");
       let services = response.data.services || [];
       
@@ -89,12 +91,21 @@ function ServiceList({ user }) {
   const filterServices = () => {
     let result = [...allServices];
 
+    // Filter by Service/Provider Name
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
       result = result.filter((service) => {
-        const fields = [service.name, service.description, service.category].filter(Boolean);
+        const fields = [service.name, service.description, service.category, service.provider_name, service.business_name].filter(Boolean);
         return fields.some((field) => field.toLowerCase().includes(term));
       });
+    }
+
+    // 🆕 Filter by Location
+    if (searchLocation.trim()) {
+        const locTerm = searchLocation.toLowerCase().trim();
+        result = result.filter((service) => {
+            return service.business_address && service.business_address.toLowerCase().includes(locTerm);
+        });
     }
 
     if (selectedCategory) {
@@ -174,7 +185,6 @@ function ServiceList({ user }) {
     const action = isBusinessClosed ? "OPEN" : "CLOSE";
     if (window.confirm(`Are you sure you want to ${action} the business? This will affect availability for all services.`)) {
         setIsBusinessClosed(!isBusinessClosed);
-        // In a real app, you would send this status to the backend here
     }
   };
 
@@ -235,13 +245,11 @@ function ServiceList({ user }) {
 
                 <div className="services-grid">
                     {filteredServices.map((service) => {
-                        // 🧠 Determine if this specific card should be dimmed
                         const isDimmed = service.is_closed || isBusinessClosed;
 
                         return (
                             <div key={service.id} className={`provider-card ${isDimmed ? 'dimmed-card' : ''}`}>
                                 
-                                {/* Status Badge Overlay */}
                                 {isDimmed && (
                                     <div className="status-overlay-badge">
                                         {isBusinessClosed ? "BUSINESS CLOSED" : "SERVICE CLOSED"}
@@ -285,9 +293,6 @@ function ServiceList({ user }) {
                                     <button className="btn-action btn-delete" onClick={() => handleDelete(service.id)}>
                                         <Trash2 size={14} /> Delete
                                     </button>
-                                    {/* 🧠 Toggle Button Logic: If Business Closed, Button says 'N/A' or allows force open? 
-                                        Here we allow toggling specific service even if business is closed, 
-                                        but visual remains dimmed until business opens. */}
                                     <button 
                                         className={`btn-action ${service.is_closed ? 'btn-toggle-open' : 'btn-toggle-close'}`} 
                                         onClick={() => toggleServiceStatus(service)}
@@ -327,6 +332,17 @@ function ServiceList({ user }) {
                             />
                         </div>
 
+                        {/* 🆕 Location Filter Input */}
+                        <div className="search-wrapper location-search">
+                            <MapPin size={18} className="search-icon" />
+                            <input
+                                type="text"
+                                placeholder="Location (e.g. Westlands)"
+                                value={searchLocation}
+                                onChange={(e) => setSearchLocation(e.target.value)}
+                            />
+                        </div>
+
                         <div className="filters-wrapper">
                             <div className="filter-item">
                                 <Filter size={16} />
@@ -359,11 +375,12 @@ function ServiceList({ user }) {
                                 </select>
                             </div>
 
-                            {(searchTerm || selectedCategory || sortOption !== "random") && (
+                            {(searchTerm || searchLocation || selectedCategory || sortOption !== "random") && (
                                 <button
                                     className="btn-clear"
                                     onClick={() => {
                                         setSearchTerm("");
+                                        setSearchLocation("");
                                         setSelectedCategory("");
                                         setSortOption("random");
                                     }}
@@ -386,8 +403,6 @@ function ServiceList({ user }) {
                       {filteredServices.map((service) => {
                         const addons = subServices[service.id] || [];
                         const price = parseFloat(service.price).toFixed(0);
-                        
-                        // 🧠 Client Dimming Logic: Card is dimmed if service OR business is closed
                         const isDimmed = service.is_closed || isBusinessClosed;
 
                         return (
@@ -410,6 +425,21 @@ function ServiceList({ user }) {
                             </div>
 
                             <div className="service-main" onClick={() => !isDimmed && handleBookClick(service)}>
+                              
+                              {/* 🆕 Address Row */}
+                              {service.business_address && (
+                                <div className="meta-row location-row">
+                                    <MapPin size={12} color="#64748b" style={{marginRight:'4px'}} />
+                                    {service.google_maps_link ? (
+                                        <a href={service.google_maps_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="location-link">
+                                            {service.business_address}
+                                        </a>
+                                    ) : (
+                                        <span className="location-text">{service.business_address}</span>
+                                    )}
+                                </div>
+                              )}
+
                               <div className="meta-row">
                                   <span className="meta-badge category">{service.category}</span>
                                   <span className="meta-badge duration">

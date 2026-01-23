@@ -1,8 +1,9 @@
+/* backend/src/routes/services.js */
 import express from "express";
 import { body, validationResult } from "express-validator";
 import { db } from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
-import { createNotification } from '../services/notificationService.js'; // ✅ IMPORTED
+import { createNotification } from "../services/notificationService.js";
 
 const router = express.Router();
 
@@ -34,15 +35,18 @@ db.run(
 );
 
 /* ---------------------------------------------
-   ✅ GET all services (includes sub-services + provider hours)
+   ✅ GET all services (includes location & maps link)
 --------------------------------------------- */
 router.get("/", (req, res) => {
-  const { search, category, provider } = req.query;
+  const { search, category, provider, location } = req.query; // 🆕 Added location param
+
   let query = `
     SELECT 
       s.*, 
       u.name AS provider_name, 
       u.business_name, 
+      u.business_address,  -- 🆕
+      u.google_maps_link,  -- 🆕
       u.opening_time AS provider_opening_time, 
       u.closing_time AS provider_closing_time
     FROM services s 
@@ -67,6 +71,12 @@ router.get("/", (req, res) => {
     params.push(`%${provider}%`);
   }
 
+  // 🆕 Location Filter Logic
+  if (location) {
+    query += ` AND u.business_address LIKE ?`;
+    params.push(`%${location}%`);
+  }
+
   query += ` ORDER BY s.created_at DESC`;
 
   db.all(query, params, (err, services) => {
@@ -83,12 +93,15 @@ router.get("/", (req, res) => {
       serviceIds,
       (subErr, subs) => {
         if (subErr)
-          return res.status(500).json({ error: "Failed to fetch sub-services" });
+          return res
+            .status(500)
+            .json({ error: "Failed to fetch sub-services" });
 
         // Group sub-services by service_id
         const subsByService = {};
         subs.forEach((sub) => {
-          if (!subsByService[sub.service_id]) subsByService[sub.service_id] = [];
+          if (!subsByService[sub.service_id])
+            subsByService[sub.service_id] = [];
           subsByService[sub.service_id].push(sub);
         });
 
@@ -116,7 +129,7 @@ router.post(
     body("category").notEmpty(),
     body("duration").isInt({ min: 1 }),
     body("price").optional().isFloat({ min: 0 }),
-    body("capacity").optional().isInt({ min: 1 }), // ✅ Added validation
+    body("capacity").optional().isInt({ min: 1 }),
   ],
   (req, res) => {
     const errors = validationResult(req);
@@ -125,13 +138,22 @@ router.post(
 
     const { name, description, category, duration, price, capacity } = req.body;
     const provider_id = req.user.userId;
-    const slots = capacity || 1; // Default to 1
+    const slots = capacity || 1;
 
     db.run(
       `INSERT INTO services (
         provider_id, name, description, category, duration, price, slot_interval, capacity
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [provider_id, name, description, category, duration, price, duration, slots],
+      [
+        provider_id,
+        name,
+        description,
+        category,
+        duration,
+        price,
+        duration,
+        slots,
+      ],
       function (err) {
         if (err) {
           console.error("❌ Error inserting service:", err);
@@ -142,12 +164,19 @@ router.post(
         console.log("✅ New service created with ID:", newServiceId);
 
         // 🔔 Notification
-        createNotification(provider_id, 'system', 'Service Created', `You have successfully added '${name}' to your services.`);
+        createNotification(
+          provider_id,
+          "system",
+          "Service Created",
+          `You have successfully added '${name}' to your services.`
+        );
 
         db.get(
           `SELECT s.*, 
                   u.name AS provider_name, 
                   u.business_name, 
+                  u.business_address,  -- 🆕
+                  u.google_maps_link,  -- 🆕
                   u.opening_time AS provider_opening_time, 
                   u.closing_time AS provider_closing_time
           FROM services s 
@@ -182,12 +211,22 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
 
   for (const [key, val] of Object.entries(req.body)) {
     // Only allow specific fields
-    if (['name', 'description', 'category', 'duration', 'price', 'capacity'].includes(key) && val !== undefined) {
+    if (
+      [
+        "name",
+        "description",
+        "category",
+        "duration",
+        "price",
+        "capacity",
+      ].includes(key) &&
+      val !== undefined
+    ) {
       updates.push(`${key} = ?`);
       params.push(val);
     }
   }
-  
+
   // 🔄 Automatically sync slot_interval with duration if provided
   if (req.body.duration !== undefined) {
     updates.push(`slot_interval = ?`);
@@ -206,13 +245,18 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
         return res.status(500).json({ error: "Failed to update service" });
       if (this.changes === 0)
         return res.status(404).json({ error: "Service not found" });
-      
+
       // 🔔 Notification
-      createNotification(provider_id, 'system', 'Service Updated', `You updated details for service ID #${serviceId}.`);
+      createNotification(
+        provider_id,
+        "system",
+        "Service Updated",
+        `You updated details for service ID #${serviceId}.`
+      );
 
       // Return updated object
-      db.get('SELECT * FROM services WHERE id = ?', [serviceId], (e, row) => {
-          res.json({ message: "Service updated successfully", service: row });
+      db.get("SELECT * FROM services WHERE id = ?", [serviceId], (e, row) => {
+        res.json({ message: "Service updated successfully", service: row });
       });
     }
   );
@@ -248,12 +292,19 @@ router.patch(
           return res.status(500).json({ error: "Failed to update service" });
         }
         if (this.changes === 0) {
-          return res.status(404).json({ error: "Service not found or not owned by you" });
+          return res
+            .status(404)
+            .json({ error: "Service not found or not owned by you" });
         }
 
         // 🔔 Notification
         const statusText = closedValue ? "Closed" : "Opened";
-        createNotification(providerId, 'system', 'Service Status Changed', `Service ID #${serviceId} is now ${statusText}.`);
+        createNotification(
+          providerId,
+          "system",
+          "Service Status Changed",
+          `Service ID #${serviceId} is now ${statusText}.`
+        );
 
         res.json({
           message: closedValue
@@ -309,7 +360,12 @@ router.patch(
 
       // 🔔 Notification
       const statusText = is_closed ? "Closed" : "Reopened";
-      createNotification(req.user.userId, 'system', 'Business Status Updated', `You have ${statusText} your business. Services updated accordingly.`);
+      createNotification(
+        req.user.userId,
+        "system",
+        "Business Status Updated",
+        `You have ${statusText} your business. Services updated accordingly.`
+      );
 
       res.json({
         message: is_closed
@@ -341,9 +397,14 @@ router.delete(
           return res.status(500).json({ error: "Failed to delete service" });
         if (this.changes === 0)
           return res.status(404).json({ error: "Service not found" });
-        
+
         // 🔔 Notification
-        createNotification(provider_id, 'system', 'Service Deleted', `Service ID #${serviceId} has been removed.`);
+        createNotification(
+          provider_id,
+          "system",
+          "Service Deleted",
+          `Service ID #${serviceId} has been removed.`
+        );
 
         res.json({ message: "Service deleted successfully" });
       }
@@ -387,9 +448,14 @@ router.post(
                 .status(500)
                 .json({ error: "Failed to add sub-service" });
             }
-            
+
             // 🔔 Notification
-            createNotification(providerId, 'system', 'Sub-service Added', `Added '${name}' to Service ID #${serviceId}.`);
+            createNotification(
+              providerId,
+              "system",
+              "Sub-service Added",
+              `Added '${name}' to Service ID #${serviceId}.`
+            );
 
             res.status(201).json({
               message: "Sub-service created",
@@ -433,12 +499,19 @@ router.delete(
       [subId, serviceId],
       function (err) {
         if (err)
-          return res.status(500).json({ error: "Failed to delete sub-service" });
+          return res
+            .status(500)
+            .json({ error: "Failed to delete sub-service" });
         if (this.changes === 0)
           return res.status(404).json({ error: "Sub-service not found" });
-        
+
         // 🔔 Notification
-        createNotification(providerId, 'system', 'Sub-service Deleted', `Sub-service ID #${subId} removed.`);
+        createNotification(
+          providerId,
+          "system",
+          "Sub-service Deleted",
+          `Sub-service ID #${subId} removed.`
+        );
 
         res.json({ message: "Sub-service deleted successfully" });
       }
@@ -467,14 +540,21 @@ router.put(
       function (err) {
         if (err) {
           console.error("💥 Sub-service update error:", err);
-          return res.status(500).json({ error: "Failed to update sub-service" });
+          return res
+            .status(500)
+            .json({ error: "Failed to update sub-service" });
         }
         if (this.changes === 0) {
           return res.status(404).json({ error: "Sub-service not found" });
         }
 
         // 🔔 Notification
-        createNotification(providerId, 'system', 'Sub-service Updated', `Updated sub-service: ${name}.`);
+        createNotification(
+          providerId,
+          "system",
+          "Sub-service Updated",
+          `Updated sub-service: ${name}.`
+        );
 
         res.json({
           message: "Sub-service updated successfully",
