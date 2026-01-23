@@ -116,6 +116,8 @@ function PaymentInfoModal({ payment, user, onClose }) {
             else if (idx === 0) label = "Deposit"; 
             else if (idx === 1) label = "Balance";
 
+            const cleanRef = tx.reference.replace(/^ref_/i, '');
+
             return `
             <div style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">
                 <div class="fin-row sub-transaction" style="font-weight: 600; color: #334155;">
@@ -229,7 +231,7 @@ function PaymentInfoModal({ payment, user, onClose }) {
                             <span style={{fontSize: '0.85em', fontWeight: '600', color: '#334155'}}>
                                 {tx.type === 'refund' ? 'Refund' : (i === 0 ? "Deposit" : "Balance")}
                             </span>
-                            <span style={{fontSize: '0.75em', color: '#94a3b8', fontFamily: 'monospace'}}>Ref: {tx.reference}</span>
+                            <span style={{fontSize: '0.75em', color: '#94a3b8', fontFamily: 'monospace'}}>Ref: {tx.reference.replace(/^ref_/i, '')}</span>
                         </div>
                         <span style={{fontSize: '0.85em', fontWeight: '700', color: tx.type === 'refund' ? '#dc2626' : '#15803d'}}>
                            {tx.type === 'refund' ? '-' : ''}KES {Number(tx.amount).toLocaleString()}
