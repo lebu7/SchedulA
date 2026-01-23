@@ -1,3 +1,4 @@
+/* backend/src/routes/analytics.js */
 import express from "express";
 import { db } from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
@@ -5,7 +6,7 @@ import { authenticateToken } from "../middleware/auth.js";
 const router = express.Router();
 
 /* --------------------------------------------------------------------------
-   📊 GET /analytics/summary
+   📊 GET /insights/summary
    Returns metrics based on user role:
    - Provider: Services, Staff (Capacity), Earnings, etc.
    - Client: Upcoming Services count
@@ -40,19 +41,16 @@ router.get("/summary", authenticateToken, (req, res) => {
             SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
             SUM(CASE WHEN a.status = 'no-show' THEN 1 ELSE 0 END) as no_shows,
             SUM(a.amount_paid) as total_earnings,
-            SUM(a.refund_amount) as total_refunds,
+            
+            -- 🔧 FIX: Only count refunds that are COMPLETED
+            SUM(CASE 
+                WHEN a.refund_status = 'completed' THEN a.refund_amount 
+                ELSE 0 
+            END) as total_refunds,
+            
             COUNT(DISTINCT a.client_id) as unique_clients
         FROM appointments a
         WHERE a.provider_id = ?
-    `;
-
-    // ✅ Fix: Use COALESCE to ensure SUM returns 0 instead of NULL if empty
-    const servicesQuery = `
-      SELECT 
-          COUNT(*) as total_services, 
-          COALESCE(SUM(capacity), 0) as total_capacity 
-      FROM services 
-      WHERE provider_id = ?
     `;
 
     db.get(query, [userId], (err, stats) => {
@@ -60,6 +58,14 @@ router.get("/summary", authenticateToken, (req, res) => {
         return res
           .status(500)
           .json({ error: "Database error", details: err.message });
+
+      const servicesQuery = `
+        SELECT 
+            COUNT(*) as total_services, 
+            COALESCE(SUM(capacity), 0) as total_capacity 
+        FROM services 
+        WHERE provider_id = ?
+      `;
 
       db.get(servicesQuery, [userId], (err2, serviceStats) => {
         if (err2) return res.status(500).json({ error: "Database error" });
@@ -80,7 +86,7 @@ router.get("/summary", authenticateToken, (req, res) => {
 });
 
 /* --------------------------------------------------------------------------
-   📈 GET /analytics/trends (Providers Only)
+   📈 GET /insights/trends (Providers Only)
 -------------------------------------------------------------------------- */
 router.get("/trends", authenticateToken, (req, res) => {
   if (req.user.user_type !== "provider") {
