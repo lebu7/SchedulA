@@ -11,6 +11,36 @@ function NotificationCenter() {
   const dropdownRef = useRef(null);
   const navigate = useNavigate(); 
 
+  // ✅ FIXED: Dynamic relative time display
+  const timeAgo = (dateStr) => {
+    if (!dateStr) return 'Just now';
+    
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffInSeconds = Math.floor((now - date) / 1000);
+
+      if (isNaN(diffInSeconds)) return 'Just now';
+
+      if (diffInSeconds < 60) return 'Just now';
+      
+      const diffInMinutes = Math.floor(diffInSeconds / 60);
+      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+      
+      const diffInHours = Math.floor(diffInMinutes / 60);
+      if (diffInHours < 24) return `${diffInHours}h ago`;
+      
+      const diffInDays = Math.floor(diffInHours / 24);
+      if (diffInDays === 1) return 'Yesterday';
+      if (diffInDays < 7) return `${diffInDays}d ago`;
+      
+      return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+    } catch (error) {
+      console.error('Error calculating time ago:', error);
+      return 'Recently';
+    }
+  };
+
   // Poll every 5 seconds
   useEffect(() => {
     fetchNotifications();
@@ -32,8 +62,6 @@ function NotificationCenter() {
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications');
-      // 🧠 CHANGED: No more filtering here. Frontend shows everything backend sends.
-      // Logic for enabling/disabling alerts is now handled in appointments.js (Backend).
       setNotifications(res.data.notifications);
       setUnreadCount(res.data.unread_count);
     } catch (err) {
@@ -133,7 +161,7 @@ function NotificationCenter() {
                   <div className="notif-content">
                     <p className="notif-title">{notif.title}</p>
                     <p className="notif-message">{notif.message}</p>
-                    <span className="notif-time">{new Date(notif.created_at).toLocaleString()}</span>
+                    <span className="notif-time">{timeAgo(notif.created_at)}</span>
                   </div>
                   {!notif.is_read && <div className="unread-dot"></div>}
                 </div>

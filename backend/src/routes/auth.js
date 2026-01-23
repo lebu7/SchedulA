@@ -544,11 +544,59 @@ router.put(
               ? `Updated: ${updatedFields.join(", ")}`
               : "Your profile details have been successfully updated.";
 
-          createNotification(
-            req.user.userId,
-            "system",
-            "Profile Updated",
-            notifMsg,
+          db.get(
+            "SELECT opening_time, closing_time, is_open_sat, is_open_sun FROM users WHERE id = ?",
+            [req.user.userId],
+            (err, user) => {
+              if (err || !user)
+                return res
+                  .status(500)
+                  .json({ error: "Failed to fetch user settings" });
+
+              db.run(
+                `UPDATE users SET opening_time = ?, closing_time = ?, is_open_sat = ?, is_open_sun = ? WHERE id = ?`,
+                [
+                  opening_time,
+                  closing_time,
+                  is_open_sat ? 1 : 0,
+                  is_open_sun ? 1 : 0,
+                  req.user.userId,
+                ],
+                function (err) {
+                  if (err)
+                    return res
+                      .status(500)
+                      .json({ error: "Failed to update hours" });
+
+                  // ✅ DYNAMIC NOTIFICATION
+                  const changedFields = [];
+                  if (
+                    opening_time !== user.opening_time ||
+                    closing_time !== user.closing_time
+                  ) {
+                    changedFields.push("business hours");
+                  }
+                  if ((is_open_sat ? 1 : 0) !== user.is_open_sat)
+                    changedFields.push("Saturday availability");
+                  if ((is_open_sun ? 1 : 0) !== user.is_open_sun)
+                    changedFields.push("Sunday availability");
+
+                  const message =
+                    changedFields.length > 0
+                      ? `Updated: ${changedFields.join(", ")}.`
+                      : "Business settings updated.";
+
+                  createNotification(
+                    req.user.userId,
+                    "system",
+                    "Business Info Updated",
+                    message,
+                  );
+
+                  res.json({ message: "Business hours updated" });
+                },
+              );
+            },
           );
         }
 

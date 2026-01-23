@@ -136,9 +136,15 @@ function Header({ user, onLogout }) {
 
   // ✅ FIXED: Better Dynamic timeAgo helper with correct pluralization
   const timeAgo = (dateStr) => {
+  if (!dateStr) return 'Just now';
+  
+  try {
     const date = new Date(dateStr);
     const now = new Date();
     const diffInSeconds = Math.floor((now - date) / 1000);
+
+    // Handle invalid dates
+    if (isNaN(diffInSeconds)) return 'Just now';
 
     if (diffInSeconds < 60) return 'Just now';
     
@@ -149,10 +155,16 @@ function Header({ user, onLogout }) {
     if (diffInHours < 24) return `${diffInHours}h ago`;
     
     const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays === 1) return 'Yesterday';
     if (diffInDays < 7) return `${diffInDays}d ago`;
     
-    return date.toLocaleDateString();
-  };
+    // For older notifications, show the actual date
+    return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+  } catch (error) {
+    console.error('Error calculating time ago:', error);
+    return 'Recently';
+  }
+};
 
   return (
     <>
@@ -192,7 +204,7 @@ function Header({ user, onLogout }) {
                             <div className="notif-text">
                               <p className="notif-title">{notif.title}</p>
                               <p className="notif-message">{notif.message}</p>
-                              {/* ✅ Dynamic time used here */}
+                              {/* ✅ FIXED: Now uses dynamic timeAgo */}
                               <p className="notif-time">{timeAgo(notif.created_at)}</p>
                             </div>
                             {!notif.is_read && <div className="unread-dot"></div>}
