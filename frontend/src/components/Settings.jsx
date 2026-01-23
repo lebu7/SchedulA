@@ -26,6 +26,7 @@ const Settings = ({ user, setUser }) => {
   });
   
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+  const [passwordError, setPasswordError] = useState(''); // 🆕 Validation Error State
   
   // SMS Preferences (Existing)
   const [notifications, setNotifications] = useState({
@@ -81,22 +82,35 @@ const Settings = ({ user, setUser }) => {
 
   // ✅ FIXED: Logic to handle navigation state
   useEffect(() => {
-    // 1. If a specific subTab is requested (e.g. 'notifications'), switch to it
     if (location.state?.subTab) {
       setActiveTab(location.state.subTab);
     } 
-    // 2. If 'tab' is passed but it's NOT 'settings' (which is the parent route), use it.
-    // This PREVENTS the blank screen issue where activeTab becomes 'settings'.
     else if (location.state?.tab && location.state.tab !== 'settings') {
       setActiveTab(location.state.tab);
     }
-    // 3. Else, do nothing (keep default 'profile')
   }, [location.state]);
 
   const showMsg = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
+
+  // 🔒 Password Validation Logic (Same as Register)
+  const checkPasswordRequirements = (password) => {
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+    if (password.length < minLength) return "Must be at least 8 characters long.";
+    if (!hasUpperCase) return "Must contain at least one uppercase letter.";
+    if (!hasLowerCase) return "Must contain at least one lowercase letter.";
+    if (!hasNumber) return "Must contain at least one number.";
+    if (!hasSymbol) return "Must contain at least one special symbol.";
+    
+    return null; 
+  }
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
@@ -127,7 +141,21 @@ const Settings = ({ user, setUser }) => {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    if (passwords.new !== passwords.confirm) return showMsg('error', 'New passwords do not match');
+    setPasswordError(''); // Clear previous errors
+
+    // 1. Validate Password Strength
+    const validationError = checkPasswordRequirements(passwords.new);
+    if (validationError) {
+      setPasswordError(validationError);
+      return;
+    }
+
+    // 2. Validate Match
+    if (passwords.new !== passwords.confirm) {
+      showMsg('error', 'New passwords do not match');
+      return;
+    }
+
     setLoading(true);
     try {
       await api.put('/auth/password', { currentPassword: passwords.current, newPassword: passwords.new });
@@ -182,6 +210,9 @@ const Settings = ({ user, setUser }) => {
     }
     setLoading(false);
   };
+
+  // Helper style for red borders
+  const errorInputStyle = { border: '1px solid red', backgroundColor: '#fff0f0' };
 
   return (
     <div className="settings-container">
@@ -267,10 +298,30 @@ const Settings = ({ user, setUser }) => {
               </div>
               <div className="form-group">
                 <label>New Password</label>
-                <input type="password" value={passwords.new} onChange={e => setPasswords({...passwords, new: e.target.value})} required minLength={6} />
+                <input 
+                  type="password" 
+                  value={passwords.new} 
+                  onChange={e => {
+                    setPasswords({...passwords, new: e.target.value});
+                    // Clear error when user starts typing again
+                    if (passwordError) setPasswordError('');
+                  }} 
+                  required 
+                  style={passwordError ? errorInputStyle : {}}
+                />
+                {/* 🆕 Validation Message / Error */}
+                <div style={{ marginTop: '5px', fontSize: '0.85rem' }}>
+                  {passwordError ? (
+                    <span style={{ color: 'red', fontWeight: 'bold' }}>⚠️ {passwordError}</span>
+                  ) : (
+                    <span style={{ color: '#666' }}>
+                      Requirement: 8+ chars, Uppercase, Lowercase, Number & Symbol.
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="form-group">
-                <label>Confirm New</label>
+                <label>Confirm New Password</label>
                 <input type="password" value={passwords.confirm} onChange={e => setPasswords({...passwords, confirm: e.target.value})} required />
               </div>
               <button type="submit" className="save-btn btn-secondary" disabled={loading}>
