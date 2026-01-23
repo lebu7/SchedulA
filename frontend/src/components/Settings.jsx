@@ -7,7 +7,7 @@ import './Settings.css';
 const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
   
-  // ✅ Initialize active tab from navigation state or default to 'profile'
+  // ✅ Initialize active tab (default to 'profile')
   const [activeTab, setActiveTab] = useState('profile');
 
   // 🆕 Sub-tab state for Notifications (SMS vs In-App)
@@ -79,14 +79,18 @@ const Settings = ({ user, setUser }) => {
     }
   }, [user]);
 
-  // Update active tab if navigation state changes
+  // ✅ FIXED: Logic to handle navigation state
   useEffect(() => {
-    if (location.state?.tab) {
-      setActiveTab(location.state.tab);
-    }
+    // 1. If a specific subTab is requested (e.g. 'notifications'), switch to it
     if (location.state?.subTab) {
       setActiveTab(location.state.subTab);
+    } 
+    // 2. If 'tab' is passed but it's NOT 'settings' (which is the parent route), use it.
+    // This PREVENTS the blank screen issue where activeTab becomes 'settings'.
+    else if (location.state?.tab && location.state.tab !== 'settings') {
+      setActiveTab(location.state.tab);
     }
+    // 3. Else, do nothing (keep default 'profile')
   }, [location.state]);
 
   const showMsg = (type, text) => {
@@ -106,7 +110,6 @@ const Settings = ({ user, setUser }) => {
     }
 
     try {
-      // ✅ Now sends gender and dob to backend
       const res = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
       showMsg('success', 'Profile updated successfully!');
       
@@ -138,20 +141,17 @@ const Settings = ({ user, setUser }) => {
 
   // Toggle SMS Settings
   const handleNotificationToggle = async (key) => {
-    if (key === 'confirmation' || key === 'refund') return; // Locked toggles
+    if (key === 'confirmation' || key === 'refund') return; 
     
     const newPrefs = { ...notifications, [key]: !notifications[key] };
     setNotifications(newPrefs);
-    // Save SMS + Current In-App to avoid overwriting
     savePreferences({ ...newPrefs, in_app: inAppPrefs });
   };
 
-  // 🧠 Toggle In-App Settings
+  // Toggle In-App Settings
   const handleInAppToggle = async (key) => {
     const newInApp = { ...inAppPrefs, [key]: !inAppPrefs[key] };
     setInAppPrefs(newInApp);
-    
-    // Merge into main preferences object (SMS + New In-App)
     const mergedPrefs = { ...notifications, in_app: newInApp };
     savePreferences(mergedPrefs);
   };
@@ -159,11 +159,9 @@ const Settings = ({ user, setUser }) => {
   const savePreferences = async (prefs) => {
     try {
         await api.put('/auth/notifications', { preferences: prefs });
-        
         const updatedUser = { ...user, notification_preferences: prefs };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
-        
     } catch (err) { 
       console.error('Failed to save prefs:', err.response?.data || err.message);
       showMsg('error', 'Failed to save setting.');
@@ -289,7 +287,6 @@ const Settings = ({ user, setUser }) => {
           <div className="section-header-row">
               <h3>Notification Preferences</h3>
               
-              {/* 🧠 PILL TABS FOR SMS / IN-APP */}
               <div className="pill-nav">
                   <button 
                     className={`pill-btn ${notifSubTab === 'sms' ? 'active' : ''}`}
@@ -306,7 +303,6 @@ const Settings = ({ user, setUser }) => {
               </div>
           </div>
 
-          {/* SMS SETTINGS VIEW */}
           {notifSubTab === 'sms' && (
               <div className="notif-group fade-in">
                   <p className="section-desc">Manage text messages sent to your phone.</p>
@@ -317,7 +313,6 @@ const Settings = ({ user, setUser }) => {
                   <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
                   <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
                   
-                  {/* Refund Notification Toggle (Locked) */}
                   <Toggle label="Refund Notifications" desc="Sent when refunds are processed (Required)" checked={true} disabled />
 
                   {user.user_type === 'provider' && (
@@ -329,7 +324,6 @@ const Settings = ({ user, setUser }) => {
               </div>
           )}
 
-          {/* 🆕 IN-APP SETTINGS VIEW */}
           {notifSubTab === 'in-app' && (
               <div className="notif-group fade-in">
                   <p className="section-desc">Control what appears in your notification bell.</p>
