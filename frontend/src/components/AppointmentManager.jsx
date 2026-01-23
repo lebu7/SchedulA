@@ -110,13 +110,10 @@ function PaymentInfoModal({ payment, user, onClose }) {
     let transactionHtml = "";
     if (transactions.length > 0) {
         transactionHtml = transactions.map((tx, idx) => {
-            // Determine Label: 1st is Deposit, 2nd is Balance (unless refund)
             let label = "Payment";
             if (tx.type === 'refund') label = "Refund";
             else if (idx === 0) label = "Deposit"; 
             else if (idx === 1) label = "Balance";
-
-            const cleanRef = tx.reference.replace(/^ref_/i, '');
 
             return `
             <div style="margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px;">

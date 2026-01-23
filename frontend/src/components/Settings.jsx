@@ -8,9 +8,7 @@ const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
   
   // ✅ Initialize active tab from navigation state or default to 'profile'
-  const [activeTab, setActiveTab] = useState(() => {
-      return location.state?.tab || 'profile';
-  });
+  const [activeTab, setActiveTab] = useState('profile');
 
   // 🆕 Sub-tab state for Notifications (SMS vs In-App)
   const [notifSubTab, setNotifSubTab] = useState('sms');
@@ -83,6 +81,9 @@ const Settings = ({ user, setUser }) => {
 
   // Update active tab if navigation state changes
   useEffect(() => {
+    if (location.state?.tab) {
+      setActiveTab(location.state.tab);
+    }
     if (location.state?.subTab) {
       setActiveTab(location.state.subTab);
     }
