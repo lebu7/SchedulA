@@ -7,7 +7,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const [step, setStep] = useState(1);
   
   // Data States
-  const [selectedDate, setSelectedDate] = useState("");
+  // 🆕 If Walk-In, default to Today's date immediately
+  const [selectedDate, setSelectedDate] = useState(isWalkIn ? new Date().toISOString().split("T")[0] : "");
   const [selectedTime, setSelectedTime] = useState("");
   const [slots, setSlots] = useState([]); 
   const [notes, setNotes] = useState("");
@@ -86,8 +87,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
       const availabilityData = availabilityRes.data;
       
-      // For Providers: This list contains ALL bookings for everyone.
-      // For Clients: This list contains only THEIR bookings.
       const userAppsObj = userRes.data.appointments || {};
       const allUserActiveApps = [
         ...(userAppsObj.pending || []),
@@ -133,11 +132,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
     const now = new Date(); 
     const serviceCapacity = serviceMeta.capacity || 1;
+    const duration = serviceMeta.duration || 30;
 
     while (current < end) {
       const timeString = current.toTimeString().slice(0, 5);
       
-      const slotEndTime = new Date(current.getTime() + (serviceMeta.duration || 30) * 60000);
+      const slotEndTime = new Date(current.getTime() + duration * 60000);
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
       // 1. Check Global Capacity
@@ -147,17 +147,35 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                (timeString <= booking.start && timeStringEnd >= booking.end); 
       }).length;
 
-      // 2. Check "Already Booked" status
-      // ⚠️ FIX: If user is a PROVIDER, we ignore this check. 
-      // Providers see ALL bookings, so this check would always return true if anyone is booked.
-      // Providers should only be blocked by 'isFull' (Capacity).
+      // 2. Check "Already Booked" status (Ignored for providers/walk-ins)
       const isBookedByMe = user.user_type === 'client' && !isWalkIn && myBookings.some(myAppt => {
         const myTime = new Date(myAppt.appointment_date).toTimeString().slice(0, 5);
         return myTime === timeString;
       });
 
       const isFull = overlapCount >= serviceCapacity;
-      const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
+      
+      // 🆕 WALK-IN TIME LOGIC:
+      // A slot is "past" if the current real time is AFTER the slot start time.
+      // We allow a small buffer (e.g. 15 mins) so if it's 10:10, you can still book 10:00 walk-in.
+      const bufferTime = new Date(now.getTime() - 15 * 60000); 
+      
+      let isPast = false;
+      
+      if (isWalkIn) {
+         // Strict check for walk-ins: You can't book a slot that has already passed significantly
+         // AND you can't book a slot way in the future (e.g. 5 hours from now) - Walk-ins are "Now"
+         // Actually, "Walk-in" implies arrival now. So we should highlight the slot closest to NOW.
+         // But for flexibility, let's just ensure we don't book past slots.
+         isPast = current < bufferTime;
+         
+         // Optional: Prevent booking too far in future for walk-in (e.g. > 2 hours)
+         // const futureLimit = new Date(now.getTime() + 120 * 60000);
+         // if (current > futureLimit) isPast = true; // Treat future as "unavailable" for walk-in context
+      } else {
+         // Standard client logic: Just check if date is today and time is past
+         isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
+      }
 
       generated.push({
         time: timeString,
@@ -331,13 +349,19 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   const getMinDate = () => {
+    // 🆕 For Walk-Ins, FORCE Today.
     if (isWalkIn) return new Date().toISOString().split("T")[0];
+    
+    // For clients, typically allow booking from tomorrow (or today if logic permits)
     const today = new Date();
     today.setDate(today.getDate() + 1);
     return today.toISOString().split("T")[0];
   };
 
   const getMaxDate = () => {
+    // 🆕 For Walk-Ins, FORCE Today.
+    if (isWalkIn) return new Date().toISOString().split("T")[0];
+    
     const maxDate = new Date();
     maxDate.setDate(maxDate.getDate() + 30);
     return maxDate.toISOString().split("T")[0];
@@ -363,16 +387,28 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
           <form onSubmit={handleSubmit} className="booking-form">
             {error && <div className="error-message">⚠️ {error}</div>}
 
+            {/* STEP 1: DATE & TIME (Plus Payment for Walk-Ins) */}
             {step === 1 ? (
               <div className="step-1">
                 <div className="form-group">
                   <label>Select Date</label>
-                  <input type="date" className="styled-input" value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(""); }} min={getMinDate()} max={getMaxDate()} />
+                  {/* 🆕 Walk-In: ReadOnly Date Input set to Today */}
+                  <input 
+                    type="date" 
+                    className="styled-input" 
+                    value={selectedDate} 
+                    onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(""); }} 
+                    min={getMinDate()} 
+                    max={getMaxDate()}
+                    readOnly={isWalkIn} // 🔒 Lock date for Walk-Ins
+                    style={isWalkIn ? {backgroundColor: '#f1f5f9', cursor: 'not-allowed'} : {}}
+                  />
+                  {isWalkIn && <small style={{color: '#64748b', fontSize: '11px'}}>Walk-ins are recorded for today.</small>}
                 </div>
 
                 <div className="form-group">
                   <label>Select Time</label>
-                  {!selectedDate ? <p className="hint">Please select a date first.</p> : loadingSlots ? <p className="hint">Loading availability...</p> : slots.length === 0 ? <p className="hint error">No slots available on this date.</p> : (
+                  {!selectedDate ? <p className="hint">Please select a date first.</p> : loadingSlots ? <p className="hint">Loading availability...</p> : slots.length === 0 ? <p className="hint error">No slots available.</p> : (
                     <div className="time-grid">
                       {slots.map((slot) => (
                         <button 
@@ -390,6 +426,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                   )}
                 </div>
 
+                {/* 🆕 WALK-IN PAYMENT FIELDS */}
                 {isWalkIn && (
                   <div className="walk-in-payment-section" style={{background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px'}}>
                     <h4 style={{fontSize: '0.9em', color: '#1e293b', marginBottom: '10px', marginTop: 0}}>💰 Record Payment</h4>

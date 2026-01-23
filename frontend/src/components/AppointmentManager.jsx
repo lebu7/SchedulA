@@ -638,7 +638,7 @@ function AppointmentManager({ user }) {
 
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
                 <h4>{apt.service_name}</h4>
-                {isWalkIn && <span className="walk-in-badge" style={{background:'#dbeafe', color:'#1e40af', padding:'2px 8px', borderRadius:'12px', fontSize:'0.75rem', fontWeight:'600'}}>Walk-In</span>}
+                {isWalkIn && <span className="walk-in-badge" >Walk-In</span>}
             </div>
 
             {user.user_type === "client" ? (
@@ -908,34 +908,26 @@ function AppointmentManager({ user }) {
 
         return (
             <div className="appointments-split-view">
-                <div className="sub-tab-pills" style={{marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center'}}>
-                    <button 
-                        className={`pill-tab ${upcomingSubTab === 'due' ? 'active warning-pill' : ''}`}
-                        onClick={() => setUpcomingSubTab('due')}
-                        style={{
-                            padding: '8px 16px', borderRadius: '20px', border: '1px solid #cbd5e1', 
-                            background: upcomingSubTab === 'due' ? '#fff7ed' : 'white',
-                            color: upcomingSubTab === 'due' ? '#c2410c' : '#64748b',
-                            fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                        }}
-                    >
-                        <AlertTriangle size={16} /> Actions Due ({dueAppointments.length})
-                    </button>
+                {/* 🆕 UPDATED: Replaced sub-tab-pills with history-filters style for matching UI */}
+                <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+                    <div className="status-filters">
+                        <button 
+                            className={`filter-pill ${upcomingSubTab === 'due' ? 'active' : ''}`}
+                            onClick={() => setUpcomingSubTab('due')}
+                        >
+                            <AlertTriangle size={14} style={{marginBottom: '-2px', marginRight: '4px'}}/> Actions Due ({dueAppointments.length})
+                        </button>
 
-                    <button 
-                        className={`pill-tab ${upcomingSubTab === 'future' ? 'active info-pill' : ''}`}
-                        onClick={() => setUpcomingSubTab('future')}
-                        style={{
-                            padding: '8px 16px', borderRadius: '20px', border: '1px solid #cbd5e1', 
-                            background: upcomingSubTab === 'future' ? '#eff6ff' : 'white',
-                            color: upcomingSubTab === 'future' ? '#2563eb' : '#64748b',
-                            fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                        }}
-                    >
-                        <Calendar size={16} /> Future ({futureAppointments.length})
-                    </button>
+                        <button 
+                            className={`filter-pill ${upcomingSubTab === 'future' ? 'active' : ''}`}
+                            onClick={() => setUpcomingSubTab('future')}
+                        >
+                            <Calendar size={14} style={{marginBottom: '-2px', marginRight: '4px'}}/> Future ({futureAppointments.length})
+                        </button>
+                    </div>
 
-                     {upcomingSubTab === 'future' && (
+                    {/* Test Mode Toggle moved here */}
+                    {upcomingSubTab === 'future' && (
                         <label className="dev-mode-toggle" style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#64748b', cursor:'pointer'}}>
                             <input 
                                 type="checkbox" 
@@ -990,17 +982,6 @@ function AppointmentManager({ user }) {
             </h2>
             
             <div className="am-controls" style={{ display: 'flex', gap: '10px' }}>
-                {/* 🆕 WALK-IN BUTTON (Provider Only) */}
-                {user.user_type === 'provider' && (
-                    <button 
-                        className="btn btn-primary" 
-                        onClick={handleWalkInClick}
-                        style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px 16px', borderRadius:'8px', fontSize:'13px'}}
-                    >
-                        <UserPlus size={16} /> Walk-In / Block Time
-                    </button>
-                )}
-
                 <div className="search-box" style={{ position: 'relative', width: '220px' }}>
                     <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input 
@@ -1057,6 +1038,16 @@ function AppointmentManager({ user }) {
                 </button>
             )
           })}
+          {/* 🆕 Walk-In Button moved inside tabs and pushed to right */}
+          {user.user_type === 'provider' && (
+              <button 
+                  className="btn-walk-in" 
+                  onClick={handleWalkInClick}
+                  style={{ marginLeft: 'auto' }}
+              >
+                  <UserPlus size={16} /> Walk-In
+              </button>
+          )}
         </div>
 
         {activeTab === 'history' && (
