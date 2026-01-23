@@ -1,4 +1,3 @@
-/* backend/src/routes/analytics.js */
 import express from "express";
 import { db } from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
@@ -7,75 +6,153 @@ const router = express.Router();
 
 /* --------------------------------------------------------------------------
    📊 GET /insights/summary
-   Returns metrics based on user role:
-   - Provider: Services, Staff (Capacity), Earnings, etc.
-   - Client: Upcoming Services count
+   Returns combined metrics for:
+   1. Dashboard Overview (Today's stats, Next Client)
+   2. Analytics Page (Historical totals, Earnings, Retention)
 -------------------------------------------------------------------------- */
 router.get("/summary", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   const userType = req.user.user_type;
 
-  // ✅ 1. CLIENT LOGIC: Get Upcoming Appointments
+  // ✅ 1. CLIENT LOGIC (Unchanged)
   if (userType === "client") {
-    const query = `
-      SELECT COUNT(*) as upcoming_services
-      FROM appointments 
-      WHERE client_id = ? 
-      AND status = 'scheduled' 
-      AND datetime(appointment_date) >= datetime('now')
+    const nextApptQuery = `
+      SELECT a.id, a.appointment_date, s.name as service_name, u.name as provider_name, u.business_name
+      FROM appointments a
+      JOIN services s ON a.service_id = s.id
+      JOIN users u ON a.provider_id = u.id
+      WHERE a.client_id = ? 
+      AND a.status IN ('scheduled', 'pending') 
+      AND a.appointment_date >= datetime('now', 'localtime')
+      ORDER BY a.appointment_date ASC 
+      LIMIT 1
     `;
 
-    db.get(query, [userId], (err, row) => {
+    const rebookQuery = `
+      SELECT DISTINCT s.id, s.name, s.price, u.business_name as provider_name, u.name as provider_real_name
+      FROM appointments a
+      JOIN services s ON a.service_id = s.id
+      JOIN users u ON a.provider_id = u.id
+      WHERE a.client_id = ? AND a.status = 'completed'
+      ORDER BY a.appointment_date DESC
+      LIMIT 4
+    `;
+
+    db.get(nextApptQuery, [userId], (err, nextApt) => {
       if (err) return res.status(500).json({ error: "Database error" });
-      res.json({ upcoming_services: row?.upcoming_services || 0 });
+      db.all(rebookQuery, [userId], (err2, rebookSuggestions) => {
+        if (err2) return res.status(500).json({ error: "Database error" });
+        res.json({
+          next_appointment: nextApt || null,
+          rebook_suggestions: rebookSuggestions || [],
+        });
+      });
     });
     return;
   }
 
-  // ✅ 2. PROVIDER LOGIC
+  // ✅ 2. PROVIDER LOGIC (Combined)
   if (userType === "provider") {
-    const query = `
+    // Query A: HISTORICAL STATS (For Analytics Page)
+    const overallStatsQuery = `
         SELECT 
             COUNT(a.id) as total_appointments,
             SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) as completed,
             SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
             SUM(CASE WHEN a.status = 'no-show' THEN 1 ELSE 0 END) as no_shows,
-            SUM(a.amount_paid) as total_earnings,
-            
-            -- 🔧 FIX: Only count refunds that are COMPLETED
-            SUM(CASE 
-                WHEN a.refund_status = 'completed' THEN a.refund_amount 
-                ELSE 0 
-            END) as total_refunds,
-            
+            COALESCE(SUM(a.amount_paid), 0) as total_earnings,
+            COALESCE(SUM(CASE WHEN a.refund_status = 'completed' THEN a.refund_amount ELSE 0 END), 0) as total_refunds,
             COUNT(DISTINCT a.client_id) as unique_clients
         FROM appointments a
         WHERE a.provider_id = ?
     `;
 
-    db.get(query, [userId], (err, stats) => {
-      if (err)
-        return res
-          .status(500)
-          .json({ error: "Database error", details: err.message });
+    // Query B: SERVICE STATS (For Analytics Page)
+    const servicesQuery = `
+      SELECT 
+          COUNT(*) as total_services, 
+          COALESCE(SUM(capacity), 0) as total_staff
+      FROM services 
+      WHERE provider_id = ?
+    `;
 
-      const servicesQuery = `
+    // Query C: TODAY'S STATS (For Dashboard Overview)
+    const todayStatsQuery = `
         SELECT 
-            COUNT(*) as total_services, 
-            COALESCE(SUM(capacity), 0) as total_capacity 
-        FROM services 
-        WHERE provider_id = ?
-      `;
+            COUNT(*) as today_count,
+            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as today_pending,
+            COALESCE(SUM(CASE WHEN status IN ('scheduled', 'completed') THEN amount_paid ELSE 0 END), 0) as today_revenue
+        FROM appointments 
+        WHERE provider_id = ? 
+        AND date(appointment_date) = date('now', 'localtime') 
+    `;
 
-      db.get(servicesQuery, [userId], (err2, serviceStats) => {
+    // Query D: NEXT CLIENT (For Dashboard Overview)
+    const nextClientQuery = `
+        SELECT c.name as client_name, a.appointment_date
+        FROM appointments a
+        JOIN users c ON a.client_id = c.id
+        WHERE a.provider_id = ? 
+        AND a.appointment_date > datetime('now', 'localtime')
+        AND a.status IN ('scheduled', 'pending')
+        ORDER BY a.appointment_date ASC 
+        LIMIT 1
+    `;
+
+    // Query E: TODAY'S VISUAL SCHEDULE (For Dashboard Overview)
+    const todayScheduleQuery = `
+        SELECT a.id, a.appointment_date, a.status, c.name as client_name, s.name as service_name, s.duration
+        FROM appointments a
+        JOIN users c ON a.client_id = c.id
+        JOIN services s ON a.service_id = s.id
+        WHERE a.provider_id = ? 
+        AND date(a.appointment_date) = date('now', 'localtime')
+        ORDER BY a.appointment_date ASC
+    `;
+
+    // Execute Queries in Sequence (Nested to ensure data integrity)
+    db.get(overallStatsQuery, [userId], (err, overall) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+
+      db.get(servicesQuery, [userId], (err2, services) => {
         if (err2) return res.status(500).json({ error: "Database error" });
 
-        res.json({
-          ...stats,
-          total_services: serviceStats.total_services || 0,
-          total_staff: serviceStats.total_capacity || 0,
-          net_earnings:
-            (stats.total_earnings || 0) - (stats.total_refunds || 0),
+        db.get(todayStatsQuery, [userId], (err3, today) => {
+          if (err3) return res.status(500).json({ error: "Database error" });
+
+          db.get(nextClientQuery, [userId], (err4, nextClient) => {
+            if (err4) return res.status(500).json({ error: "Database error" });
+
+            db.all(todayScheduleQuery, [userId], (err5, schedule) => {
+              if (err5)
+                return res.status(500).json({ error: "Database error" });
+
+              // ✅ Combine ALL data into one response
+              res.json({
+                // --- Analytics Page Data ---
+                total_appointments: overall.total_appointments || 0,
+                completed: overall.completed || 0,
+                cancelled: overall.cancelled || 0,
+                no_shows: overall.no_shows || 0,
+                total_earnings: overall.total_earnings || 0,
+                total_refunds: overall.total_refunds || 0,
+                net_earnings:
+                  (overall.total_earnings || 0) - (overall.total_refunds || 0),
+                unique_clients: overall.unique_clients || 0,
+                total_services: services.total_services || 0,
+                total_staff: services.total_staff || 0,
+
+                // --- Dashboard Overview Data ---
+                today_metrics: {
+                  count: today ? today.today_count : 0,
+                  pending: today ? today.today_pending : 0,
+                  today_revenue: today ? today.today_revenue : 0,
+                },
+                next_client: nextClient || null,
+                today_schedule: schedule || [],
+              });
+            });
+          });
         });
       });
     });
@@ -86,27 +163,18 @@ router.get("/summary", authenticateToken, (req, res) => {
 });
 
 /* --------------------------------------------------------------------------
-   📈 GET /insights/trends (Providers Only)
+   📈 GET /insights/trends (Unchanged)
 -------------------------------------------------------------------------- */
 router.get("/trends", authenticateToken, (req, res) => {
   if (req.user.user_type !== "provider") {
     return res.status(403).json({ error: "Access denied" });
   }
-
   const providerId = req.user.userId;
-
   const query = `
-        SELECT 
-            strftime('%Y-%m', appointment_date) as month,
-            COUNT(id) as count,
-            SUM(amount_paid) as revenue
-        FROM appointments
-        WHERE provider_id = ? AND status != 'cancelled'
-        GROUP BY month
-        ORDER BY month ASC
-        LIMIT 12
+        SELECT strftime('%Y-%m', appointment_date) as month, COUNT(id) as count, SUM(amount_paid) as revenue
+        FROM appointments WHERE provider_id = ? AND status != 'cancelled'
+        GROUP BY month ORDER BY month ASC LIMIT 12
     `;
-
   db.all(query, [providerId], (err, rows) => {
     if (err) return res.status(500).json({ error: "Database error" });
     res.json(rows);

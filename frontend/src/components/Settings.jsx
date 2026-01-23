@@ -7,8 +7,15 @@ import './Settings.css';
 const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
   
-  // ✅ Initialize active tab (default to 'profile')
-  const [activeTab, setActiveTab] = useState('profile');
+  // ✅ FIX: Initialize active tab with validation (prevents loading 'pending' or 'appointments' tabs from stale state)
+  const [activeTab, setActiveTab] = useState(() => {
+      const validTabs = ['profile', 'notifications', 'hours'];
+      // Only use the subTab from state if it belongs to Settings
+      if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
+          return location.state.subTab;
+      }
+      return 'profile';
+  });
 
   // 🆕 Sub-tab state for Notifications (SMS vs In-App)
   const [notifSubTab, setNotifSubTab] = useState('sms');
@@ -26,7 +33,7 @@ const Settings = ({ user, setUser }) => {
   });
   
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
-  const [passwordError, setPasswordError] = useState(''); // 🆕 Validation Error State
+  const [passwordError, setPasswordError] = useState(''); 
   
   // SMS Preferences (Existing)
   const [notifications, setNotifications] = useState({
@@ -80,13 +87,11 @@ const Settings = ({ user, setUser }) => {
     }
   }, [user]);
 
-  // ✅ FIXED: Logic to handle navigation state
+  // ✅ LISTEN: Also update if location state changes while mounted (with validation)
   useEffect(() => {
-    if (location.state?.subTab) {
+    const validTabs = ['profile', 'notifications', 'hours'];
+    if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
       setActiveTab(location.state.subTab);
-    } 
-    else if (location.state?.tab && location.state.tab !== 'settings') {
-      setActiveTab(location.state.tab);
     }
   }, [location.state]);
 
@@ -95,7 +100,7 @@ const Settings = ({ user, setUser }) => {
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
 
-  // 🔒 Password Validation Logic (Same as Register)
+  // 🔒 Password Validation Logic
   const checkPasswordRequirements = (password) => {
     const minLength = 8;
     const hasUpperCase = /[A-Z]/.test(password);
@@ -141,7 +146,7 @@ const Settings = ({ user, setUser }) => {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    setPasswordError(''); // Clear previous errors
+    setPasswordError(''); 
 
     // 1. Validate Password Strength
     const validationError = checkPasswordRequirements(passwords.new);
@@ -303,13 +308,11 @@ const Settings = ({ user, setUser }) => {
                   value={passwords.new} 
                   onChange={e => {
                     setPasswords({...passwords, new: e.target.value});
-                    // Clear error when user starts typing again
                     if (passwordError) setPasswordError('');
                   }} 
                   required 
                   style={passwordError ? errorInputStyle : {}}
                 />
-                {/* 🆕 Validation Message / Error */}
                 <div style={{ marginTop: '5px', fontSize: '0.85rem' }}>
                   {passwordError ? (
                     <span style={{ color: 'red', fontWeight: 'bold' }}>⚠️ {passwordError}</span>

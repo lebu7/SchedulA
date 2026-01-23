@@ -253,7 +253,7 @@ function Header({ user, onLogout }) {
                   </div>
                   <div className="modal-stat-box">
                      <h4>{userStats.total_staff || 0}</h4>
-                     <span>Total Capacity</span>
+                     <span>Staff</span>
                   </div>
                 </>
               ) : (
