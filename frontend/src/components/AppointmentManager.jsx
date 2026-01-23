@@ -4,13 +4,13 @@ import { useLocation } from "react-router-dom";
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
+import CalendarView from "./CalendarView"; // 🆕 Integrated
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
-  Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare 
+  Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare, List 
 } from "lucide-react"; 
 import "./AppointmentManager.css";
 
-// ... [Keep helper functions: parseAddons, getRiskBadge unchanged] ...
 const parseAddons = (apt) => {
   let selectedAddons =
     apt?.addons || apt?.addon_items || apt?.sub_services || [];
@@ -54,19 +54,16 @@ const getRiskBadge = (riskScore) => {
   }
 };
 
-/* 💳 Printable Payment Info Modal (Fixed Duplicates) */
 function PaymentInfoModal({ payment, user, onClose }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔄 Fetch and Deduplicate Transactions
   useEffect(() => {
     if (payment?.id) {
       setLoading(true);
       api.get(`/appointments/${payment.id}/transactions`)
         .then((res) => {
           const raw = res.data.transactions || [];
-          // 🧠 Deduplicate by Reference ID
           const unique = raw.filter((tx, index, self) =>
             index === self.findIndex((t) => t.reference === tx.reference)
           );
@@ -106,7 +103,6 @@ function PaymentInfoModal({ payment, user, onClose }) {
       statusBg = "#fee2e2";
     }
 
-    // 🧾 Generate HTML for transactions
     let transactionHtml = "";
     if (transactions.length > 0) {
         transactionHtml = transactions.map((tx, idx) => {
@@ -216,7 +212,6 @@ function PaymentInfoModal({ payment, user, onClose }) {
           
           <div style={{ borderTop: "1px dashed #e2e8f0", margin: "12px 0" }}></div>
           
-          {/* On-Screen Transaction List */}
           {loading ? (
              <p style={{fontSize: '0.85em', color: '#94a3b8', fontStyle: 'italic', padding: '10px 0'}}>Loading history...</p>
           ) : transactions.length > 0 ? (
@@ -261,7 +256,6 @@ function PaymentInfoModal({ payment, user, onClose }) {
   );
 }
 
-// ... [Rest of AppointmentManager component remains unchanged] ...
 function AppointmentManager({ user }) {
   const location = useLocation(); 
   const [appointments, setAppointments] = useState({
@@ -272,28 +266,24 @@ function AppointmentManager({ user }) {
   });
   const [loading, setLoading] = useState(true);
   
+  const [viewMode, setViewMode] = useState('list'); // 🆕 'list' or 'calendar'
+
   const [activeTab, setActiveTab] = useState(() => {
     if (location.state?.subTab) return location.state.subTab;
     return user.user_type === "provider" ? "upcoming" : "pending";
   });
 
-  // 🆕 Sub-tab state for Provider Upcoming view
   const [upcomingSubTab, setUpcomingSubTab] = useState("due");
-
-  // 🆕 Search & Sort States
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortOption, setSortOption] = useState("date-desc"); // Default: Newest/Future first
+  const [sortOption, setSortOption] = useState("date-desc");
 
   const [updating, setUpdating] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
   
-  // Status Filter (History)
   const [historyFilter, setHistoryFilter] = useState("all"); 
-  // Date Filter (History)
   const [dateFilter, setDateFilter] = useState("all"); 
 
-  // 🆕 DEV MODE
   const [isDevMode, setIsDevMode] = useState(false);
 
   const [showBooking, setShowBooking] = useState(false);
@@ -302,7 +292,6 @@ function AppointmentManager({ user }) {
   const [rescheduleApt, setRescheduleApt] = useState(null); 
   const [processingPayment, setProcessingPayment] = useState(null); 
 
-  // 🆕 Walk-In States
   const [showServiceSelector, setShowServiceSelector] = useState(false);
   const [providerServices, setProviderServices] = useState([]);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -321,9 +310,7 @@ function AppointmentManager({ user }) {
         return;
       }
       
-      // Check upcoming/due
       const allUpcoming = [...(appointments.upcoming || []), ...(appointments.scheduled || [])];
-      // Also check if it's a 'due' item hiding in past
       const pastDue = appointments.past?.filter(a => a.status === 'scheduled') || [];
       const combinedUpcoming = [...allUpcoming, ...pastDue];
 
@@ -353,31 +340,21 @@ function AppointmentManager({ user }) {
     }
   };
 
-  // 🧠 REORGANIZED DATA (Memoized to fix counters)
   const processedAppointments = useMemo(() => {
     const rawPending = appointments.pending || [];
-    
-    // 1. Identify "Due" items currently sitting in history
     const pastDueItems = (appointments.past || []).filter(a => a.status === 'scheduled');
-    
-    // 2. Base Upcoming list
     const baseUpcoming = user.user_type === 'client' 
         ? (appointments.scheduled || []) 
         : (appointments.upcoming || []);
-    
-    // 3. Combine for true "Upcoming" list (Provider sees due items here)
     const combinedUpcoming = user.user_type === 'provider' 
         ? [...baseUpcoming, ...pastDueItems] 
         : baseUpcoming; 
-
-    // 4. Clean History (Remove the due items we moved)
     const cleanHistory = (appointments.past || []).filter(a => a.status !== 'scheduled');
 
-    // 🚨 FIX: Return 'scheduled' key for clients, pointing to same data as upcoming
     return {
         pending: rawPending,
         upcoming: combinedUpcoming,
-        scheduled: combinedUpcoming, // ✅ FIX: Maps client's 'scheduled' tab to data
+        scheduled: combinedUpcoming, 
         history: cleanHistory
     };
   }, [appointments, user.user_type]);
@@ -390,20 +367,18 @@ function AppointmentManager({ user }) {
         await fetchAppointments();
         alert("Appointment deleted.");
       } catch (err) {
-        // Show the backend error if available (e.g., 6 months rule)
         alert(err.response?.data?.error || "Failed to delete appointment.");
       }
     }
   };
 
   const handleRebook = (apt) => {
-    // ✅ FIX: Ensure provider_id is passed for availability check
     setRebookService({
-      service_id: apt.service_id, // Important: Use service_id for rebooking logic
-      id: apt.service_id, // Fallback
+      service_id: apt.service_id, 
+      id: apt.service_id, 
       name: apt.service_name,
       provider_name: apt.provider_name,
-      provider_id: apt.provider_id, // ✅ CRITICAL FIX: Pass provider_id so modal can check slots
+      provider_id: apt.provider_id, 
       duration: apt.duration,
       price: apt.price,
       opening_time: apt.opening_time || "08:00",
@@ -414,14 +389,12 @@ function AppointmentManager({ user }) {
     setShowBooking(true);
   };
 
-  // 🆕 Walk-In Flow
   const handleWalkInClick = async () => {
     setShowServiceSelector(true);
     if (providerServices.length === 0) {
         setLoadingServices(true);
         try {
             const res = await api.get('/services');
-            // Filter services for THIS provider
             const myServices = res.data.services.filter(s => s.provider_id === user.id);
             setProviderServices(myServices);
         } catch(e) { 
@@ -435,7 +408,7 @@ function AppointmentManager({ user }) {
   const selectWalkInService = (service) => {
       setWalkInService(service);
       setShowServiceSelector(false);
-      setShowBooking(true); // Re-use booking modal in Walk-In mode
+      setShowBooking(true); 
   };
 
   const handleReschedule = (apt) => {
@@ -567,7 +540,6 @@ function AppointmentManager({ user }) {
     );
   };
 
-  // 🆕 Helper Function to Render Single Card (Reusable)
   const renderAppointmentCard = (apt, type) => {
      const selectedAddons = parseAddons(apt);
      const addonsTotal = selectedAddons.reduce(
@@ -605,15 +577,12 @@ function AppointmentManager({ user }) {
      const isFuture = new Date(apt.appointment_date) > new Date();
      const actionsDisabled = isFuture && !isDevMode;
 
-     // 🆕 6-Month Delete Rule Logic (Frontend Check - Applied to EVERYONE)
      const appointmentDate = new Date(apt.appointment_date);
      const sixMonthsAgo = new Date();
      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
      
-     // Can Delete if: older than 6 months OR (dev mode enabled if you want to test)
      const canDelete = appointmentDate <= sixMonthsAgo;
 
-     // 🆕 Check if Walk-In (Identified by Reference starting with WALK-IN)
      const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
 
      return (
@@ -663,7 +632,6 @@ function AppointmentManager({ user }) {
                 </p>
             )}
 
-            {/* Standard Payment Details (Hidden for Walk-Ins if simplified view desired, but shown for transparency) */}
             <div className="payment-details">
                 {!isWalkIn && (
                     <p className="payment-line">
@@ -771,7 +739,6 @@ function AppointmentManager({ user }) {
                         <button className="btn btn-primary small-btn" onClick={() => handleRebook(apt)}>Rebook</button>
                     )}
                     
-                    {/* 🆕 Delete Button - Visible only if older than 6 months (Universal) */}
                     {canDelete && (
                         <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
                     )}
@@ -799,13 +766,11 @@ function AppointmentManager({ user }) {
                     </button>
                 )}
 
-                {/* 🆕 Dropdown for Scheduled items (Including Walk-Ins) */}
                 {type === "upcoming" && (apt.status === "scheduled" || apt.status === "completed") && (
                     <div className="status-dropdown-container">
                     <div style={{display:'flex', alignItems:'center', gap:'8px', width:'100%'}}>
                         {actionsDisabled && !isWalkIn && <Clock size={16} color="#94a3b8" title="Available when appointment time reached" />}
                         
-                        {/* 🆕 If it's a Walk-In, show 'Mark Complete' button instead of just dropdown */}
                         {isWalkIn && apt.status === 'scheduled' ? (
                             <button 
                                 className="btn btn-success small-btn"
@@ -836,7 +801,6 @@ function AppointmentManager({ user }) {
 
                 {type === "history" && (
                     <div className="action-row">
-                        {/* 🆕 Provider Delete Button (Universal 6-month rule applied via canDelete) */}
                         {canDelete && (
                             <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
                         )}
@@ -852,8 +816,6 @@ function AppointmentManager({ user }) {
   const renderAppointmentsList = (list, type) => {
     let displayList = list || [];
 
-    // 🆕 1. GLOBAL FILTERING (Search & Sort) - Applies to all tabs
-    // Filter by Search Term
     if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         displayList = displayList.filter(apt => 
@@ -864,7 +826,6 @@ function AppointmentManager({ user }) {
         );
     }
 
-    // Sort by Option
     displayList.sort((a, b) => {
         const dateA = new Date(a.appointment_date);
         const dateB = new Date(b.appointment_date);
@@ -872,21 +833,18 @@ function AppointmentManager({ user }) {
         const priceB = b.total_price || 0;
 
         switch (sortOption) {
-            case "date-asc": return dateA - dateB; // Oldest first
-            case "date-desc": return dateB - dateA; // Newest first (Default)
-            case "price-desc": return priceB - priceA; // Expensive first
-            case "price-asc": return priceA - priceB; // Cheapest first
+            case "date-asc": return dateA - dateB; 
+            case "date-desc": return dateB - dateA; 
+            case "price-desc": return priceB - priceA; 
+            case "price-asc": return priceA - priceB; 
             default: return 0;
         }
     });
 
-    // 🆕 2. HISTORY SPECIFIC FILTERS (Status & Calendar Date)
     if (type === 'history') {
-      // Status Filter
       if (historyFilter === 'completed') displayList = displayList.filter(apt => apt.status === 'completed');
       else if (historyFilter === 'cancelled') displayList = displayList.filter(apt => apt.status === 'cancelled' || apt.status === 'no-show');
 
-      // Date Filter
       const now = new Date();
       if (dateFilter === 'this_year') {
           displayList = displayList.filter(apt => new Date(apt.appointment_date).getFullYear() === now.getFullYear());
@@ -898,7 +856,6 @@ function AppointmentManager({ user }) {
       }
     }
 
-    // 3. Provider Split Logic (Upcoming Tab)
     if (type === 'upcoming' && user.user_type === 'provider') {
         const now = new Date();
         const dueAppointments = displayList.filter(apt => new Date(apt.appointment_date) <= now);
@@ -908,7 +865,6 @@ function AppointmentManager({ user }) {
 
         return (
             <div className="appointments-split-view">
-                {/* 🆕 UPDATED: Replaced sub-tab-pills with history-filters style for matching UI */}
                 <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
                     <div className="status-filters">
                         <button 
@@ -926,7 +882,6 @@ function AppointmentManager({ user }) {
                         </button>
                     </div>
 
-                    {/* Test Mode Toggle moved here */}
                     {upcomingSubTab === 'future' && (
                         <label className="dev-mode-toggle" style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#64748b', cursor:'pointer'}}>
                             <input 
@@ -975,13 +930,32 @@ function AppointmentManager({ user }) {
     <div className="appointment-manager">
       <div className="container">
         
-        {/* 🆕 HEADER & CONTROLS */}
         <div className="am-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
             <h2 style={{margin: 0, fontSize: '24px', color: '#1e293b'}}>
                 {user.user_type === "provider" ? "Manage Appointments" : "My Appointments"}
             </h2>
             
             <div className="am-controls" style={{ display: 'flex', gap: '10px' }}>
+                {/* 🆕 View Toggle for Provider */}
+                {user.user_type === 'provider' && (
+                    <div className="view-toggle-pills" style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+                        <button 
+                            className={`pill-btn ${viewMode === 'list' ? 'active' : ''}`} 
+                            onClick={() => setViewMode('list')}
+                            style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'list' ? 'white' : 'transparent', boxShadow: viewMode === 'list' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
+                        >
+                            <List size={16} /> List
+                        </button>
+                        <button 
+                            className={`pill-btn ${viewMode === 'calendar' ? 'active' : ''}`} 
+                            onClick={() => setViewMode('calendar')}
+                            style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'calendar' ? 'white' : 'transparent', boxShadow: viewMode === 'calendar' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
+                        >
+                            <Calendar size={16} /> Calendar
+                        </button>
+                    </div>
+                )}
+
                 <div className="search-box" style={{ position: 'relative', width: '220px' }}>
                     <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input 
@@ -1022,65 +996,71 @@ function AppointmentManager({ user }) {
             </div>
         </div>
 
-        <div className="tabs">
-          {tabs.map((tab) => {
-            const count = tab === 'history' 
-                ? processedAppointments.history.length 
-                : processedAppointments[tab]?.length;
-                
-            return (
-                <button
-                key={tab}
-                className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                onClick={() => setActiveTab(tab)}
-                >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count || 0})
-                </button>
-            )
-          })}
-          {/* 🆕 Walk-In Button moved inside tabs and pushed to right */}
-          {user.user_type === 'provider' && (
-              <button 
-                  className="btn-walk-in" 
-                  onClick={handleWalkInClick}
-                  style={{ marginLeft: 'auto' }}
-              >
-                  <UserPlus size={16} /> Walk-In
-              </button>
-          )}
-        </div>
+        {/* 🆕 Conditional Rendering for Calendar View */}
+        {viewMode === 'calendar' && user.user_type === 'provider' ? (
+            <CalendarView user={user} />
+        ) : (
+            <>
+                <div className="tabs">
+                  {tabs.map((tab) => {
+                    const count = tab === 'history' 
+                        ? processedAppointments.history.length 
+                        : processedAppointments[tab]?.length;
+                        
+                    return (
+                        <button
+                        key={tab}
+                        className={`tab-btn ${activeTab === tab ? "active" : ""}`}
+                        onClick={() => setActiveTab(tab)}
+                        >
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count || 0})
+                        </button>
+                    )
+                  })}
+                  {user.user_type === 'provider' && (
+                      <button 
+                          className="btn-walk-in" 
+                          onClick={handleWalkInClick}
+                          style={{ marginLeft: 'auto' }}
+                      >
+                          <UserPlus size={16} /> Walk-In
+                      </button>
+                  )}
+                </div>
 
-        {activeTab === 'history' && (
-          <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div className="status-filters">
-              <button className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} onClick={() => setHistoryFilter('all')}>All Status</button>
-              <button className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} onClick={() => setHistoryFilter('completed')}>Completed</button>
-              <button className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} onClick={() => setHistoryFilter('cancelled')}>Cancelled</button>
-            </div>
+                {activeTab === 'history' && (
+                  <div className="history-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                    <div className="status-filters">
+                      <button className={`filter-pill ${historyFilter === 'all' ? 'active' : ''}`} onClick={() => setHistoryFilter('all')}>All Status</button>
+                      <button className={`filter-pill ${historyFilter === 'completed' ? 'active' : ''}`} onClick={() => setHistoryFilter('completed')}>Completed</button>
+                      <button className={`filter-pill ${historyFilter === 'cancelled' ? 'active' : ''}`} onClick={() => setHistoryFilter('cancelled')}>Cancelled</button>
+                    </div>
 
-            <div className="date-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Calendar size={18} color="#64748b" />
-                <select 
-                    value={dateFilter} 
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="date-select"
-                    style={{
-                        padding: '6px 12px', borderRadius: '20px', border: '1px solid #cbd5e1',
-                        backgroundColor: '#fff', fontSize: '0.9rem', cursor: 'pointer', outline: 'none'
-                    }}
-                >
-                    <option value="all">All Time</option>
-                    <option value="this_year">📅 This Year ({new Date().getFullYear()})</option>
-                    <option value="this_month">📅 This Month</option>
-                    <option value="last_3_months">⏳ Last 3 Months</option>
-                </select>
-            </div>
-          </div>
+                    <div className="date-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Calendar size={18} color="#64748b" />
+                        <select 
+                            value={dateFilter} 
+                            onChange={(e) => setDateFilter(e.target.value)}
+                            className="date-select"
+                            style={{
+                                padding: '6px 12px', borderRadius: '20px', border: '1px solid #cbd5e1',
+                                backgroundColor: '#fff', fontSize: '0.9rem', cursor: 'pointer', outline: 'none'
+                            }}
+                        >
+                            <option value="all">All Time</option>
+                            <option value="this_year">📅 This Year ({new Date().getFullYear()})</option>
+                            <option value="this_month">📅 This Month</option>
+                            <option value="last_3_months">⏳ Last 3 Months</option>
+                        </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="tab-content">
+                  {renderAppointmentsList(processedAppointments[activeTab], activeTab)}
+                </div>
+            </>
         )}
-
-        <div className="tab-content">
-          {renderAppointmentsList(processedAppointments[activeTab], activeTab)}
-        </div>
 
         {showBooking && (
           <BookingModal
@@ -1088,7 +1068,7 @@ function AppointmentManager({ user }) {
             user={user}
             onClose={() => { setShowBooking(false); setWalkInService(null); }}
             onBookingSuccess={handleRebookSuccess}
-            isWalkIn={!!walkInService} // 🚩 Passes true if initiated from Walk-In flow
+            isWalkIn={!!walkInService} 
           />
         )}
 
@@ -1108,7 +1088,6 @@ function AppointmentManager({ user }) {
           />
         )}
 
-        {/* 🆕 Service Selector Modal for Walk-Ins */}
         {showServiceSelector && (
             <div className="modal-overlay" onClick={() => setShowServiceSelector(false)}>
                 <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px', padding: '20px'}}>

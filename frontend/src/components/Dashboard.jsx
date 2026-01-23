@@ -59,7 +59,10 @@ function Dashboard({ user, setUser }) {
                 : "Ready to find your next great service?"}
             </p>
           </div>
-          <button className="btn-primary-icon" onClick={() => setActiveTab(user.user_type === 'client' ? 'services' : 'appointments')}>
+          <button 
+            className="btn-primary-icon" 
+            onClick={() => setActiveTab(user.user_type === 'client' ? 'services' : 'appointments')}
+          >
             {user.user_type === 'client' ? <Plus size={18} /> : <Calendar size={18} />}
             <span>{user.user_type === 'client' ? "Book New" : "View Calendar"}</span>
           </button>
@@ -85,7 +88,6 @@ function Dashboard({ user, setUser }) {
                 <div className="stat-icon"><DollarSign size={24} /></div>
                 <div className="stat-info">
                   <span className="label">Revenue Today</span>
-                  {/* ✅ Fixed Revenue Display */}
                   <h3>KES {dashboardData.today_metrics?.today_revenue?.toLocaleString() || 0}</h3>
                 </div>
               </div>
@@ -202,7 +204,7 @@ function Dashboard({ user, setUser }) {
             </button>
             <button onClick={() => setActiveTab('appointments')}>
               <div className="icon-box purple"><Calendar size={20} /></div>
-              <span>Calendar</span>
+              <span>{user.user_type === 'client' ? 'My Schedule' : 'Calendar'}</span>
             </button>
             {user.user_type === 'provider' && (
               <button onClick={() => setActiveTab('analytics')}>
@@ -255,7 +257,6 @@ function Dashboard({ user, setUser }) {
   return (
     <div className="container">
       <div className="dashboard">
-        {/* ✅ FIXED TOP NAVIGATION */}
         <div className="nav-container">
           <div className="dashboard-tabs">
             <button 
@@ -284,7 +285,7 @@ function Dashboard({ user, setUser }) {
               className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} 
               onClick={() => setActiveTab('appointments')}
             >
-              Appointments
+              {user.user_type === 'client' ? 'Schedule' : 'Appointments'}
             </button>
             <button 
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} 
