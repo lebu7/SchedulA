@@ -964,6 +964,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
             if (status === "cancelled") {
               if (userType === "client") {
+                // Provider gets notified that client cancelled
                 if (shouldNotify(fullApt.provider_prefs, "booking_alerts")) {
                   createNotification(
                     fullApt.provider_id,
@@ -974,17 +975,19 @@ router.put("/:id", authenticateToken, async (req, res) => {
                   );
                 }
               } else {
+                // ✅ FIX: Client MUST get notified when provider cancels
                 if (shouldNotify(fullApt.client_prefs, "booking_alerts")) {
                   createNotification(
                     fullApt.client_id,
                     "cancellation",
                     "Booking Cancelled",
-                    `Provider cancelled appointment #${id}.`,
+                    `Provider cancelled your appointment #${id}.`,
                     id
                   );
                 }
               }
 
+              // Send SMS notification
               await smsService.sendCancellationNotice(
                 {
                   ...fullApt,
