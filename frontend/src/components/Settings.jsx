@@ -43,6 +43,7 @@ const Settings = ({ user, setUser }) => {
   const [notifSubTab, setNotifSubTab] = useState('sms');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [hasChanges, setHasChanges] = useState(false); 
 
   const [profile, setProfile] = useState({ 
     name: '', 
@@ -103,8 +104,37 @@ const Settings = ({ user, setUser }) => {
             setInAppPrefs(prev => ({ ...prev, ...prefs.in_app }));
         }
       }
+      setHasChanges(false); 
     }
   }, [user]);
+
+  // ✅ DEEP COMPARISON LOGIC TO TRACK REAL CHANGES
+  useEffect(() => {
+    if (!user) return;
+
+    const profileChanged = 
+      profile.name !== (user.name || '') ||
+      profile.phone !== (user.phone || '') ||
+      profile.business_name !== (user.business_name || '') ||
+      profile.suburb !== (user.suburb || '') ||
+      profile.business_address !== (user.business_address || '') ||
+      profile.google_maps_link !== (user.google_maps_link || '');
+
+    const hoursChanged = 
+      hours.opening_time !== (user.opening_time || '08:00') ||
+      hours.closing_time !== (user.closing_time || '18:00') ||
+      hours.is_open_sat !== (!!user.is_open_sat) ||
+      hours.is_open_sun !== (!!user.is_open_sun);
+
+    setHasChanges(profileChanged || hoursChanged);
+  }, [profile, hours, user]);
+
+  useEffect(() => {
+    const validTabs = ['profile', 'notifications', 'hours'];
+    if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
+      setActiveTab(location.state.subTab);
+    }
+  }, [location.state]);
 
   const showMsg = (type, text) => {
     setMessage({ type, text });
@@ -142,10 +172,10 @@ const Settings = ({ user, setUser }) => {
       const res = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
       showMsg('success', 'Profile updated successfully!');
       
-      setProfile(prev => ({ ...prev, phone: formattedPhone }));
       const updatedUser = { ...user, ...res.data.user };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser)); 
+      setHasChanges(false);
     } catch (err) { 
       const errMsg = err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Update failed';
       showMsg('error', errMsg); 
@@ -215,11 +245,13 @@ const Settings = ({ user, setUser }) => {
     setLoading(true);
     try {
       await api.put('/auth/business-hours', hours);
-      const profileRes = await api.put('/auth/profile', profile);
+      const profileRes = await api.put('/auth/profile', { ...profile, is_hours_update: true });
+      
       showMsg('success', 'Business settings updated!');
       const updatedUser = { ...user, ...hours, ...profileRes.data.user };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      setHasChanges(false);
     } catch (err) { 
       showMsg('error', err.response?.data?.error || 'Failed to update settings'); 
     }
@@ -280,7 +312,9 @@ const Settings = ({ user, setUser }) => {
                   <input type="text" value={profile.business_name} onChange={e => setProfile({...profile, business_name: e.target.value})} />
                 </div>
               )}
-              <button type="submit" className="save-btn" disabled={loading}>Save Profile Changes</button>
+              <button type="submit" className="save-btn" disabled={loading || !hasChanges}>
+                {loading ? 'Saving...' : 'Save Profile Changes'}
+              </button>
             </form>
           </div>
           <div className="profile-column password-column">
@@ -409,7 +443,9 @@ const Settings = ({ user, setUser }) => {
                     <Toggle label="Open on Sundays" desc="Operate on Sundays" checked={hours.is_open_sun} onChange={() => setHours({...hours, is_open_sun: !hours.is_open_sun})} />
                 </div>
              </div>
-             <button type="submit" className="save-btn" style={{marginTop: '30px'}} disabled={loading}>Saving Changes</button>
+             <button type="submit" className="save-btn" style={{marginTop: '30px'}} disabled={loading || !hasChanges}>
+                {loading ? 'Saving...' : 'Save All Changes'}
+             </button>
           </form>
         </div>
       )}

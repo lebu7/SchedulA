@@ -1,3 +1,4 @@
+/* frontend/src/components/Header.jsx */
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
@@ -63,7 +64,7 @@ function Header({ user, onLogout }) {
       setNotifications(res.data.notifications || []);
       setUnreadCount(res.data.unread_count || 0);
     } catch (err) {
-      // console.error("Failed to fetch notifications");
+      // Fail silently
     }
   };
 
@@ -88,7 +89,7 @@ function Header({ user, onLogout }) {
     setShowNotifications(false);
 
     let navState = { tab: 'overview' };
-    const title = notif.title ? notif.title.toLowerCase() : '';
+    const title = notif.title ? notif.title : ''; 
     const type = notif.type;
 
     if (['booking', 'new_request', 'reschedule'].includes(type)) {
@@ -101,9 +102,19 @@ function Header({ user, onLogout }) {
         navState = { tab: 'appointments', subTab: 'upcoming', targetId: notif.reference_id };
     }
     else if (type === 'system') {
-        if (title.includes('service')) navState = { tab: 'services', targetId: notif.reference_id };
-        else if (title.includes('profile')) navState = { tab: 'settings', subTab: 'profile' };
-        else if (title.includes('settings')) navState = { tab: 'settings', subTab: 'notifications' };
+        // ✅ Corrected Routing for Location, Business Info, and Schedule
+        if (title.includes('service')) {
+          navState = { tab: 'services', targetId: notif.reference_id };
+        } else if (title.includes('Profile Updated')) {
+          navState = { tab: 'settings', subTab: 'profile' };
+        } else if (title.includes('Business Info') || title.includes('Location Updated') || title.includes('Schedule Update')) {
+          // ✅ Specifically route to the Business Info (hours) subtab
+          navState = { tab: 'settings', subTab: 'hours' }; 
+        } else if (title.includes('Password')) {
+          navState = { tab: 'settings', subTab: 'profile' };
+        } else if (title.toLowerCase().includes('settings')) {
+          navState = { tab: 'settings', subTab: 'notifications' };
+        }
     }
 
     navigate('/dashboard', { state: navState });
@@ -123,12 +134,24 @@ function Header({ user, onLogout }) {
     );
   };
 
+  // ✅ FIXED: Better Dynamic timeAgo helper with correct pluralization
   const timeAgo = (dateStr) => {
-    const diff = Math.floor((new Date() - new Date(dateStr)) / 1000);
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} hour ago`;
-    return new Date(dateStr).toLocaleDateString();
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) return 'Just now';
+    
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+    
+    return date.toLocaleDateString();
   };
 
   return (
@@ -169,6 +192,7 @@ function Header({ user, onLogout }) {
                             <div className="notif-text">
                               <p className="notif-title">{notif.title}</p>
                               <p className="notif-message">{notif.message}</p>
+                              {/* ✅ Dynamic time used here */}
                               <p className="notif-time">{timeAgo(notif.created_at)}</p>
                             </div>
                             {!notif.is_read && <div className="unread-dot"></div>}
@@ -247,7 +271,6 @@ function Header({ user, onLogout }) {
               {user.user_type === 'provider' ? (
                 <>
                   <div className="modal-stat-box">
-                     {/* ✅ Use Safe Accessors or Defaults */}
                      <h4>{userStats.total_services || 0}</h4>
                      <span>Services</span>
                   </div>
