@@ -50,7 +50,7 @@ router.post(
           .json({ error: errors.array()[0].msg, details: errors.array() });
       }
 
-      // Destructure new fields
+      // Destructure new fields including Location data
       const {
         email,
         password,
@@ -60,6 +60,9 @@ router.post(
         dob,
         user_type,
         business_name,
+        suburb, // 🆕
+        business_address, // 🆕
+        google_maps_link, // 🆕
       } = req.body;
 
       // Check for duplicate email
@@ -91,10 +94,14 @@ router.post(
             new_request: true,
           });
 
-          // Insert gender and dob into database
+          // Insert gender, dob, and NEW LOCATION FIELDS into database
           db.run(
-            `INSERT INTO users (email, password, name, phone, gender, dob, user_type, business_name, opening_time, closing_time, notification_preferences)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO users (
+              email, password, name, phone, gender, dob, user_type, 
+              business_name, suburb, business_address, google_maps_link,
+              opening_time, closing_time, notification_preferences
+            )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               email,
               hashedPassword,
@@ -104,13 +111,18 @@ router.post(
               dob,
               user_type,
               business_name,
+              suburb || null, // 🆕
+              business_address || null, // 🆕
+              google_maps_link || null, // 🆕
               defaultOpening,
               defaultClosing,
               defaultPrefs,
             ],
             function (err) {
-              if (err)
+              if (err) {
+                console.error("Registration Error:", err.message);
                 return res.status(500).json({ error: "Failed to create user" });
+              }
 
               const newUserId = this.lastID;
 
@@ -135,10 +147,11 @@ router.post(
                   id: newUserId,
                   email,
                   name,
-                  phone, // 🆕 Return phone
-                  gender, // 🆕 Return gender
+                  phone,
+                  gender,
                   user_type,
                   business_name,
+                  suburb,
                   opening_time: defaultOpening,
                   closing_time: defaultClosing,
                 },

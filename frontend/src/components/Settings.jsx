@@ -31,6 +31,7 @@ const NAIROBI_SUBURBS = {
 const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
   
+  // ✅ Initialize active tab with validation
   const [activeTab, setActiveTab] = useState(() => {
       const validTabs = ['profile', 'notifications', 'hours'];
       if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
@@ -43,6 +44,7 @@ const Settings = ({ user, setUser }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  // Profile States (Includes Location & Suburb)
   const [profile, setProfile] = useState({ 
     name: '', 
     phone: '', 
@@ -97,6 +99,7 @@ const Settings = ({ user, setUser }) => {
     }
   }, [user]);
 
+  // Handle Location State Changes from Router
   useEffect(() => {
     const validTabs = ['profile', 'notifications', 'hours'];
     if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
@@ -243,6 +246,7 @@ const Settings = ({ user, setUser }) => {
             <Bell size={16} /> Notifications
         </button>
         {user?.user_type === 'provider' && (
+          // 🏷️ UPDATED LABEL: Business Info
           <button className={`tab-btn ${activeTab === 'hours' ? 'active' : ''}`} onClick={() => setActiveTab('hours')}>
               <Briefcase size={16} /> Business Info
           </button>
@@ -427,11 +431,11 @@ const Settings = ({ user, setUser }) => {
           
           <form onSubmit={handleBusinessInfoUpdate} className="settings-form">
              
-             {/* 🆕 Single Dropdown Location Section */}
+             {/* 🆕 Location Section with Single Suburb Dropdown */}
              <div style={{marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
                 <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>📍 Location</h4>
                 
-                {/* 1. Suburb Dropdown (Grouped by Letter) */}
+                {/* Single Suburb Dropdown with Optgroups */}
                 <div className="form-group">
                     <label>Suburb</label>
                     <select 
@@ -457,7 +461,7 @@ const Settings = ({ user, setUser }) => {
                         value={profile.business_address} 
                         onChange={e => setProfile({...profile, business_address: e.target.value})} 
                         placeholder="e.g. 2nd Floor, City Mall"
-                        style={smallInputStyle} // 🤏 Compact Style
+                        style={smallInputStyle}
                     />
                 </div>
 
@@ -467,9 +471,12 @@ const Settings = ({ user, setUser }) => {
                         type="url" 
                         value={profile.google_maps_link} 
                         onChange={e => setProfile({...profile, google_maps_link: e.target.value})} 
-                        placeholder="http://maps.google.com/..."
-                        style={smallInputStyle} // 🤏 Compact Style
+                        placeholder="http://googleusercontent.com/maps.google.com/..."
+                        style={smallInputStyle}
                     />
+                    <small style={{color: '#666', display: 'block', marginTop: '5px'}}>
+                        Paste a link from Google Maps so clients can find you easily.
+                    </small>
                 </div>
              </div>
 
