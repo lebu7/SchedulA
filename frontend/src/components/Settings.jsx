@@ -1,12 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; 
-import api from "../services/auth";
-import BookingModal from "./BookingModal";
-import { 
-  Search, Filter, ArrowUpDown, List, Clock, Zap, 
-  Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink 
-} from "lucide-react"; 
-import "./ServiceList.css";
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom'; 
+import api from '../services/auth';
+import { MessageSquare, Bell, Clock, User, Briefcase } from 'lucide-react'; 
+import './Settings.css';
 
 // 🏙️ Nairobi Suburbs Data
 const NAIROBI_SUBURBS = {
@@ -32,484 +28,485 @@ const NAIROBI_SUBURBS = {
   Z: ["Zimmerman", "Ziwani/Kariokor"]
 };
 
-// Helper: Fisher-Yates Shuffle
-const shuffleArray = (array) => {
-  let currentIndex = array.length, randomIndex;
-  while (currentIndex !== 0) {
-    randomIndex = Math.floor(Math.random() * currentIndex);
-    currentIndex--;
-    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-  }
-  return array;
-};
-
-function ServiceList({ user }) {
-  const navigate = useNavigate();
-  const [allServices, setAllServices] = useState([]);
-  const [filteredServices, setFilteredServices] = useState([]);
-  const [loading, setLoading] = useState(true);
+const Settings = ({ user, setUser }) => {
+  const location = useLocation(); 
   
-  const [isBusinessClosed, setIsBusinessClosed] = useState(false);
-
-  // Filters
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSuburb, setSelectedSuburb] = useState(""); 
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [sortOption, setSortOption] = useState("random");
-  const [itemsToShow, setItemsToShow] = useState(20);
-
-  // Modals & Data
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [selectedService, setSelectedService] = useState(null);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
-  const [subServices, setSubServices] = useState({});
-
-  // 🆕 Location Modal State
-  const [mapService, setMapService] = useState(null);
-
-  useEffect(() => {
-    fetchAllServices();
-  }, [user.user_type]); 
-
-  useEffect(() => {
-    filterServices();
-  }, [searchTerm, selectedSuburb, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
-
-  const fetchAllServices = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get("/services");
-      let services = response.data.services || [];
-      
-      if (user.user_type === 'client') {
-        services = shuffleArray(services);
+  const [activeTab, setActiveTab] = useState(() => {
+      const validTabs = ['profile', 'notifications', 'hours'];
+      if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
+          return location.state.subTab;
       }
-      
-      setAllServices(services);
-      fetchAllSubServices(services);
-    } catch (error) {
-      console.error("Error fetching services:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return 'profile';
+  });
 
-  const fetchAllSubServices = async (services) => {
-    try {
-      const results = {};
-      await Promise.all(
-        services.map(async (service) => {
-          try {
-            const res = await api.get(`/services/${service.id}/sub-services`);
-            results[service.id] = res.data.sub_services || [];
-          } catch {
-            results[service.id] = [];
-          }
-        })
-      );
-      setSubServices(results);
-    } catch (err) {
-      console.error("Error fetching add-ons:", err);
-    }
-  };
+  const [notifSubTab, setNotifSubTab] = useState('sms');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  const filterServices = () => {
-    let result = [...allServices];
+  const [profile, setProfile] = useState({ 
+    name: '', 
+    phone: '', 
+    business_name: '', 
+    gender: '', 
+    dob: '',
+    suburb: '',           
+    business_address: '', 
+    google_maps_link: '' 
+  });
 
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase().trim();
-      result = result.filter((service) => {
-        const fields = [service.name, service.description, service.category, service.provider_name, service.business_name].filter(Boolean);
-        return fields.some((field) => field.toLowerCase().includes(term));
+  const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
+  const [passwordError, setPasswordError] = useState(''); 
+  
+  const [notifications, setNotifications] = useState({
+    confirmation: true, acceptance: true, reminder: true, cancellation: true, receipt: true, new_request: true, refund: true 
+  });
+
+  const [inAppPrefs, setInAppPrefs] = useState({
+    booking_alerts: true, system_updates: true, payment_alerts: true, reminders: true
+  });
+  
+  const [hours, setHours] = useState({ opening_time: '08:00', closing_time: '18:00' });
+
+  useEffect(() => {
+    if (user) {
+      setProfile({ 
+        name: user.name || '', 
+        phone: user.phone || '', 
+        business_name: user.business_name || '',
+        gender: user.gender || '', 
+        dob: user.dob ? user.dob.split('T')[0] : '',
+        suburb: user.suburb || '',                 
+        business_address: user.business_address || '', 
+        google_maps_link: user.google_maps_link || ''
       });
-    }
+      setHours({ 
+        opening_time: user.opening_time || '08:00', 
+        closing_time: user.closing_time || '18:00' 
+      });
 
-    if (selectedSuburb) {
-      result = result.filter((service) => service.suburb === selectedSuburb);
-    }
-
-    if (selectedCategory) {
-      result = result.filter((service) => service.category === selectedCategory);
-    }
-
-    if (sortOption !== "random") {
-        result.sort((a, b) => {
-            const priceA = parseFloat(a.price || 0);
-            const priceB = parseFloat(b.price || 0);
-            const nameA = a.name.toLowerCase();
-            const nameB = b.name.toLowerCase();
-
-            switch (sortOption) {
-                case "price-asc": return priceA - priceB;
-                case "price-desc": return priceB - priceA;
-                case "name-asc": return nameA.localeCompare(nameB);
-                case "name-desc": return nameB.localeCompare(nameA);
-                case "duration-asc": return parseInt(a.duration) - parseInt(b.duration);
-                default: return 0;
-            }
-        });
-    }
-
-    if (itemsToShow !== "all" && user.user_type === 'client') {
-        result = result.slice(0, parseInt(itemsToShow));
-    }
-
-    setFilteredServices(result);
-  };
-
-  // === ACTIONS ===
-  const handleBookClick = (service) => {
-    if (service.is_closed || isBusinessClosed) return;
-    setSelectedService(service);
-    setShowBookingModal(true);
-  };
-
-  const handleBookingSuccess = () => {
-    setBookingSuccess(true);
-    setTimeout(() => setBookingSuccess(false), 3000);
-  };
-
-  const handleCloseModal = () => {
-    setShowBookingModal(false);
-    setSelectedService(null);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this service? This cannot be undone.")) {
-      try {
-        await api.delete(`/services/${id}`);
-        setAllServices(prev => prev.filter(s => s.id !== id));
-        alert("Service deleted successfully.");
-      } catch (error) {
-        console.error("Delete failed", error);
-        alert("Failed to delete service.");
+      if (user.notification_preferences) {
+        let prefs = user.notification_preferences;
+        if (typeof prefs === 'string') {
+            try { prefs = JSON.parse(prefs); } catch (e) { prefs = {}; }
+        }
+        setNotifications(prev => ({ ...prev, ...prefs }));
+        if (prefs.in_app) {
+            setInAppPrefs(prev => ({ ...prev, ...prefs.in_app }));
+        }
       }
     }
+  }, [user]);
+
+  useEffect(() => {
+    const validTabs = ['profile', 'notifications', 'hours'];
+    if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
+      setActiveTab(location.state.subTab);
+    }
+  }, [location.state]);
+
+  const showMsg = (type, text) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
 
-  const toggleServiceStatus = async (service) => {
+  const checkPasswordRequirements = (password) => {
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+    if (password.length < minLength) return "Must be at least 8 characters long.";
+    if (!hasUpperCase) return "Must contain at least one uppercase letter.";
+    if (!hasLowerCase) return "Must contain at least one lowercase letter.";
+    if (!hasNumber) return "Must contain at least one number.";
+    if (!hasSymbol) return "Must contain at least one special symbol.";
+    
+    return null; 
+  }
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    let formattedPhone = profile.phone.trim();
+    if (formattedPhone.startsWith('0')) {
+      formattedPhone = '+254' + formattedPhone.substring(1);
+    } else if (formattedPhone.startsWith('254')) {
+      formattedPhone = '+' + formattedPhone;
+    }
+
     try {
-      const newStatus = !service.is_closed;
-      await api.put(`/services/${service.id}`, { is_closed: newStatus });
-      setAllServices(prev => prev.map(s => 
-        s.id === service.id ? { ...s, is_closed: newStatus } : s
-      ));
-    } catch (error) {
-      console.error("Toggle status failed", error);
-      alert("Failed to update status.");
+      const res = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
+      showMsg('success', 'Profile updated successfully!');
+      
+      setProfile(prev => ({ ...prev, phone: formattedPhone }));
+      const updatedUser = { ...user, ...res.data.user };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser)); 
+    } catch (err) { 
+      console.error(err);
+      const errMsg = err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Update failed';
+      showMsg('error', errMsg); 
+    }
+    setLoading(false);
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPasswordError(''); 
+
+    const validationError = checkPasswordRequirements(passwords.new);
+    if (validationError) {
+      setPasswordError(validationError);
+      return;
+    }
+
+    if (passwords.new !== passwords.confirm) {
+      showMsg('error', 'New passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.put('/auth/password', { currentPassword: passwords.current, newPassword: passwords.new });
+      showMsg('success', 'Password changed successfully');
+      setPasswords({ current: '', new: '', confirm: '' });
+    } catch (err) { 
+      showMsg('error', err.response?.data?.error || 'Failed to change password'); 
+    }
+    setLoading(false);
+  };
+
+  const handleNotificationToggle = async (key) => {
+    if (key === 'confirmation' || key === 'refund') return; 
+    const newPrefs = { ...notifications, [key]: !notifications[key] };
+    setNotifications(newPrefs);
+    savePreferences({ ...newPrefs, in_app: inAppPrefs });
+  };
+
+  const handleInAppToggle = async (key) => {
+    const newInApp = { ...inAppPrefs, [key]: !inAppPrefs[key] };
+    setInAppPrefs(newInApp);
+    const mergedPrefs = { ...notifications, in_app: newInApp };
+    savePreferences(mergedPrefs);
+  };
+
+  const savePreferences = async (prefs) => {
+    try {
+        await api.put('/auth/notifications', { preferences: prefs });
+        const updatedUser = { ...user, notification_preferences: prefs };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+    } catch (err) { 
+      console.error('Failed to save prefs:', err.response?.data || err.message);
+      showMsg('error', 'Failed to save setting.');
     }
   };
 
-  const handleToggleBusiness = () => {
-    const action = isBusinessClosed ? "OPEN" : "CLOSE";
-    if (window.confirm(`Are you sure you want to ${action} the business? This will affect availability for all services.`)) {
-        setIsBusinessClosed(!isBusinessClosed);
+  const handleBusinessInfoUpdate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.put('/auth/business-hours', hours);
+      
+      let formattedPhone = profile.phone.trim(); 
+      if (formattedPhone.startsWith('0')) formattedPhone = '+254' + formattedPhone.substring(1);
+      else if (formattedPhone.startsWith('254')) formattedPhone = '+' + formattedPhone;
+
+      const profileRes = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
+
+      showMsg('success', 'Business settings updated!');
+      const updatedUser = { ...user, ...hours, ...profileRes.data.user };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    } catch (err) { 
+      showMsg('error', err.response?.data?.error || 'Failed to update settings'); 
     }
+    setLoading(false);
   };
 
-  const handleEdit = (service) => {
-    navigate(`/services/edit/${service.id}`, { state: { service } });
-  };
-
-  const handleViewAddons = (service) => {
-    const addons = subServices[service.id] || [];
-    if (addons.length === 0) {
-        alert("No add-ons configured for this service.");
-    } else {
-        alert(`Add-ons for ${service.name}:\n\n` + addons.map(a => `- ${a.name}: KES ${a.price}`).join('\n'));
-    }
-  };
-
-  const handleLocationClick = (e, service) => {
-    e.stopPropagation(); // Prevent opening booking modal
-    setMapService(service);
-  };
-
-  const getCategoryClass = (category) => {
-    if (!category) return "default-category";
-    const cat = category.toLowerCase();
-    if (cat.includes("salon")) return "salon-header";
-    if (cat.includes("spa")) return "spa-header";
-    if (cat.includes("barber")) return "barber-header";
-    return "default-category";
-  };
+  // 🤏 Small Input Style for Compact Location Form
+  const smallInputStyle = { padding: '8px 10px', fontSize: '13px', height: 'auto' };
 
   return (
-    <div className="service-list">
-      <div className="container">
-        
-        {/* ==========================
-            PROVIDER VIEW
-           ========================== */}
-        {user.user_type === 'provider' ? (
-            <>
-                <div className="service-page-header">
-                    <div className="title-section">
-                        <h2>Manage Your Services</h2>
-                        <p>Update prices, manage availability, and add new offerings.</p>
-                    </div>
-                    <div className="provider-top-actions">
-                         <button className="btn-add-service" onClick={() => navigate('/services/new')}>
-                            <Plus size={18} /> Add New Service
-                         </button>
-                         <button 
-                            className={`btn-close-business ${isBusinessClosed ? 'closed' : ''}`} 
-                            onClick={handleToggleBusiness}
-                         >
-                            <Power size={18} /> {isBusinessClosed ? "Re-open Business" : "Close Business"}
-                         </button>
-                    </div>
-                </div>
+    <div className="settings-container">
+      <h2>⚙️ Account Settings</h2>
+      {message.text && <div className={`settings-alert ${message.type}`}>{message.text}</div>}
 
-                {isBusinessClosed && (
-                    <div className="business-closed-banner">
-                        ⚠️ Your business is currently marked as <strong>CLOSED</strong>. Clients cannot book any services.
-                    </div>
-                )}
-
-                <div className="services-grid">
-                    {filteredServices.map((service) => {
-                        const isDimmed = service.is_closed || isBusinessClosed;
-
-                        return (
-                            <div key={service.id} className={`provider-card ${isDimmed ? 'dimmed-card' : ''}`}>
-                                {isDimmed && (
-                                    <div className="status-overlay-badge">
-                                        {isBusinessClosed ? "BUSINESS CLOSED" : "SERVICE CLOSED"}
-                                    </div>
-                                )}
-
-                                <div className="provider-card-header">
-                                    <h3>{service.name}</h3>
-                                    <span className="provider-category-badge">{service.category}</span>
-                                </div>
-
-                                <p className="provider-card-desc">
-                                    {service.description 
-                                        ? (service.description.length > 100 ? service.description.substring(0, 100) + '...' : service.description)
-                                        : "No description provided."}
-                                </p>
-
-                                <div className="provider-stats-row">
-                                    <div className="stat-item">
-                                        <Clock size={14} style={{marginBottom:'4px'}}/>
-                                        <span>{service.duration}m</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <span style={{fontSize:'12px', fontWeight:'400'}}>Price</span>
-                                        <span>KES {service.price}</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <Store size={14} style={{marginBottom:'4px'}}/>
-                                        <span>Cap: {service.capacity || 1}</span>
-                                    </div>
-                                </div>
-
-                                <button className="btn-view-addons" onClick={() => handleViewAddons(service)}>
-                                    View Add-ons ({subServices[service.id]?.length || 0})
-                                </button>
-
-                                <div className="provider-actions-footer">
-                                    <button className="btn-action btn-edit" onClick={() => handleEdit(service)}>
-                                        <Edit size={14} /> Edit
-                                    </button>
-                                    <button className="btn-action btn-delete" onClick={() => handleDelete(service.id)}>
-                                        <Trash2 size={14} /> Delete
-                                    </button>
-                                    <button 
-                                        className={`btn-action ${service.is_closed ? 'btn-toggle-open' : 'btn-toggle-close'}`} 
-                                        onClick={() => toggleServiceStatus(service)}
-                                    >
-                                        {service.is_closed ? (
-                                            <><Unlock size={12} /> Open</>
-                                        ) : (
-                                            <><Lock size={12} /> Close</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </>
-        ) : (
-        /* ==========================
-            CLIENT VIEW
-           ========================== */
-            <>
-                <div className="service-page-header">
-                    <div className="control-bar">
-                        <div className="search-wrapper">
-                            <Search size={18} className="search-icon" />
-                            <input
-                                type="text"
-                                placeholder="Find services or providers..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-
-                        {/* Suburb Filter */}
-                        <div className="search-wrapper location-search">
-                            <MapPin size={18} className="search-icon" />
-                            <select 
-                                value={selectedSuburb} 
-                                onChange={(e) => setSelectedSuburb(e.target.value)}
-                                className="suburb-filter-select"
-                            >
-                                <option value="">All Locations</option>
-                                {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
-                                    <optgroup key={letter} label={letter}>
-                                        {NAIROBI_SUBURBS[letter].map(sub => (
-                                            <option key={sub} value={sub}>{sub}</option>
-                                        ))}
-                                    </optgroup>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="filters-wrapper">
-                            <div className="filter-item">
-                                <Filter size={16} />
-                                <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
-                                    <option value="">All Categories</option>
-                                    <option value="Salon">Salon</option>
-                                    <option value="Spa">Spa</option>
-                                    <option value="Barbershop">Barbershop</option>
-                                </select>
-                            </div>
-
-                            <button
-                                className="btn-clear"
-                                onClick={() => {
-                                    setSearchTerm("");
-                                    setSelectedSuburb("");
-                                    setSelectedCategory("");
-                                }}
-                            >
-                                Reset
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {loading ? (
-                  <div className="loading-container">
-                    <div className="spinner"></div>
-                    <p>Finding the best services for you...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="services-grid">
-                      {filteredServices.map((service) => {
-                        const price = parseFloat(service.price).toFixed(0);
-                        const isDimmed = service.is_closed || isBusinessClosed;
-
-                        return (
-                          <div
-                            key={service.id}
-                            className={`service-card ${isDimmed ? "closed-client-card" : ""}`}
-                          >
-                            <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
-                              <div className="header-content">
-                                <h3 className="service-name">{service.name}</h3>
-                                {/* 🆕 Provider name updated to standout button style below service name */}
-                                <div 
-                                  className="provider-link-btn" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/provider/${service.provider_id}`);
-                                  }}
-                                  title={`View profile of ${service.business_name || service.provider_name}`}
-                                >
-                                   {service.business_name || service.provider_name}
-                                </div>
-                              </div>
-                              <div className="header-price">
-                                <small>From</small>
-                                KES {price}
-                              </div>
-                            </div>
-
-                            <div className="service-main" onClick={() => !isDimmed && handleBookClick(service)}>
-                              
-                              {(service.suburb || service.business_address) && (
-                                <div 
-                                    className="meta-row location-row clickable" 
-                                    onClick={(e) => handleLocationClick(e, service)}
-                                    title="View location map"
-                                >
-                                    <MapPin size={13} color="#2563eb" style={{marginRight:'4px', flexShrink:0}} />
-                                    <span className="location-link">
-                                        {service.suburb}, {service.business_address}
-                                    </span>
-                                </div>
-                              )}
-
-                              <div className="meta-row">
-                                  <span className="meta-badge category">{service.category}</span>
-                                  <span className="meta-badge duration">
-                                      <Clock size={12} /> {service.duration}m
-                                  </span>
-                              </div>
-
-                              <p className="service-description">{service.description}</p>
-
-                              <button className="btn btn-primary book-btn" disabled={isDimmed}>
-                                {isDimmed ? "Currently Closed" : "Book Now"}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-            </>
+      {/* MAIN TAB NAVIGATION */}
+      <div className="settings-tabs">
+        <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
+            <User size={16} /> Profile
+        </button>
+        <button className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
+            <Bell size={16} /> Notifications
+        </button>
+        {user?.user_type === 'provider' && (
+          <button className={`tab-btn ${activeTab === 'hours' ? 'active' : ''}`} onClick={() => setActiveTab('hours')}>
+              <Briefcase size={16} /> Business Info
+          </button>
         )}
-
-        {showBookingModal && selectedService && (
-          <BookingModal
-            service={selectedService}
-            user={user}
-            onClose={handleCloseModal}
-            onBookingSuccess={handleBookingSuccess}
-          />
-        )}
-        
-        {mapService && (
-            <div className="map-modal-overlay" onClick={() => setMapService(null)}>
-                <div className="map-modal-content" onClick={e => e.stopPropagation()}>
-                    <div className="map-header">
-                        <h3>📍 Location Details</h3>
-                        <button onClick={() => setMapService(null)} className="close-btn"><X size={20} /></button>
-                    </div>
-                    <div className="map-body">
-                        <h4 style={{margin:'0 0 5px 0', color:'#1e293b'}}>{mapService.business_name}</h4>
-                        <p style={{color:'#64748b', fontSize:'14px', marginBottom:'20px'}}>
-                            {mapService.suburb}, {mapService.business_address}
-                        </p>
-                        
-                        <div className="map-actions">
-                            {mapService.google_maps_link && (
-                                <a 
-                                    href={mapService.google_maps_link} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="btn-open-map"
-                                >
-                                    <MapPin size={18} /> Open in Google Maps <ExternalLink size={14} style={{marginLeft:5}}/>
-                                </a>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
       </div>
+
+      {/* === PROFILE TAB === */}
+      {activeTab === 'profile' && (
+        <div className="settings-section profile-layout">
+          <div className="profile-column">
+            <h3>Personal Details</h3>
+            <form onSubmit={handleProfileUpdate} className="settings-form">
+              <div className="form-group">
+                <label>Full Name</label>
+                <input type="text" value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>Mobile Number</label>
+                <input type="tel" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} placeholder="0712345678" required />
+                <small style={{color: '#666', display: 'block', marginTop: '5px'}}>We will format this to +254 automatically.</small>
+              </div>
+
+              <div className="form-group">
+                <label>Gender <small style={{color:'#888'}}>(Cannot be changed)</small></label>
+                <select 
+                  value={profile.gender} 
+                  disabled 
+                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Date of Birth <small style={{color:'#888'}}>(Cannot be changed)</small></label>
+                <input 
+                  type="date" 
+                  value={profile.dob} 
+                  disabled 
+                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}
+                />
+              </div>
+
+              {user.user_type === 'provider' && (
+                <div className="form-group">
+                  <label>Business Name</label>
+                  <input type="text" value={profile.business_name} onChange={e => setProfile({...profile, business_name: e.target.value})} />
+                </div>
+              )}
+              <button type="submit" className="save-btn" disabled={loading}>
+                {loading ? 'Saving...' : 'Save Profile Changes'}
+              </button>
+            </form>
+          </div>
+
+          <div className="profile-column password-column">
+            <h3>Change Password</h3>
+            <form onSubmit={handlePasswordChange} className="settings-form">
+              <div className="form-group">
+                <label>Current Password</label>
+                <input type="password" value={passwords.current} onChange={e => setPasswords({...passwords, current: e.target.value})} required />
+              </div>
+              <div className="form-group">
+                <label>New Password</label>
+                <input 
+                  type="password" 
+                  value={passwords.new} 
+                  onChange={e => {
+                    setPasswords({...passwords, new: e.target.value});
+                    if (passwordError) setPasswordError('');
+                  }} 
+                  required 
+                  style={passwordError ? { border: '1px solid red', backgroundColor: '#fff0f0' } : {}}
+                />
+                <div style={{ marginTop: '5px', fontSize: '0.85rem' }}>
+                  {passwordError ? (
+                    <span style={{ color: 'red', fontWeight: 'bold' }}>⚠️ {passwordError}</span>
+                  ) : (
+                    <span style={{ color: '#666' }}>
+                      Requirement: 8+ chars, Uppercase, Lowercase, Number & Symbol.
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Confirm New Password</label>
+                <input type="password" value={passwords.confirm} onChange={e => setPasswords({...passwords, confirm: e.target.value})} required />
+              </div>
+              <button type="submit" className="save-btn btn-secondary" disabled={loading}>
+                {loading ? 'Processing...' : 'Update Password'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* === NOTIFICATIONS TAB === */}
+      {activeTab === 'notifications' && (
+        <div className="settings-section">
+          <div className="section-header-row">
+              <h3>Notification Preferences</h3>
+              
+              <div className="pill-nav">
+                  <button 
+                    className={`pill-btn ${notifSubTab === 'sms' ? 'active' : ''}`}
+                    onClick={() => setNotifSubTab('sms')}
+                  >
+                    <MessageSquare size={14} /> SMS
+                  </button>
+                  <button 
+                    className={`pill-btn ${notifSubTab === 'in-app' ? 'active' : ''}`}
+                    onClick={() => setNotifSubTab('in-app')}
+                  >
+                    <Bell size={14} /> In-App
+                  </button>
+              </div>
+          </div>
+
+          {notifSubTab === 'sms' && (
+              <div className="notif-group fade-in">
+                  <p className="section-desc">Manage text messages sent to your phone.</p>
+                  
+                  <Toggle label="Booking Confirmation" desc="Sent immediately after booking." checked={true} disabled />
+                  <Toggle label="Booking Accepted" desc="When provider confirms." checked={notifications.acceptance} onChange={() => handleNotificationToggle('acceptance')} />
+                  <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
+                  <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
+                  <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
+                  
+                  <Toggle label="Refund Notifications" desc="Sent when refunds are processed (Required)" checked={true} disabled />
+
+                  {user.user_type === 'provider' && (
+                    <>
+                      <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
+                      <Toggle label="Refund Requests" desc="When clients cancel and request refunds (Required)" checked={true} disabled />
+                    </>
+                  )}
+              </div>
+          )}
+
+          {notifSubTab === 'in-app' && (
+              <div className="notif-group fade-in">
+                  <p className="section-desc">Control what appears in your notification bell.</p>
+                  
+                  <Toggle 
+                    label="Booking Alerts" 
+                    desc="New bookings, status changes, and approvals." 
+                    checked={inAppPrefs.booking_alerts} 
+                    onChange={() => handleInAppToggle('booking_alerts')} 
+                  />
+                  <Toggle 
+                    label="System Updates" 
+                    desc="Important platform announcements and maintenance." 
+                    checked={inAppPrefs.system_updates} 
+                    onChange={() => handleInAppToggle('system_updates')} 
+                  />
+                  <Toggle 
+                    label="Payment Alerts" 
+                    desc="Confirmations of deposits and balance payments." 
+                    checked={inAppPrefs.payment_alerts} 
+                    onChange={() => handleInAppToggle('payment_alerts')} 
+                  />
+                  <Toggle 
+                    label="In-App Reminders" 
+                    desc="Pop-up reminders when you are online." 
+                    checked={inAppPrefs.reminders} 
+                    onChange={() => handleInAppToggle('reminders')} 
+                  />
+              </div>
+          )}
+        </div>
+      )}
+
+      {/* === BUSINESS INFO TAB (HOURS + LOCATION) === */}
+      {activeTab === 'hours' && (
+        <div className="settings-section">
+          <h3>Business Info & Hours</h3>
+          <p className="section-desc">Manage your operational details and location.</p>
+          
+          <form onSubmit={handleBusinessInfoUpdate} className="settings-form">
+             
+             {/* 🆕 Single Dropdown Location Section */}
+             <div style={{marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
+                <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>📍 Location</h4>
+                
+                {/* 1. Suburb Dropdown (Grouped by Letter) */}
+                <div className="form-group">
+                    <label>Suburb</label>
+                    <select 
+                        value={profile.suburb} 
+                        onChange={(e) => setProfile(p => ({ ...p, suburb: e.target.value }))}
+                        className="suburb-dropdown" 
+                    >
+                        <option value="">Select Suburb</option>
+                        {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
+                            <optgroup key={letter} label={letter}>
+                                {NAIROBI_SUBURBS[letter].map(sub => (
+                                    <option key={sub} value={sub}>{sub}</option>
+                                ))}
+                            </optgroup>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="form-group">
+                    <label>Business Address / Landmark</label>
+                    <input 
+                        type="text" 
+                        value={profile.business_address} 
+                        onChange={e => setProfile({...profile, business_address: e.target.value})} 
+                        placeholder="e.g. 2nd Floor, City Mall"
+                        style={smallInputStyle} // 🤏 Compact Style
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label>Google Maps Link <small style={{color:'#64748b'}}>(Optional)</small></label>
+                    <input 
+                        type="url" 
+                        value={profile.google_maps_link} 
+                        onChange={e => setProfile({...profile, google_maps_link: e.target.value})} 
+                        placeholder="http://maps.google.com/..."
+                        style={smallInputStyle} // 🤏 Compact Style
+                    />
+                </div>
+             </div>
+
+             {/* Hours Section */}
+             <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>⏰ Operating Hours</h4>
+             <div className="form-group-row" style={{display:'flex', gap:'15px'}}>
+                <div className="form-group" style={{flex:1}}>
+                <label>Opening Time</label>
+                <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} style={smallInputStyle} />
+                </div>
+                <div className="form-group" style={{flex:1}}>
+                <label>Closing Time</label>
+                <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} style={smallInputStyle} />
+                </div>
+             </div>
+
+             <button type="submit" className="save-btn" disabled={loading}>
+                {loading ? 'Saving...' : 'Save All Changes'}
+             </button>
+          </form>
+        </div>
+      )}
     </div>
   );
-}
+};
 
-export default ServiceList;
+const Toggle = ({ label, desc, checked, onChange, disabled }) => (
+  <div className="toggle-row">
+    <div>
+      <h4>{label} {disabled && <span style={{color:'#ef4444', fontSize:'0.75em', fontWeight:'600'}}>(Required)</span>}</h4>
+      <p>{desc}</p>
+    </div>
+    <label className="switch">
+      <input type="checkbox" checked={!!checked} onChange={onChange} disabled={disabled} />
+      <span className="slider round"></span>
+    </label>
+  </div>
+);
+
+export default Settings;
