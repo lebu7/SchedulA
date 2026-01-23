@@ -4,9 +4,33 @@ import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
-  Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin 
+  Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink 
 } from "lucide-react"; 
 import "./ServiceList.css";
+
+// 🏙️ Nairobi Suburbs Data
+const NAIROBI_SUBURBS = {
+  A: ["Airbase"],
+  B: ["Baba Dogo"],
+  C: ["California", "Chokaa", "Clay City"],
+  D: ["Dagoretti", "Dandora", "Donholm"],
+  E: ["Eastleigh"],
+  G: ["Gikomba/Kamukunji", "Githurai"],
+  H: ["Huruma"],
+  I: ["Imara Daima", "Industrial Area"],
+  J: ["Jamhuri"],
+  K: ["Kabiro", "Kahawa", "Kahawa West", "Kamulu", "Kangemi", "Kariobangi", "Kasarani", "Kawangware", "Kayole", "Kiamaiko", "Kibra", "Kileleshwa", "Kitisuru", "Komarock"],
+  L: ["Landimawe", "Langata", "Lavington", "Lucky Summer"],
+  M: ["Makadara", "Makongeni", "Maringo/Hamza", "Mathare Hospital", "Mathare North", "Mbagathi Way", "Mlango Kubwa", "Mombasa Road", "Mountain View", "Mowlem", "Muthaiga", "Mwiki"],
+  N: ["Nairobi South", "Nairobi West", "Njiru"],
+  P: ["Pangani", "Parklands/Highridge", "Pumwani"],
+  R: ["Ridgeways", "Roysambu", "Ruai", "Ruaraka", "Runda"],
+  S: ["Saika", "South B", "South C"],
+  T: ["Thome"],
+  U: ["Umoja", "Upperhill", "Utalii", "Utawala"],
+  W: ["Westlands", "Woodley/Kenyatta Golf Course"],
+  Z: ["Zimmerman", "Ziwani/Kariokor"]
+};
 
 // Helper: Fisher-Yates Shuffle
 const shuffleArray = (array) => {
@@ -25,12 +49,11 @@ function ServiceList({ user }) {
   const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // 🆕 Business Status State (Simulated global toggle)
   const [isBusinessClosed, setIsBusinessClosed] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchLocation, setSearchLocation] = useState(""); // 🆕 Location Filter
+  const [selectedSuburb, setSelectedSuburb] = useState(""); 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [sortOption, setSortOption] = useState("random");
   const [itemsToShow, setItemsToShow] = useState(20);
@@ -41,18 +64,20 @@ function ServiceList({ user }) {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [subServices, setSubServices] = useState({});
 
+  // 🆕 Location Modal State
+  const [mapService, setMapService] = useState(null);
+
   useEffect(() => {
     fetchAllServices();
   }, [user.user_type]); 
 
   useEffect(() => {
     filterServices();
-  }, [searchTerm, searchLocation, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
+  }, [searchTerm, selectedSuburb, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
 
   const fetchAllServices = async () => {
     try {
       setLoading(true);
-      // Fetch all services initially. Backend now supports filtering, but we'll fetch all and filter locally for speed
       const response = await api.get("/services");
       let services = response.data.services || [];
       
@@ -91,7 +116,6 @@ function ServiceList({ user }) {
   const filterServices = () => {
     let result = [...allServices];
 
-    // Filter by Service/Provider Name
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
       result = result.filter((service) => {
@@ -100,12 +124,8 @@ function ServiceList({ user }) {
       });
     }
 
-    // 🆕 Filter by Location
-    if (searchLocation.trim()) {
-        const locTerm = searchLocation.toLowerCase().trim();
-        result = result.filter((service) => {
-            return service.business_address && service.business_address.toLowerCase().includes(locTerm);
-        });
+    if (selectedSuburb) {
+      result = result.filter((service) => service.suburb === selectedSuburb);
     }
 
     if (selectedCategory) {
@@ -180,7 +200,6 @@ function ServiceList({ user }) {
     }
   };
 
-  // 🆕 Toggle Business Status
   const handleToggleBusiness = () => {
     const action = isBusinessClosed ? "OPEN" : "CLOSE";
     if (window.confirm(`Are you sure you want to ${action} the business? This will affect availability for all services.`)) {
@@ -199,6 +218,11 @@ function ServiceList({ user }) {
     } else {
         alert(`Add-ons for ${service.name}:\n\n` + addons.map(a => `- ${a.name}: KES ${a.price}`).join('\n'));
     }
+  };
+
+  const handleLocationClick = (e, service) => {
+    e.stopPropagation(); // Prevent opening booking modal
+    setMapService(service);
   };
 
   const getCategoryClass = (category) => {
@@ -249,7 +273,6 @@ function ServiceList({ user }) {
 
                         return (
                             <div key={service.id} className={`provider-card ${isDimmed ? 'dimmed-card' : ''}`}>
-                                
                                 {isDimmed && (
                                     <div className="status-overlay-badge">
                                         {isBusinessClosed ? "BUSINESS CLOSED" : "SERVICE CLOSED"}
@@ -332,15 +355,23 @@ function ServiceList({ user }) {
                             />
                         </div>
 
-                        {/* 🆕 Location Filter Input */}
+                        {/* Suburb Filter */}
                         <div className="search-wrapper location-search">
                             <MapPin size={18} className="search-icon" />
-                            <input
-                                type="text"
-                                placeholder="Location (e.g. Westlands)"
-                                value={searchLocation}
-                                onChange={(e) => setSearchLocation(e.target.value)}
-                            />
+                            <select 
+                                value={selectedSuburb} 
+                                onChange={(e) => setSelectedSuburb(e.target.value)}
+                                className="suburb-filter-select"
+                            >
+                                <option value="">All Locations</option>
+                                {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
+                                    <optgroup key={letter} label={letter}>
+                                        {NAIROBI_SUBURBS[letter].map(sub => (
+                                            <option key={sub} value={sub}>{sub}</option>
+                                        ))}
+                                    </optgroup>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="filters-wrapper">
@@ -375,12 +406,12 @@ function ServiceList({ user }) {
                                 </select>
                             </div>
 
-                            {(searchTerm || searchLocation || selectedCategory || sortOption !== "random") && (
+                            {(searchTerm || selectedSuburb || selectedCategory || sortOption !== "random") && (
                                 <button
                                     className="btn-clear"
                                     onClick={() => {
                                         setSearchTerm("");
-                                        setSearchLocation("");
+                                        setSelectedSuburb("");
                                         setSelectedCategory("");
                                         setSortOption("random");
                                     }}
@@ -426,17 +457,19 @@ function ServiceList({ user }) {
 
                             <div className="service-main" onClick={() => !isDimmed && handleBookClick(service)}>
                               
-                              {/* 🆕 Address Row */}
-                              {service.business_address && (
-                                <div className="meta-row location-row">
-                                    <MapPin size={12} color="#64748b" style={{marginRight:'4px'}} />
-                                    {service.google_maps_link ? (
-                                        <a href={service.google_maps_link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="location-link">
-                                            {service.business_address}
-                                        </a>
-                                    ) : (
-                                        <span className="location-text">{service.business_address}</span>
-                                    )}
+                              {/* 🆕 Clickable Address Row */}
+                              {(service.suburb || service.business_address) && (
+                                <div 
+                                    className="meta-row location-row clickable" 
+                                    onClick={(e) => handleLocationClick(e, service)}
+                                    title="View location map"
+                                >
+                                    <MapPin size={13} color="#2563eb" style={{marginRight:'4px', flexShrink:0}} />
+                                    <span className="location-link">
+                                        {service.suburb ? <span style={{fontWeight:'600'}}>{service.suburb}</span> : null}
+                                        {service.suburb && service.business_address ? ", " : ""}
+                                        {service.business_address}
+                                    </span>
                                 </div>
                               )}
 
@@ -504,6 +537,43 @@ function ServiceList({ user }) {
             ✅ Appointment booked successfully! Check your appointments page.
           </div>
         )}
+
+        {/* 🆕 Map Popup Modal */}
+        {mapService && (
+            <div className="map-modal-overlay" onClick={() => setMapService(null)}>
+                <div className="map-modal-content" onClick={e => e.stopPropagation()}>
+                    <div className="map-header">
+                        <h3>📍 Location Details</h3>
+                        <button onClick={() => setMapService(null)} className="close-btn"><X size={20} /></button>
+                    </div>
+                    <div className="map-body">
+                        <h4 style={{margin:'0 0 5px 0', color:'#1e293b'}}>{mapService.business_name}</h4>
+                        <p style={{color:'#64748b', fontSize:'14px', marginBottom:'20px'}}>
+                            {mapService.suburb}, {mapService.business_address}
+                        </p>
+                        
+                        <div className="map-actions">
+                            {mapService.google_maps_link ? (
+                                <a 
+                                    href={mapService.google_maps_link} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="btn-open-map"
+                                >
+                                    <MapPin size={18} /> Open in Google Maps <ExternalLink size={14} style={{marginLeft:5}}/>
+                                </a>
+                            ) : (
+                                <div className="no-map-link">
+                                    <MapPin size={40} color="#cbd5e1" />
+                                    <p>No map link provided by this business.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
       </div>
     </div>
   );

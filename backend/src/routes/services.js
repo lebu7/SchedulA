@@ -38,15 +38,17 @@ db.run(
    ✅ GET all services (includes location & maps link)
 --------------------------------------------- */
 router.get("/", (req, res) => {
-  const { search, category, provider, location } = req.query; // 🆕 Added location param
+  const { search, category, provider, location } = req.query;
 
+  // ✅ Added u.suburb to the query
   let query = `
     SELECT 
       s.*, 
       u.name AS provider_name, 
       u.business_name, 
-      u.business_address,  -- 🆕
-      u.google_maps_link,  -- 🆕
+      u.business_address,
+      u.suburb,
+      u.google_maps_link,
       u.opening_time AS provider_opening_time, 
       u.closing_time AS provider_closing_time
     FROM services s 
@@ -71,10 +73,10 @@ router.get("/", (req, res) => {
     params.push(`%${provider}%`);
   }
 
-  // 🆕 Location Filter Logic
+  // Filter by address text if provided via query (optional fallback)
   if (location) {
-    query += ` AND u.business_address LIKE ?`;
-    params.push(`%${location}%`);
+    query += ` AND (u.business_address LIKE ? OR u.suburb LIKE ?)`;
+    params.push(`%${location}%`, `%${location}%`);
   }
 
   query += ` ORDER BY s.created_at DESC`;
@@ -175,8 +177,9 @@ router.post(
           `SELECT s.*, 
                   u.name AS provider_name, 
                   u.business_name, 
-                  u.business_address,  -- 🆕
-                  u.google_maps_link,  -- 🆕
+                  u.business_address,
+                  u.suburb,
+                  u.google_maps_link,
                   u.opening_time AS provider_opening_time, 
                   u.closing_time AS provider_closing_time
           FROM services s 
