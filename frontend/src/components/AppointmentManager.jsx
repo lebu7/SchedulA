@@ -391,10 +391,13 @@ function AppointmentManager({ user }) {
   };
 
   const handleRebook = (apt) => {
+    // ✅ FIX: Ensure provider_id is passed for availability check
     setRebookService({
-      id: apt.service_id,
+      service_id: apt.service_id, // Important: Use service_id for rebooking logic
+      id: apt.service_id, // Fallback
       name: apt.service_name,
       provider_name: apt.provider_name,
+      provider_id: apt.provider_id, // ✅ CRITICAL FIX: Pass provider_id so modal can check slots
       duration: apt.duration,
       price: apt.price,
       opening_time: apt.opening_time || "08:00",

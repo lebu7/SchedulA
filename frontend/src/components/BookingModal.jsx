@@ -15,6 +15,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   // UI States
   const [error, setError] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
+  
+  // Initialize serviceMeta. If rebooking, 'service' is an appointment object.
   const [serviceMeta, setServiceMeta] = useState(service || {});
   const [showAddonDropdown, setShowAddonDropdown] = useState(false);
   
@@ -26,13 +28,48 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // ---------- 1. Availability Logic (Updated for Capacity & User Conflict) ----------
+  // ✅ Determine Real Service ID
+  // If 'service_id' exists, it's an appointment (rebooking). If not, it's a service object (id).
+  const realServiceId = serviceMeta.service_id || serviceMeta.id;
+
+  // ✅ 0. FETCH FULL SERVICE DETAILS (For Rebooking - to get Capacity & Provider ID)
+  useEffect(() => {
+    const fetchServiceDetails = async () => {
+      // If we are rebooking (we have a service_id property), fetch the original service
+      if (service.service_id) {
+        try {
+          const res = await api.get(`/services/${service.service_id}`);
+          // Merge the original service data (capacity, provider_id) into our meta
+          // This ensures provider_id is correct for the availability check
+          setServiceMeta(prev => ({ 
+            ...prev, 
+            ...res.data, 
+            // Ensure we keep the appointment's provider_id if the service fetch fails or returns partial data
+            provider_id: res.data.provider_id || prev.provider_id 
+          })); 
+        } catch (err) {
+          console.error("Failed to fetch service details for rebooking", err);
+        }
+      }
+    };
+    
+    if (service) {
+      setServiceMeta(service);
+      fetchServiceDetails();
+    }
+    
+    if (realServiceId) fetchAddons(realServiceId);
+  }, [service, realServiceId]);
+
+
+  // ---------- 1. Availability Logic (Updated) ----------
 
   useEffect(() => {
+    // Only fetch if we have a date and a provider ID
     if (selectedDate && serviceMeta?.provider_id) {
       fetchAvailability();
     }
-  }, [selectedDate, serviceMeta]);
+  }, [selectedDate, serviceMeta]); // Depend on serviceMeta to re-run if provider_id updates
 
   const fetchAvailability = async () => {
     setLoadingSlots(true);
@@ -41,33 +78,28 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setError("");
 
     try {
-      // 🧠 Run both requests in parallel: 
-      // 1. Provider's availability (for capacity)
-      // 2. User's appointments (to prevent double booking)
       const [availabilityRes, userRes] = await Promise.all([
         api.get(`/appointments/providers/${serviceMeta.provider_id}/availability`, {
           params: { date: selectedDate }
         }),
-        api.get('/appointments') // Fetches user's history
+        api.get('/appointments') // Fetches user's history to check for conflicts
       ]);
 
       const availabilityData = availabilityRes.data;
 
-      // 🧠 Process User's Bookings: Flatten the response object and filter
+      // Process User's Bookings
       const userAppsObj = userRes.data.appointments || {};
-      // Combine all active lists (pending, scheduled, upcoming)
       const allUserActiveApps = [
         ...(userAppsObj.pending || []),
         ...(userAppsObj.scheduled || []),
         ...(userAppsObj.upcoming || [])
       ];
 
-      // Filter for THIS date and THIS service
+      // Filter for THIS date and THIS service (to prevent double-booking same service)
       const myBookingsForThisService = allUserActiveApps.filter(apt => {
         const aptDate = new Date(apt.appointment_date).toDateString();
         const selDate = new Date(selectedDate).toDateString();
-        // Check if date matches AND service ID matches (preventing double booking same service)
-        return aptDate === selDate && apt.service_id === serviceMeta.id;
+        return aptDate === selDate && apt.service_id === realServiceId;
       });
 
       if (availabilityData.is_closed) {
@@ -77,7 +109,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           availabilityData.opening_time, 
           availabilityData.closing_time, 
           availabilityData.booked_slots || [], 
-          myBookingsForThisService // Pass user's bookings to generator
+          myBookingsForThisService 
         );
       }
     } catch (err) {
@@ -89,6 +121,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
 
   const generateTimeSlots = (openTime, closeTime, bookedRanges, myBookings) => {
     const generated = [];
+    if (!openTime || !closeTime) return;
+
     const [openH, openM] = openTime.split(':').map(Number);
     const [closeH, closeM] = closeTime.split(':').map(Number);
     
@@ -99,37 +133,36 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     end.setHours(closeH, closeM, 0, 0);
 
     const now = new Date(); 
+    // ✅ CRITICAL FIX: Use capacity from fetched meta, default to 1
     const serviceCapacity = serviceMeta.capacity || 1;
 
     while (current < end) {
       const timeString = current.toTimeString().slice(0, 5); // "08:00"
       
-      // Calculate end of this specific slot
       const slotEndTime = new Date(current.getTime() + (serviceMeta.duration || 30) * 60000);
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
-      // 1. Check Global Capacity
+      // 1. Check Global Capacity (How many people have booked this slot?)
       const overlapCount = bookedRanges.filter(booking => {
         return (timeString >= booking.start && timeString < booking.end) || 
                (timeStringEnd > booking.start && timeStringEnd <= booking.end) || 
                (timeString <= booking.start && timeStringEnd >= booking.end); 
       }).length;
 
-      // 2. Check if USER already booked this slot (The new requirement)
+      // 2. Check if USER already booked this slot (Prevent user from booking same slot twice)
       const isBookedByMe = myBookings.some(myAppt => {
-        // Convert my appt date to time string "HH:MM"
         const myTime = new Date(myAppt.appointment_date).toTimeString().slice(0, 5);
         return myTime === timeString;
       });
 
-      // Logic: Unavailable if Capacity Reached OR User already has this slot
+      // Logic: Slot is full if overlap >= capacity.
       const isFull = overlapCount >= serviceCapacity;
       const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
 
       generated.push({
         time: timeString,
-        available: !isFull && !isPast && !isBookedByMe, // 🧠 Disable if booked by me
-        status: isBookedByMe ? "booked" : (isFull ? "full" : "open") // Helper for UI styling
+        available: !isFull && !isPast && !isBookedByMe,
+        status: isBookedByMe ? "booked" : (isFull ? "full" : "open")
       });
 
       current.setMinutes(current.getMinutes() + 30);
@@ -137,16 +170,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setSlots(generated);
   };
 
-  // ---------- 2. Addons & Helpers (unchanged) ----------
+  // ---------- 2. Addons & Helpers ----------
 
-  useEffect(() => {
-    if (service) setServiceMeta(service);
-    if (service?.id) fetchAddons(service.id);
-  }, [service]);
-
-  const fetchAddons = async (serviceId) => {
+  const fetchAddons = async (sId) => {
     try {
-      const res = await api.get(`/services/${serviceId}/sub-services`);
+      const res = await api.get(`/services/${sId}/sub-services`);
       setAddons(res.data.sub_services || []);
     } catch (err) { console.error("Error fetching add-ons:", err); }
   };
@@ -161,14 +189,14 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
 
   useEffect(() => {
     const addonTotal = selectedAddons.reduce((sum, a) => sum + Number(a.price ?? a.additional_price ?? 0), 0);
-    setTotalPrice(Number(service?.price || 0) + addonTotal);
-  }, [selectedAddons, service?.price]);
+    setTotalPrice(Number(serviceMeta?.price || 0) + addonTotal);
+  }, [selectedAddons, serviceMeta?.price]);
 
   const handleAddonToggle = (addon, checked) => {
     setSelectedAddons((prev) => checked ? [...prev, addon] : prev.filter((a) => a.id !== addon.id));
   };
 
-  // ---------- 3. Payment Calculations (unchanged) ----------
+  // ---------- 3. Payment Calculations ----------
   const depositPercentage = 0.3;
   const basePrice = Number(serviceMeta?.price || 0);
   const addonsTotal = selectedAddons.reduce((sum, a) => sum + Number(a.price ?? a.additional_price ?? 0), 0);
@@ -184,7 +212,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return depositKES;
   };
 
-  // ---------- 4. Paystack Config (unchanged) ----------
+  // ---------- 4. Paystack Config ----------
   const buildPaystackConfig = (forOption) => {
     const amount = (() => {
       if (forOption === "full") return totalKES * 100;
@@ -225,7 +253,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           let payment_status = paidAmountKES >= totalKES ? "paid" : "deposit-paid";
 
           const payload = {
-            service_id: serviceMeta.id,
+            service_id: realServiceId, // ✅ Use real Service ID
             appointment_date: appointmentDateTime.toISOString(),
             notes: notes.trim(),
             addons: selectedAddons,
