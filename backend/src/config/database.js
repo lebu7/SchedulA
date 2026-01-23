@@ -28,7 +28,7 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 
 function initializeDatabase() {
   /* ---------------------------------------------
-     🧱 USERS TABLE (Updated with gender/dob)
+     🧱 USERS TABLE 
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -37,15 +37,26 @@ function initializeDatabase() {
       password TEXT NOT NULL,
       name TEXT NOT NULL,
       phone TEXT,
-      gender TEXT, -- 🆕
-      dob DATE,    -- 🆕
+      gender TEXT,
+      dob DATE,
       user_type TEXT CHECK(user_type IN ('client', 'provider')) NOT NULL,
       business_name TEXT,
+      
+      -- 🆕 Location Columns
+      suburb TEXT,
+      business_address TEXT,
+      google_maps_link TEXT,
+
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
+
+      -- 🆕 Weekend Operations
+      is_open_sat INTEGER DEFAULT 0,
+      is_open_sun INTEGER DEFAULT 0,
+
       notification_preferences TEXT,
-      reset_otp TEXT, -- 🆕 For password reset
-      reset_otp_expires DATETIME, -- 🆕 For password reset expiry
+      reset_otp TEXT,
+      reset_otp_expires DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -96,14 +107,12 @@ function initializeDatabase() {
       addons TEXT DEFAULT '[]',
       reminder_sent INTEGER DEFAULT 0,
       
-      -- Refund Columns
       refund_status TEXT DEFAULT NULL CHECK(refund_status IN (NULL, 'pending', 'processing', 'completed', 'failed')),
       refund_reference TEXT,
       refund_amount REAL DEFAULT 0,
       refund_initiated_at DATETIME,
       refund_completed_at DATETIME,
 
-      -- 🧠 AI Risk Score
       no_show_risk REAL DEFAULT 0,
 
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -123,8 +132,8 @@ function initializeDatabase() {
       appointment_id INTEGER NOT NULL,
       amount REAL NOT NULL,
       reference TEXT NOT NULL,
-      type TEXT DEFAULT 'payment', -- payment, refund
-      status TEXT DEFAULT 'success', -- success, failed
+      type TEXT DEFAULT 'payment',
+      status TEXT DEFAULT 'success',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (appointment_id) REFERENCES appointments(id)
     )
@@ -133,9 +142,7 @@ function initializeDatabase() {
       if (!err) {
         db.get("SELECT count(*) as count FROM transactions", [], (e, row) => {
           if (!e && row.count === 0) {
-            console.log(
-              "⚙️ Backfilling transactions from existing appointments..."
-            );
+            console.log("⚙️ Backfilling transactions...");
             db.run(`
             INSERT INTO transactions (appointment_id, amount, reference, type, status)
             SELECT id, amount_paid, payment_reference, 'payment', 'success'
@@ -173,7 +180,7 @@ function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
-      type TEXT NOT NULL, -- e.g., 'booking', 'refund', 'system'
+      type TEXT NOT NULL,
       title TEXT NOT NULL,
       message TEXT NOT NULL,
       is_read BOOLEAN DEFAULT 0,
@@ -232,15 +239,21 @@ function initializeDatabase() {
   /* ---------------------------------------------
      🔍 Ensure missing columns exist (MIGRATIONS)
   --------------------------------------------- */
-  // Users Migrations (New Gender/DOB/ResetOTP)
+  // Users Migrations
   tryAddColumn("users", "gender", "TEXT");
   tryAddColumn("users", "dob", "DATE");
-  tryAddColumn("users", "reset_otp", "TEXT"); // 🆕
-  tryAddColumn("users", "reset_otp_expires", "DATETIME"); // 🆕
-
+  tryAddColumn("users", "reset_otp", "TEXT");
+  tryAddColumn("users", "reset_otp_expires", "DATETIME");
   tryAddColumn("users", "opening_time", "TEXT DEFAULT '08:00'");
   tryAddColumn("users", "closing_time", "TEXT DEFAULT '18:00'");
   tryAddColumn("users", "notification_preferences", "TEXT");
+
+  // 🆕 Users Migrations for Location & Weekends
+  tryAddColumn("users", "suburb", "TEXT");
+  tryAddColumn("users", "business_address", "TEXT");
+  tryAddColumn("users", "google_maps_link", "TEXT");
+  tryAddColumn("users", "is_open_sat", "INTEGER DEFAULT 0");
+  tryAddColumn("users", "is_open_sun", "INTEGER DEFAULT 0");
 
   tryAddColumn("services", "opening_time", "TEXT DEFAULT '08:00'");
   tryAddColumn("services", "closing_time", "TEXT DEFAULT '18:00'");

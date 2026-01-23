@@ -57,12 +57,10 @@
 .tab-btn:hover {
   color: #1e293b;
 }
-
 .tab-btn.active {
   color: #2563eb;
   font-weight: 600;
 }
-
 .tab-btn.active::after {
   content: "";
   position: absolute;
@@ -95,15 +93,7 @@
   margin: 0 0 25px 0;
 }
 
-/* Header Row (Title + Pill Tabs) */
-.section-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-/* Pill Navigation (SMS vs In-App) */
+/* Pill Navigation */
 .pill-nav {
   display: flex;
   background-color: #f1f5f9;
@@ -125,10 +115,6 @@
   align-items: center;
   gap: 6px;
   transition: all 0.2s;
-}
-
-.pill-btn:hover {
-  color: #334155;
 }
 
 .pill-btn.active {
@@ -167,8 +153,6 @@
   font-size: 13px;
   font-weight: 600;
   color: #475569;
-  display: flex;
-  align-items: center;
 }
 
 .form-group input {
@@ -176,7 +160,6 @@
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 14px;
-  transition: border 0.2s;
 }
 
 .form-group input:focus {
@@ -184,36 +167,47 @@
   outline: none;
 }
 
+/* 🆕 Side-by-side Layouts */
+.flex-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+  align-items: flex-start;
+}
+
+.flex-1 {
+  flex: 1;
+}
+.flex-2 {
+  flex: 2;
+}
+
+/* 🆕 Business/Weekend Section */
+.business-hours-split {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.weekend-card {
+  flex: 1.2;
+  padding: 20px;
+  background-color: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
 /* Buttons */
 .save-btn {
-  margin-top: 10px;
-  padding: 10px;
+  margin-top: 20px;
+  padding: 12px;
   background-color: #2563eb;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
-}
-
-.save-btn:hover {
-  background-color: #1d4ed8;
-}
-
-.save-btn:disabled {
-  background-color: #94a3b8;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background-color: #f1f5f9;
-  color: #334155;
-}
-
-.btn-secondary:hover {
-  background-color: #e2e8f0;
 }
 
 /* Toggles */
@@ -221,24 +215,43 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 0;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.toggle-row:last-child {
-  border-bottom: none;
+  padding: 12px 0;
 }
 
 .toggle-row h4 {
-  margin: 0 0 4px 0;
+  margin: 0;
   font-size: 14px;
   color: #1e293b;
 }
-
 .toggle-row p {
   margin: 0;
   font-size: 12px;
   color: #94a3b8;
+}
+
+/* Suburb Dropdown */
+.suburb-dropdown {
+  padding: 8px 12px;
+  font-size: 13px;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: white;
+  color: #334155;
+  cursor: pointer;
+}
+
+/* 🆕 Single Line Description Truncation */
+.service-description {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 15px;
+  flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 /* Switch Styles */
@@ -248,13 +261,11 @@
   width: 44px;
   height: 24px;
 }
-
 .switch input {
   opacity: 0;
   width: 0;
   height: 0;
 }
-
 .slider {
   position: absolute;
   cursor: pointer;
@@ -266,7 +277,6 @@
   transition: 0.4s;
   border-radius: 24px;
 }
-
 .slider:before {
   position: absolute;
   content: "";
@@ -278,21 +288,13 @@
   transition: 0.4s;
   border-radius: 50%;
 }
-
 input:checked + .slider {
   background-color: #2563eb;
 }
-
 input:checked + .slider:before {
   transform: translateX(20px);
 }
 
-input:disabled + .slider {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Animation */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -303,73 +305,93 @@ input:disabled + .slider {
     transform: translateY(0);
   }
 }
-
-.fade-in {
-  animation: fadeIn 0.3s ease-out;
+/* 🔔 Notifications Section Specific Styling */
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .profile-layout {
-    grid-template-columns: 1fr;
-    gap: 30px;
-  }
-
-  .settings-tabs {
-    gap: 15px;
-    overflow-x: auto;
-    padding-bottom: 5px;
-  }
-
-  .tab-btn {
-    white-space: nowrap;
-  }
-}
-/* frontend/src/components/Settings.css */
-
-.suburb-dropdown {
-  padding: 8px 12px;
-  font-size: 13px;
-  height: auto;
-  width: 80%;
-  max-width: 300px; /* 👈 Restricts width so it doesn't cover the whole screen */
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background-color: white;
-  color: #334155;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.suburb-dropdown:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* Style the headers (A, B, C...) inside the dropdown */
-.suburb-dropdown optgroup {
-  font-style: normal;
-  font-weight: 700;
-  color: #94a3b8;
-  background-color: #f8fafc;
-}
-
-.suburb-dropdown option {
+.pill-nav {
+  display: flex;
+  background-color: #f1f5f9;
   padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+}
+
+.pill-btn {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.pill-btn:hover {
+  color: #1e293b;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.pill-btn.active {
+  background-color: white;
+  color: #2563eb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.notif-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 🆕 Refined Toggle Row for Notifications */
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 0;
+  border-bottom: 1px solid #f8fafc;
+  transition: background 0.2s;
+}
+
+.toggle-row:hover {
+  background-color: #fafafa;
+  padding-left: 8px;
+  padding-right: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  border-radius: 8px;
+}
+
+.toggle-row:last-child {
+  border-bottom: none;
+}
+
+.toggle-info {
+  flex: 1;
+  padding-right: 20px;
+}
+
+.toggle-row h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
   color: #1e293b;
 }
 
-.service-description {
+.toggle-row p {
+  margin: 0;
+  font-size: 12px;
   color: #64748b;
-  font-size: 13px;
-  line-height: 1.5;
-  margin-bottom: 15px;
-  flex-grow: 1;
-
-  /* 🆕 Force single line and add ellipsis */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block; /* Ensure it behaves as a block for truncation */
+  line-height: 1.4;
 }

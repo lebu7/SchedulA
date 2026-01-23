@@ -12,15 +12,14 @@ const router = express.Router();
 
 /* ---------------------------------------------
    ✅ Public Provider Profile (For Clients)
-   Updated: Staff count picked from total service capacity
 --------------------------------------------- */
 router.get("/public-profile/:id", authenticateToken, (req, res) => {
   const providerId = req.params.id;
 
-  // 1. Fetch Provider Business Details (Excluding Email, DOB, Gender)
   db.get(
     `SELECT id, name, business_name, phone, business_address, suburb, 
-            google_maps_link, opening_time, closing_time, created_at 
+            google_maps_link, opening_time, closing_time, 
+            is_open_sat, is_open_sun, created_at 
      FROM users WHERE id = ? AND user_type = 'provider'`,
     [providerId],
     (err, provider) => {
@@ -28,7 +27,6 @@ router.get("/public-profile/:id", authenticateToken, (req, res) => {
       if (!provider)
         return res.status(404).json({ error: "Provider not found" });
 
-      // 2. Fetch Provider's Services
       db.all(
         `SELECT id, name, description, category, duration, price, is_closed 
          FROM services WHERE provider_id = ? AND is_closed = 0`,
@@ -37,7 +35,6 @@ router.get("/public-profile/:id", authenticateToken, (req, res) => {
           if (servErr)
             return res.status(500).json({ error: "Error fetching services" });
 
-          // 3. 🆕 Pick staff count from total capacity (matching analytics logic)
           db.get(
             `SELECT COALESCE(SUM(capacity), 0) as total_staff 
              FROM services 
@@ -54,11 +51,11 @@ router.get("/public-profile/:id", authenticateToken, (req, res) => {
                 services: services || [],
                 staff_count: capacityRow ? capacityRow.total_staff : 0,
               });
-            }
+            },
           );
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -73,7 +70,6 @@ router.post(
     body("name").notEmpty().trim(),
     body("phone").notEmpty().withMessage("Phone number is required"),
     body("gender").isIn(["Male", "Female", "Other", "Prefer not to say"]),
-    // 🔞 Age Validation (Backend)
     body("dob")
       .isISO8601()
       .withMessage("Date of Birth must be a valid date")
@@ -142,9 +138,9 @@ router.post(
             `INSERT INTO users (
               email, password, name, phone, gender, dob, user_type, 
               business_name, suburb, business_address, google_maps_link,
-              opening_time, closing_time, notification_preferences
+              opening_time, closing_time, is_open_sat, is_open_sun, notification_preferences
             )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
             [
               email,
               hashedPassword,
@@ -172,13 +168,13 @@ router.post(
                 newUserId,
                 "system",
                 "Welcome to Schedula!",
-                `Hello ${name}, your account has been successfully created.`
+                `Hello ${name}, your account has been successfully created.`,
               );
 
               const token = jwt.sign(
                 { userId: newUserId, email, user_type },
                 process.env.JWT_SECRET,
-                { expiresIn: "24h" }
+                { expiresIn: "24h" },
               );
 
               res.status(201).json({
@@ -195,20 +191,22 @@ router.post(
                   suburb,
                   opening_time: defaultOpening,
                   closing_time: defaultClosing,
+                  is_open_sat: 0,
+                  is_open_sun: 0,
                 },
               });
-            }
+            },
           );
-        }
+        },
       );
     } catch (error) {
       res.status(500).json({ error: "Server error during registration" });
     }
-  }
+  },
 );
 
 /* ---------------------------------------------
-   ✅ Login (Email OR Phone)
+   ✅ Login
 --------------------------------------------- */
 router.post(
   "/login",
@@ -240,7 +238,7 @@ router.post(
           const token = jwt.sign(
             { userId: user.id, email: user.email, user_type: user.user_type },
             process.env.JWT_SECRET,
-            { expiresIn: "24h" }
+            { expiresIn: "24h" },
           );
 
           let prefs = {};
@@ -265,15 +263,17 @@ router.post(
               google_maps_link: user.google_maps_link,
               opening_time: user.opening_time || "08:00",
               closing_time: user.closing_time || "18:00",
+              is_open_sat: user.is_open_sat || 0,
+              is_open_sun: user.is_open_sun || 0,
               notification_preferences: prefs,
             },
           });
-        }
+        },
       );
     } catch (error) {
       res.status(500).json({ error: "Server error during login" });
     }
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -308,7 +308,7 @@ router.post(
           const now = new Date();
           const otp = Math.floor(100000 + Math.random() * 900000).toString();
           const expiresAt = new Date(
-            now.getTime() + 1 * 60 * 1000
+            now.getTime() + 1 * 60 * 1000,
           ).toISOString();
 
           db.run(
@@ -330,18 +330,18 @@ router.post(
                   error: "Failed to send SMS. Please try again later.",
                 });
               }
-            }
+            },
           );
-        }
+        },
       );
     } catch (error) {
       res.status(500).json({ error: "Server error" });
     }
-  }
+  },
 );
 
 /* ---------------------------------------------
-   ✅ Reset Password - Verify OTP & Update
+   ✅ Reset Password
 --------------------------------------------- */
 router.post(
   "/reset-password",
@@ -392,30 +392,62 @@ router.post(
                 user.id,
                 "system",
                 "Password Reset",
-                "Your password has been successfully reset."
+                "Your password has been successfully reset.",
               );
 
               res.json({
                 message: "Password reset successfully. Please login.",
               });
-            }
+            },
           );
-        }
+        },
       );
     } catch (error) {
       res.status(500).json({ error: "Server error" });
     }
-  }
+  },
 );
 
 /* ---------------------------------------------
-   ✅ Get Profile (Updated for Location & Suburb)
+   ✅ GET Notifications
+--------------------------------------------- */
+router.get("/notifications", authenticateToken, (req, res) => {
+  db.all(
+    "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+    [req.user.userId],
+    (err, rows) => {
+      if (err) {
+        console.error("Error fetching notifications:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+      res.json({ notifications: rows || [] });
+    },
+  );
+});
+
+/* ---------------------------------------------
+   ✅ MARK NOTIFICATIONS READ
+--------------------------------------------- */
+router.put("/notifications/read", authenticateToken, (req, res) => {
+  db.run(
+    "UPDATE notifications SET is_read = 1 WHERE user_id = ?",
+    [req.user.userId],
+    (err) => {
+      if (err) return res.status(500).json({ error: "Failed to update" });
+      res.json({ message: "Notifications marked as read" });
+    },
+  );
+});
+
+/* ---------------------------------------------
+   ✅ Get Profile
 --------------------------------------------- */
 router.get("/profile", authenticateToken, (req, res) => {
   db.get(
     `SELECT id, email, name, phone, gender, dob, user_type, business_name, 
             business_address, suburb, google_maps_link, 
-            opening_time, closing_time, notification_preferences, created_at 
+            opening_time, closing_time, is_open_sat, is_open_sun, 
+            notification_preferences, created_at 
      FROM users WHERE id = ?`,
     [req.user.userId],
     (err, user) => {
@@ -424,17 +456,17 @@ router.get("/profile", authenticateToken, (req, res) => {
 
       try {
         user.notification_preferences = JSON.parse(
-          user.notification_preferences || "{}"
+          user.notification_preferences || "{}",
         );
       } catch (e) {}
 
       res.json({ user });
-    }
+    },
   );
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE PROFILE (Updated for Location & Suburb)
+   ✅ UPDATE PROFILE (Compulsory Location)
 --------------------------------------------- */
 router.put(
   "/profile",
@@ -444,8 +476,22 @@ router.put(
     body("phone")
       .matches(/^\+254\d{9}$/)
       .withMessage("Phone must start with +254 and have 9 digits"),
+    body("suburb").custom((value, { req }) => {
+      if (req.user.user_type === "provider" && !value) {
+        throw new Error("Suburb is compulsory for business profiles.");
+      }
+      return true;
+    }),
+    body("business_address").custom((value, { req }) => {
+      if (req.user.user_type === "provider" && !value) {
+        throw new Error(
+          "Business Address is compulsory for business profiles.",
+        );
+      }
+      return true;
+    }),
     body("google_maps_link")
-      .optional()
+      .optional({ checkFalsy: true })
       .isURL()
       .withMessage("Must be a valid URL"),
   ],
@@ -489,7 +535,7 @@ router.put(
           req.user.userId,
           "system",
           "Profile Updated",
-          "Your profile details have been successfully updated."
+          "Your profile details have been successfully updated.",
         );
 
         res.json({
@@ -505,9 +551,9 @@ router.put(
             google_maps_link,
           },
         });
-      }
+      },
     );
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -555,15 +601,15 @@ router.put(
               userId,
               "system",
               "Password Changed",
-              "Your account password was recently changed."
+              "Your account password was recently changed.",
             );
 
             res.json({ message: "Password changed successfully" });
-          }
+          },
         );
-      }
+      },
     );
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -584,11 +630,11 @@ router.put("/notifications", authenticateToken, (req, res) => {
         req.user.userId,
         "system",
         "Settings Updated",
-        "Your notification preferences have been saved."
+        "Your notification preferences have been saved.",
       );
 
       res.json({ message: "Settings saved", preferences: safePrefs });
-    }
+    },
   );
 });
 
@@ -612,15 +658,21 @@ router.put(
     if (!errors.isEmpty())
       return res.status(400).json({ errors: errors.array() });
 
-    const { opening_time, closing_time } = req.body;
+    const { opening_time, closing_time, is_open_sat, is_open_sun } = req.body;
     if (closing_time <= opening_time)
       return res
         .status(400)
         .json({ error: "Closing time must be later than opening time" });
 
     db.run(
-      `UPDATE users SET opening_time = ?, closing_time = ? WHERE id = ?`,
-      [opening_time, closing_time, req.user.userId],
+      `UPDATE users SET opening_time = ?, closing_time = ?, is_open_sat = ?, is_open_sun = ? WHERE id = ?`,
+      [
+        opening_time,
+        closing_time,
+        is_open_sat ? 1 : 0,
+        is_open_sun ? 1 : 0,
+        req.user.userId,
+      ],
       function (err) {
         if (err)
           return res.status(500).json({ error: "Failed to update hours" });
@@ -629,13 +681,13 @@ router.put(
           req.user.userId,
           "system",
           "Schedule Update",
-          `Your business hours are now ${opening_time} - ${closing_time}.`
+          `Your business hours and weekend status have been updated.`,
         );
 
         res.json({ message: "Business hours updated" });
-      }
+      },
     );
-  }
+  },
 );
 
 export default router;

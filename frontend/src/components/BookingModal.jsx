@@ -7,7 +7,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const [step, setStep] = useState(1);
   
   // Data States
-  // 🆕 If Walk-In, default to Today's date immediately
   const [selectedDate, setSelectedDate] = useState(isWalkIn ? new Date().toISOString().split("T")[0] : "");
   const [selectedTime, setSelectedTime] = useState("");
   const [slots, setSlots] = useState([]); 
@@ -65,6 +64,41 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
   // ---------- 1. Availability Logic ----------
 
+  // 🆕 Helper to validate if a date is allowed based on provider settings
+  const handleDateChange = async (dateValue) => {
+    setError("");
+    setSelectedTime("");
+    setSlots([]);
+
+    if (!dateValue) {
+      setSelectedDate("");
+      return;
+    }
+
+    const dateObj = new Date(dateValue);
+    const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
+
+    try {
+      const providerRes = await api.get(`/auth/public-profile/${serviceMeta.provider_id}`);
+      const providerSettings = providerRes.data.provider;
+
+      const isSatClosed = dayOfWeek === 6 && !providerSettings.is_open_sat;
+      const isSunClosed = dayOfWeek === 0 && !providerSettings.is_open_sun;
+
+      if (isSatClosed || isSunClosed) {
+        const dayName = dayOfWeek === 6 ? "Saturdays" : "Sundays";
+        setError(`This provider is closed on ${dayName}. Please pick another date.`);
+        setSelectedDate(""); // 🆕 Clear the picker if they chose a closed day
+        return;
+      }
+
+      setSelectedDate(dateValue);
+    } catch (err) {
+      console.error("Error validating date:", err);
+      setSelectedDate(dateValue);
+    }
+  };
+
   useEffect(() => {
     if (selectedDate && serviceMeta?.provider_id) {
       fetchAvailability();
@@ -75,8 +109,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     setLoadingSlots(true);
     setSlots([]);
     setSelectedTime("");
-    setError("");
-
+    
     try {
       const [availabilityRes, userRes] = await Promise.all([
         api.get(`/appointments/providers/${serviceMeta.provider_id}/availability`, {
@@ -140,14 +173,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
       const slotEndTime = new Date(current.getTime() + duration * 60000);
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
-      // 1. Check Global Capacity
       const overlapCount = bookedRanges.filter(booking => {
         return (timeString >= booking.start && timeString < booking.end) || 
                (timeStringEnd > booking.start && timeStringEnd <= booking.end) || 
                (timeString <= booking.start && timeStringEnd >= booking.end); 
       }).length;
 
-      // 2. Check "Already Booked" status (Ignored for providers/walk-ins)
       const isBookedByMe = user.user_type === 'client' && !isWalkIn && myBookings.some(myAppt => {
         const myTime = new Date(myAppt.appointment_date).toTimeString().slice(0, 5);
         return myTime === timeString;
@@ -155,25 +186,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
       const isFull = overlapCount >= serviceCapacity;
       
-      // 🆕 WALK-IN TIME LOGIC:
-      // A slot is "past" if the current real time is AFTER the slot start time.
-      // We allow a small buffer (e.g. 15 mins) so if it's 10:10, you can still book 10:00 walk-in.
       const bufferTime = new Date(now.getTime() - 15 * 60000); 
       
       let isPast = false;
       
       if (isWalkIn) {
-         // Strict check for walk-ins: You can't book a slot that has already passed significantly
-         // AND you can't book a slot way in the future (e.g. 5 hours from now) - Walk-ins are "Now"
-         // Actually, "Walk-in" implies arrival now. So we should highlight the slot closest to NOW.
-         // But for flexibility, let's just ensure we don't book past slots.
          isPast = current < bufferTime;
-         
-         // Optional: Prevent booking too far in future for walk-in (e.g. > 2 hours)
-         // const futureLimit = new Date(now.getTime() + 120 * 60000);
-         // if (current > futureLimit) isPast = true; // Treat future as "unavailable" for walk-in context
       } else {
-         // Standard client logic: Just check if date is today and time is past
          isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
       }
 
@@ -349,19 +368,14 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   const getMinDate = () => {
-    // 🆕 For Walk-Ins, FORCE Today.
     if (isWalkIn) return new Date().toISOString().split("T")[0];
-    
-    // For clients, typically allow booking from tomorrow (or today if logic permits)
     const today = new Date();
     today.setDate(today.getDate() + 1);
     return today.toISOString().split("T")[0];
   };
 
   const getMaxDate = () => {
-    // 🆕 For Walk-Ins, FORCE Today.
     if (isWalkIn) return new Date().toISOString().split("T")[0];
-    
     const maxDate = new Date();
     maxDate.setDate(maxDate.getDate() + 30);
     return maxDate.toISOString().split("T")[0];
@@ -387,20 +401,18 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
           <form onSubmit={handleSubmit} className="booking-form">
             {error && <div className="error-message">⚠️ {error}</div>}
 
-            {/* STEP 1: DATE & TIME (Plus Payment for Walk-Ins) */}
             {step === 1 ? (
               <div className="step-1">
                 <div className="form-group">
                   <label>Select Date</label>
-                  {/* 🆕 Walk-In: ReadOnly Date Input set to Today */}
                   <input 
                     type="date" 
                     className="styled-input" 
                     value={selectedDate} 
-                    onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(""); }} 
+                    onChange={(e) => handleDateChange(e.target.value)} // 🆕 Updated handler
                     min={getMinDate()} 
                     max={getMaxDate()}
-                    readOnly={isWalkIn} // 🔒 Lock date for Walk-Ins
+                    readOnly={isWalkIn} 
                     style={isWalkIn ? {backgroundColor: '#f1f5f9', cursor: 'not-allowed'} : {}}
                   />
                   {isWalkIn && <small style={{color: '#64748b', fontSize: '11px'}}>Walk-ins are recorded for today.</small>}
@@ -408,7 +420,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
                 <div className="form-group">
                   <label>Select Time</label>
-                  {!selectedDate ? <p className="hint">Please select a date first.</p> : loadingSlots ? <p className="hint">Loading availability...</p> : slots.length === 0 ? <p className="hint error">No slots available.</p> : (
+                  {!selectedDate ? <p className="hint">Please select a date first.</p> : loadingSlots ? <p className="hint">Loading availability...</p> : slots.length === 0 ? <p className="hint error">{error || "No slots available."}</p> : (
                     <div className="time-grid">
                       {slots.map((slot) => (
                         <button 
@@ -417,7 +429,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                           className={`time-slot ${selectedTime === slot.time ? 'selected' : ''}`} 
                           disabled={!slot.available} 
                           onClick={() => setSelectedTime(slot.time)}
-                          title={slot.status === 'booked' ? "You already booked this slot" : slot.status === 'full' ? "Slot Full" : ""}
                         >
                           {slot.status === 'booked' ? 'Booked' : slot.time}
                         </button>
@@ -426,7 +437,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                   )}
                 </div>
 
-                {/* 🆕 WALK-IN PAYMENT FIELDS */}
                 {isWalkIn && (
                   <div className="walk-in-payment-section" style={{background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px'}}>
                     <h4 style={{fontSize: '0.9em', color: '#1e293b', marginBottom: '10px', marginTop: 0}}>💰 Record Payment</h4>

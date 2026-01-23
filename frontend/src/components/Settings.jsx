@@ -1,3 +1,4 @@
+/* frontend/src/components/Settings.jsx */
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom'; 
 import api from '../services/auth';
@@ -65,7 +66,12 @@ const Settings = ({ user, setUser }) => {
     booking_alerts: true, system_updates: true, payment_alerts: true, reminders: true
   });
   
-  const [hours, setHours] = useState({ opening_time: '08:00', closing_time: '18:00' });
+  const [hours, setHours] = useState({ 
+    opening_time: '08:00', 
+    closing_time: '18:00',
+    is_open_sat: false,
+    is_open_sun: false
+  });
 
   useEffect(() => {
     if (user) {
@@ -79,9 +85,12 @@ const Settings = ({ user, setUser }) => {
         business_address: user.business_address || '', 
         google_maps_link: user.google_maps_link || ''
       });
+      
       setHours({ 
         opening_time: user.opening_time || '08:00', 
-        closing_time: user.closing_time || '18:00' 
+        closing_time: user.closing_time || '18:00',
+        is_open_sat: !!user.is_open_sat,
+        is_open_sun: !!user.is_open_sun
       });
 
       if (user.notification_preferences) {
@@ -96,13 +105,6 @@ const Settings = ({ user, setUser }) => {
       }
     }
   }, [user]);
-
-  useEffect(() => {
-    const validTabs = ['profile', 'notifications', 'hours'];
-    if (location.state?.subTab && validTabs.includes(location.state.subTab)) {
-      setActiveTab(location.state.subTab);
-    }
-  }, [location.state]);
 
   const showMsg = (type, text) => {
     setMessage({ type, text });
@@ -145,7 +147,6 @@ const Settings = ({ user, setUser }) => {
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser)); 
     } catch (err) { 
-      console.error(err);
       const errMsg = err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Update failed';
       showMsg('error', errMsg); 
     }
@@ -199,23 +200,22 @@ const Settings = ({ user, setUser }) => {
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
     } catch (err) { 
-      console.error('Failed to save prefs:', err.response?.data || err.message);
       showMsg('error', 'Failed to save setting.');
     }
   };
 
   const handleBusinessInfoUpdate = async (e) => {
     e.preventDefault();
+
+    if (!profile.suburb || !profile.business_address) {
+        showMsg('error', 'Suburb and Business Address are compulsory.');
+        return;
+    }
+
     setLoading(true);
     try {
       await api.put('/auth/business-hours', hours);
-      
-      let formattedPhone = profile.phone.trim(); 
-      if (formattedPhone.startsWith('0')) formattedPhone = '+254' + formattedPhone.substring(1);
-      else if (formattedPhone.startsWith('254')) formattedPhone = '+' + formattedPhone;
-
-      const profileRes = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
-
+      const profileRes = await api.put('/auth/profile', profile);
       showMsg('success', 'Business settings updated!');
       const updatedUser = { ...user, ...hours, ...profileRes.data.user };
       setUser(updatedUser);
@@ -226,7 +226,6 @@ const Settings = ({ user, setUser }) => {
     setLoading(false);
   };
 
-  // 🤏 Small Input Style for Compact Location Form
   const smallInputStyle = { padding: '8px 10px', fontSize: '13px', height: 'auto' };
 
   return (
@@ -234,7 +233,6 @@ const Settings = ({ user, setUser }) => {
       <h2>⚙️ Account Settings</h2>
       {message.text && <div className={`settings-alert ${message.type}`}>{message.text}</div>}
 
-      {/* MAIN TAB NAVIGATION */}
       <div className="settings-tabs">
         <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
             <User size={16} /> Profile
@@ -249,7 +247,6 @@ const Settings = ({ user, setUser }) => {
         )}
       </div>
 
-      {/* === PROFILE TAB === */}
       {activeTab === 'profile' && (
         <div className="settings-section profile-layout">
           <div className="profile-column">
@@ -261,17 +258,11 @@ const Settings = ({ user, setUser }) => {
               </div>
               <div className="form-group">
                 <label>Mobile Number</label>
-                <input type="tel" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} placeholder="0712345678" required />
-                <small style={{color: '#666', display: 'block', marginTop: '5px'}}>We will format this to +254 automatically.</small>
+                <input type="tel" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} required />
               </div>
-
               <div className="form-group">
                 <label>Gender <small style={{color:'#888'}}>(Cannot be changed)</small></label>
-                <select 
-                  value={profile.gender} 
-                  disabled 
-                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}
-                >
+                <select value={profile.gender} disabled style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}>
                   <option value="">Select Gender</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
@@ -279,29 +270,19 @@ const Settings = ({ user, setUser }) => {
                   <option value="Prefer not to say">Prefer not to say</option>
                 </select>
               </div>
-
               <div className="form-group">
                 <label>Date of Birth <small style={{color:'#888'}}>(Cannot be changed)</small></label>
-                <input 
-                  type="date" 
-                  value={profile.dob} 
-                  disabled 
-                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }}
-                />
+                <input type="date" value={profile.dob} disabled style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed', color: '#6b7280' }} />
               </div>
-
               {user.user_type === 'provider' && (
                 <div className="form-group">
                   <label>Business Name</label>
                   <input type="text" value={profile.business_name} onChange={e => setProfile({...profile, business_name: e.target.value})} />
                 </div>
               )}
-              <button type="submit" className="save-btn" disabled={loading}>
-                {loading ? 'Saving...' : 'Save Profile Changes'}
-              </button>
+              <button type="submit" className="save-btn" disabled={loading}>Save Profile Changes</button>
             </form>
           </div>
-
           <div className="profile-column password-column">
             <h3>Change Password</h3>
             <form onSubmit={handlePasswordChange} className="settings-form">
@@ -325,9 +306,7 @@ const Settings = ({ user, setUser }) => {
                   {passwordError ? (
                     <span style={{ color: 'red', fontWeight: 'bold' }}>⚠️ {passwordError}</span>
                   ) : (
-                    <span style={{ color: '#666' }}>
-                      Requirement: 8+ chars, Uppercase, Lowercase, Number & Symbol.
-                    </span>
+                    <span style={{ color: '#666' }}>Requirement: 8+ chars, Uppercase, Lowercase, Number & Symbol.</span>
                   )}
                 </div>
               </div>
@@ -335,160 +314,102 @@ const Settings = ({ user, setUser }) => {
                 <label>Confirm New Password</label>
                 <input type="password" value={passwords.confirm} onChange={e => setPasswords({...passwords, confirm: e.target.value})} required />
               </div>
-              <button type="submit" className="save-btn btn-secondary" disabled={loading}>
-                {loading ? 'Processing...' : 'Update Password'}
-              </button>
+              <button type="submit" className="save-btn btn-secondary" disabled={loading}>Update Password</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* === NOTIFICATIONS TAB === */}
       {activeTab === 'notifications' && (
         <div className="settings-section">
           <div className="section-header-row">
-              <h3>Notification Preferences</h3>
-              
+              <div className="toggle-info">
+                  <h3>Notification Preferences</h3>
+                  <p className="section-desc">Manage how we keep you updated.</p>
+              </div>
               <div className="pill-nav">
-                  <button 
-                    className={`pill-btn ${notifSubTab === 'sms' ? 'active' : ''}`}
-                    onClick={() => setNotifSubTab('sms')}
-                  >
+                  <button className={`pill-btn ${notifSubTab === 'sms' ? 'active' : ''}`} onClick={() => setNotifSubTab('sms')}>
                     <MessageSquare size={14} /> SMS
                   </button>
-                  <button 
-                    className={`pill-btn ${notifSubTab === 'in-app' ? 'active' : ''}`}
-                    onClick={() => setNotifSubTab('in-app')}
-                  >
+                  <button className={`pill-btn ${notifSubTab === 'in-app' ? 'active' : ''}`} onClick={() => setNotifSubTab('in-app')}>
                     <Bell size={14} /> In-App
                   </button>
               </div>
           </div>
-
           {notifSubTab === 'sms' && (
               <div className="notif-group fade-in">
-                  <p className="section-desc">Manage text messages sent to your phone.</p>
-                  
                   <Toggle label="Booking Confirmation" desc="Sent immediately after booking." checked={true} disabled />
                   <Toggle label="Booking Accepted" desc="When provider confirms." checked={notifications.acceptance} onChange={() => handleNotificationToggle('acceptance')} />
                   <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
                   <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
                   <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
-                  
                   <Toggle label="Refund Notifications" desc="Sent when refunds are processed (Required)" checked={true} disabled />
-
                   {user.user_type === 'provider' && (
-                    <>
-                      <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
-                      <Toggle label="Refund Requests" desc="When clients cancel and request refunds (Required)" checked={true} disabled />
-                    </>
+                    <Toggle label="New Requests" desc="Notifications for new client bookings." checked={notifications.new_request} onChange={() => handleNotificationToggle('new_request')} />
                   )}
               </div>
           )}
-
           {notifSubTab === 'in-app' && (
               <div className="notif-group fade-in">
-                  <p className="section-desc">Control what appears in your notification bell.</p>
-                  
-                  <Toggle 
-                    label="Booking Alerts" 
-                    desc="New bookings, status changes, and approvals." 
-                    checked={inAppPrefs.booking_alerts} 
-                    onChange={() => handleInAppToggle('booking_alerts')} 
-                  />
-                  <Toggle 
-                    label="System Updates" 
-                    desc="Important platform announcements and maintenance." 
-                    checked={inAppPrefs.system_updates} 
-                    onChange={() => handleInAppToggle('system_updates')} 
-                  />
-                  <Toggle 
-                    label="Payment Alerts" 
-                    desc="Confirmations of deposits and balance payments." 
-                    checked={inAppPrefs.payment_alerts} 
-                    onChange={() => handleInAppToggle('payment_alerts')} 
-                  />
-                  <Toggle 
-                    label="In-App Reminders" 
-                    desc="Pop-up reminders when you are online." 
-                    checked={inAppPrefs.reminders} 
-                    onChange={() => handleInAppToggle('reminders')} 
-                  />
+                  <Toggle label="Booking Alerts" desc="New bookings and status changes." checked={inAppPrefs.booking_alerts} onChange={() => handleInAppToggle('booking_alerts')} />
+                  <Toggle label="System Updates" desc="Important platform announcements." checked={inAppPrefs.system_updates} onChange={() => handleInAppToggle('system_updates')} />
+                  <Toggle label="Payment Alerts" desc="Confirmations of deposits." checked={inAppPrefs.payment_alerts} onChange={() => handleInAppToggle('payment_alerts')} />
+                  <Toggle label="Reminders" desc="In-app appointment reminders." checked={inAppPrefs.reminders} onChange={() => handleInAppToggle('reminders')} />
               </div>
           )}
         </div>
       )}
 
-      {/* === BUSINESS INFO TAB (HOURS + LOCATION) === */}
       {activeTab === 'hours' && (
         <div className="settings-section">
-          <h3>Business Info & Hours</h3>
-          <p className="section-desc">Manage your operational details and location.</p>
-          
           <form onSubmit={handleBusinessInfoUpdate} className="settings-form">
-             
-             {/* 🆕 Single Dropdown Location Section */}
-             <div style={{marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
-                <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>📍 Location</h4>
-                
-                {/* 1. Suburb Dropdown (Grouped by Letter) */}
-                <div className="form-group">
-                    <label>Suburb</label>
-                    <select 
-                        value={profile.suburb} 
-                        onChange={(e) => setProfile(p => ({ ...p, suburb: e.target.value }))}
-                        className="suburb-dropdown" 
-                    >
-                        <option value="">Select Suburb</option>
-                        {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
-                            <optgroup key={letter} label={letter}>
-                                {NAIROBI_SUBURBS[letter].map(sub => (
-                                    <option key={sub} value={sub}>{sub}</option>
-                                ))}
-                            </optgroup>
-                        ))}
-                    </select>
+             <div style={{marginBottom: '25px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
+                <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '15px'}}>📍 Location (Required)</h4>
+                <div style={{display:'flex', gap:'20px', marginBottom: '15px'}}>
+                    <div className="form-group" style={{flex: 1}}>
+                        <label>Suburb *</label>
+                        <select value={profile.suburb} onChange={(e) => setProfile(p => ({ ...p, suburb: e.target.value }))} className="suburb-dropdown" required>
+                            <option value="">Select Suburb</option>
+                            {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
+                                <optgroup key={letter} label={letter}>
+                                    {NAIROBI_SUBURBS[letter].map(sub => (<option key={sub} value={sub}>{sub}</option>))}
+                                </optgroup>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="form-group" style={{flex: 2}}>
+                        <label>Business Address / Landmark *</label>
+                        <input type="text" value={profile.business_address} onChange={e => setProfile({...profile, business_address: e.target.value})} placeholder="e.g. 2nd Floor, City Mall" style={smallInputStyle} required />
+                    </div>
                 </div>
-
-                <div className="form-group">
-                    <label>Business Address / Landmark</label>
-                    <input 
-                        type="text" 
-                        value={profile.business_address} 
-                        onChange={e => setProfile({...profile, business_address: e.target.value})} 
-                        placeholder="e.g. 2nd Floor, City Mall"
-                        style={smallInputStyle} // 🤏 Compact Style
-                    />
-                </div>
-
                 <div className="form-group">
                     <label>Google Maps Link <small style={{color:'#64748b'}}>(Optional)</small></label>
-                    <input 
-                        type="url" 
-                        value={profile.google_maps_link} 
-                        onChange={e => setProfile({...profile, google_maps_link: e.target.value})} 
-                        placeholder="http://maps.google.com/..."
-                        style={smallInputStyle} // 🤏 Compact Style
-                    />
+                    <input type="url" value={profile.google_maps_link} onChange={e => setProfile({...profile, google_maps_link: e.target.value})} placeholder="Paste link here" style={smallInputStyle} />
                 </div>
              </div>
-
-             {/* Hours Section */}
-             <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '12px'}}>⏰ Operating Hours</h4>
-             <div className="form-group-row" style={{display:'flex', gap:'15px'}}>
-                <div className="form-group" style={{flex:1}}>
-                <label>Opening Time</label>
-                <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} style={smallInputStyle} />
+             <div style={{display: 'flex', gap: '30px', alignItems: 'flex-start'}}>
+                <div style={{flex: 1}}>
+                    <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '15px'}}>⏰ Mon-Fri Hours</h4>
+                    <div className="form-group-row" style={{display:'flex', gap:'15px'}}>
+                        <div className="form-group" style={{flex:1}}>
+                            <label>Opening</label>
+                            <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} style={smallInputStyle} />
+                        </div>
+                        <div className="form-group" style={{flex:1}}>
+                            <label>Closing</label>
+                            <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} style={smallInputStyle} />
+                        </div>
+                    </div>
                 </div>
-                <div className="form-group" style={{flex:1}}>
-                <label>Closing Time</label>
-                <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} style={smallInputStyle} />
+                {/* RESTORED WEEKEND OPERATIONS CARD */}
+                <div style={{flex: 1.2, padding: '15px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0'}}>
+                    <h5 style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px' }}>Weekend Operations</h5>
+                    <Toggle label="Open on Saturdays" desc="Operate on Saturdays" checked={hours.is_open_sat} onChange={() => setHours({...hours, is_open_sat: !hours.is_open_sat})} />
+                    <div style={{ height: '12px' }}></div>
+                    <Toggle label="Open on Sundays" desc="Operate on Sundays" checked={hours.is_open_sun} onChange={() => setHours({...hours, is_open_sun: !hours.is_open_sun})} />
                 </div>
              </div>
-
-             <button type="submit" className="save-btn" disabled={loading}>
-                {loading ? 'Saving...' : 'Save All Changes'}
-             </button>
+             <button type="submit" className="save-btn" style={{marginTop: '30px'}} disabled={loading}>Saving Changes</button>
           </form>
         </div>
       )}
@@ -497,9 +418,9 @@ const Settings = ({ user, setUser }) => {
 };
 
 const Toggle = ({ label, desc, checked, onChange, disabled }) => (
-  <div className="toggle-row">
-    <div>
-      <h4>{label} {disabled && <span style={{color:'#ef4444', fontSize:'0.75em', fontWeight:'600'}}>(Required)</span>}</h4>
+  <div className="toggle-row" style={{marginBottom: 0}}>
+    <div className="toggle-info">
+      <h4>{label} {disabled && <span style={{color:'#ef4444', fontSize:'11px', fontWeight:'600'}}>(Required)</span>}</h4>
       <p>{desc}</p>
     </div>
     <label className="switch">

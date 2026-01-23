@@ -45,7 +45,6 @@ const ProviderProfile = ({ user }) => {
 
     return (
         <div className="provider-profile-page">
-            {/* ✅ FIXED: Explicitly navigate to /dashboard and pass the 'services' tab state */}
             <button 
                 className="back-link" 
                 onClick={() => navigate('/dashboard', { state: { tab: 'services' } })}
@@ -112,9 +111,25 @@ const ProviderProfile = ({ user }) => {
                             <span>Monday - Friday</span>
                             <strong>{provider.opening_time} - {provider.closing_time}</strong>
                         </div>
+                        
+                        {/* ✅ NEW: Dynamic Saturday Display */}
                         <div className="hours-row">
-                            <span>Saturday - Sunday</span>
-                            <strong className="closed-text">Closed</strong>
+                            <span>Saturday</span>
+                            {provider.is_open_sat ? (
+                                <strong>{provider.opening_time} - {provider.closing_time}</strong>
+                            ) : (
+                                <strong className="closed-text">Closed</strong>
+                            )}
+                        </div>
+
+                        {/* ✅ NEW: Dynamic Sunday Display */}
+                        <div className="hours-row">
+                            <span>Sunday</span>
+                            {provider.is_open_sun ? (
+                                <strong>{provider.opening_time} - {provider.closing_time}</strong>
+                            ) : (
+                                <strong className="closed-text">Closed</strong>
+                            )}
                         </div>
                     </div>
                 </aside>
