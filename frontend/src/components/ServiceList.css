@@ -545,3 +545,52 @@
     opacity: 1;
   }
 }
+
+/* Scope the flex properties specifically to the Service Card Header */
+.service-header-bar .header-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column; /* Stacks Service Name and Provider Button vertically */
+  align-items: flex-start; /* Aligns them to the left */
+  gap: 8px; /* Space between the name and the button */
+  min-width: 0;
+  text-align: left; /* Ensures text doesn't center */
+}
+
+/* Ensure the provider button stays small and left-aligned */
+.provider-link-btn {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content; /* Only as wide as the text */
+  max-width: 90%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  display: block; /* Ensures it behaves as its own block line */
+}
+
+.provider-link-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+  border-color: white;
+}
+
+.service-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

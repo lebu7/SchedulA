@@ -359,3 +359,17 @@ input:disabled + .slider {
   padding: 4px;
   color: #1e293b;
 }
+
+.service-description {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 15px;
+  flex-grow: 1;
+
+  /* 🆕 Force single line and add ellipsis */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block; /* Ensure it behaves as a block for truncation */
+}

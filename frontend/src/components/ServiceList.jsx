@@ -445,7 +445,15 @@ function ServiceList({ user }) {
                             <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
                               <div className="header-content">
                                 <h3 className="service-name">{service.name}</h3>
-                                <p className="service-provider">
+                                {/* 🆕 Provider name is now a link to their profile */}
+                                <p 
+                                  className="service-provider" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/provider/${service.provider_id}`);
+                                  }}
+                                  style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                >
                                    {service.business_name || service.provider_name}
                                 </p>
                               </div>

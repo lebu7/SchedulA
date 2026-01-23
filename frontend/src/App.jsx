@@ -8,7 +8,8 @@ import Header from './components/Header'
 import Login from './components/Login'
 import Register from './components/Register'
 import Dashboard from './components/Dashboard'
-import ForgotPassword from './components/ForgotPassword' // 🆕 Import
+import ForgotPassword from './components/ForgotPassword'
+import ProviderProfile from './components/ProviderProfile' // 🆕 Import for the new feature
 
 // Services
 import { authService } from './services/auth'
@@ -67,7 +68,6 @@ function App() {
               } 
             />
             
-            {/* 🆕 Forgot Password Route */}
             <Route 
               path="/forgot-password" 
               element={
@@ -75,7 +75,14 @@ function App() {
               } 
             />
             
-            {/* ✅ FIX: Pass 'setUser' here so Dashboard can update the profile */}
+            {/* 🆕 New Public Provider Profile Route */}
+            <Route 
+              path="/provider/:id" 
+              element={
+                user ? <ProviderProfile user={user} /> : <Navigate to="/login" />
+              } 
+            />
+            
             <Route 
               path="/dashboard" 
               element={

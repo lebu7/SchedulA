@@ -11,6 +11,58 @@ import smsService from "../services/smsService.js"; // Import smsService
 const router = express.Router();
 
 /* ---------------------------------------------
+   ✅ Public Provider Profile (For Clients)
+   Updated: Staff count picked from total service capacity
+--------------------------------------------- */
+router.get("/public-profile/:id", authenticateToken, (req, res) => {
+  const providerId = req.params.id;
+
+  // 1. Fetch Provider Business Details (Excluding Email, DOB, Gender)
+  db.get(
+    `SELECT id, name, business_name, phone, business_address, suburb, 
+            google_maps_link, opening_time, closing_time, created_at 
+     FROM users WHERE id = ? AND user_type = 'provider'`,
+    [providerId],
+    (err, provider) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (!provider)
+        return res.status(404).json({ error: "Provider not found" });
+
+      // 2. Fetch Provider's Services
+      db.all(
+        `SELECT id, name, description, category, duration, price, is_closed 
+         FROM services WHERE provider_id = ? AND is_closed = 0`,
+        [providerId],
+        (servErr, services) => {
+          if (servErr)
+            return res.status(500).json({ error: "Error fetching services" });
+
+          // 3. 🆕 Pick staff count from total capacity (matching analytics logic)
+          db.get(
+            `SELECT COALESCE(SUM(capacity), 0) as total_staff 
+             FROM services 
+             WHERE provider_id = ?`,
+            [providerId],
+            (staffErr, capacityRow) => {
+              if (staffErr)
+                return res
+                  .status(500)
+                  .json({ error: "Error calculating capacity" });
+
+              res.json({
+                provider,
+                services: services || [],
+                staff_count: capacityRow ? capacityRow.total_staff : 0,
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+/* ---------------------------------------------
    ✅ Register
 --------------------------------------------- */
 router.post(
@@ -44,13 +96,11 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        // Return the first error message so frontend displays it correctly
         return res
           .status(400)
           .json({ error: errors.array()[0].msg, details: errors.array() });
       }
 
-      // Destructure new fields including Location data
       const {
         email,
         password,
@@ -60,31 +110,25 @@ router.post(
         dob,
         user_type,
         business_name,
-        suburb, // 🆕
-        business_address, // 🆕
-        google_maps_link, // 🆕
+        suburb,
+        business_address,
+        google_maps_link,
       } = req.body;
 
-      // Check for duplicate email
       db.get(
         "SELECT id FROM users WHERE email = ?",
         [email],
         async (err, row) => {
           if (err) return res.status(500).json({ error: "Database error" });
 
-          // 🆕 Updated Error Message
           if (row)
             return res
               .status(400)
               .json({ error: "User already exists. Try logging in." });
 
           const hashedPassword = await bcrypt.hash(password, 12);
-
-          // Add default business hours for providers
           const defaultOpening = user_type === "provider" ? "08:00" : null;
           const defaultClosing = user_type === "provider" ? "18:00" : null;
-
-          // Default Notification Preferences (All ON)
           const defaultPrefs = JSON.stringify({
             confirmation: true,
             acceptance: true,
@@ -94,7 +138,6 @@ router.post(
             new_request: true,
           });
 
-          // Insert gender, dob, and NEW LOCATION FIELDS into database
           db.run(
             `INSERT INTO users (
               email, password, name, phone, gender, dob, user_type, 
@@ -111,9 +154,9 @@ router.post(
               dob,
               user_type,
               business_name,
-              suburb || null, // 🆕
-              business_address || null, // 🆕
-              google_maps_link || null, // 🆕
+              suburb || null,
+              business_address || null,
+              google_maps_link || null,
               defaultOpening,
               defaultClosing,
               defaultPrefs,
@@ -125,8 +168,6 @@ router.post(
               }
 
               const newUserId = this.lastID;
-
-              // 🔔 Welcome Notification
               createNotification(
                 newUserId,
                 "system",
@@ -172,7 +213,6 @@ router.post(
 router.post(
   "/login",
   [
-    // Removed isEmail() check to allow phone numbers too
     body("identifier").exists().withMessage("Email or Phone is required"),
     body("password").exists(),
   ],
@@ -183,7 +223,6 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      // 'identifier' can be email OR phone
       const { identifier, password } = req.body;
 
       db.get(
@@ -204,7 +243,6 @@ router.post(
             { expiresIn: "24h" }
           );
 
-          // Parse notification preferences safely
           let prefs = {};
           try {
             prefs = JSON.parse(user.notification_preferences || "{}");
@@ -222,6 +260,9 @@ router.post(
               phone: user.phone,
               gender: user.gender,
               dob: user.dob,
+              suburb: user.suburb,
+              business_address: user.business_address,
+              google_maps_link: user.google_maps_link,
               opening_time: user.opening_time || "08:00",
               closing_time: user.closing_time || "18:00",
               notification_preferences: prefs,
@@ -253,7 +294,6 @@ router.post(
 
       const { email, phone } = req.body;
 
-      // Verify user exists with BOTH email and phone
       db.get(
         "SELECT * FROM users WHERE email = ? AND phone = ?",
         [email, phone],
@@ -265,25 +305,12 @@ router.post(
             });
           }
 
-          // Check if OTP was sent recently (within 2 minutes)
           const now = new Date();
-          if (
-            user.reset_otp_expires &&
-            new Date(user.reset_otp_expires) >
-              new Date(now.getTime() - 2 * 60 * 1000)
-          ) {
-            // Optional: Allow resend only after 2 minutes. For now, we'll overwrite.
-          }
-
-          // Generate 6-digit OTP
           const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-          // Set expiry to 1 minute from now
           const expiresAt = new Date(
             now.getTime() + 1 * 60 * 1000
           ).toISOString();
 
-          // Store OTP in DB
           db.run(
             "UPDATE users SET reset_otp = ?, reset_otp_expires = ? WHERE id = ?",
             [otp, expiresAt, user.id],
@@ -293,7 +320,6 @@ router.post(
                   .status(500)
                   .json({ error: "Failed to generate OTP" });
 
-              // Send SMS
               const message = `Your Schedula password reset code is: ${otp}. It expires in 1 minute.`;
               const smsResult = await smsService.sendSMS(phone, message);
 
@@ -341,22 +367,18 @@ router.post(
           if (err) return res.status(500).json({ error: "Database error" });
           if (!user) return res.status(404).json({ error: "User not found." });
 
-          // Check OTP match
           if (user.reset_otp !== otp) {
             return res.status(400).json({ error: "Invalid OTP." });
           }
 
-          // Check OTP expiry
           if (new Date() > new Date(user.reset_otp_expires)) {
             return res
               .status(400)
               .json({ error: "OTP has expired. Please request a new one." });
           }
 
-          // Hash new password
           const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-          // Update password and clear OTP
           db.run(
             "UPDATE users SET password = ?, reset_otp = NULL, reset_otp_expires = NULL WHERE id = ?",
             [hashedPassword, user.id],
@@ -400,7 +422,6 @@ router.get("/profile", authenticateToken, (req, res) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      // Parse JSON for frontend
       try {
         user.notification_preferences = JSON.parse(
           user.notification_preferences || "{}"
@@ -423,7 +444,6 @@ router.put(
     body("phone")
       .matches(/^\+254\d{9}$/)
       .withMessage("Phone must start with +254 and have 9 digits"),
-    // Optional: Validate that maps link is a URL if provided
     body("google_maps_link")
       .optional()
       .isURL()
@@ -465,7 +485,6 @@ router.put(
         if (err)
           return res.status(500).json({ error: "Failed to update profile" });
 
-        // 🔔 Notification
         createNotification(
           req.user.userId,
           "system",
@@ -532,7 +551,6 @@ router.put(
                 .status(500)
                 .json({ error: "Failed to update password" });
 
-            // 🔔 Notification
             createNotification(
               userId,
               "system",
@@ -553,7 +571,7 @@ router.put(
 --------------------------------------------- */
 router.put("/notifications", authenticateToken, (req, res) => {
   const { preferences } = req.body;
-  const safePrefs = { ...preferences, confirmation: true }; // Force confirmation ON
+  const safePrefs = { ...preferences, confirmation: true };
 
   db.run(
     `UPDATE users SET notification_preferences = ? WHERE id = ?`,
@@ -562,7 +580,6 @@ router.put("/notifications", authenticateToken, (req, res) => {
       if (err)
         return res.status(500).json({ error: "Failed to save preferences" });
 
-      // 🔔 Notification
       createNotification(
         req.user.userId,
         "system",
@@ -608,7 +625,6 @@ router.put(
         if (err)
           return res.status(500).json({ error: "Failed to update hours" });
 
-        // 🔔 Notification
         createNotification(
           req.user.userId,
           "system",
