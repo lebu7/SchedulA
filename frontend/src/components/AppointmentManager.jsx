@@ -6,7 +6,7 @@ import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
-  Search, ArrowUpDown, Filter, X 
+  Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare 
 } from "lucide-react"; 
 import "./AppointmentManager.css";
 
@@ -302,6 +302,12 @@ function AppointmentManager({ user }) {
   const [rescheduleApt, setRescheduleApt] = useState(null); 
   const [processingPayment, setProcessingPayment] = useState(null); 
 
+  // 🆕 Walk-In States
+  const [showServiceSelector, setShowServiceSelector] = useState(false);
+  const [providerServices, setProviderServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [walkInService, setWalkInService] = useState(null);
+
   useEffect(() => {
     fetchAppointments();
   }, []);
@@ -408,6 +414,30 @@ function AppointmentManager({ user }) {
     setShowBooking(true);
   };
 
+  // 🆕 Walk-In Flow
+  const handleWalkInClick = async () => {
+    setShowServiceSelector(true);
+    if (providerServices.length === 0) {
+        setLoadingServices(true);
+        try {
+            const res = await api.get('/services');
+            // Filter services for THIS provider
+            const myServices = res.data.services.filter(s => s.provider_id === user.id);
+            setProviderServices(myServices);
+        } catch(e) { 
+            console.error("Failed to load services"); 
+        } finally { 
+            setLoadingServices(false); 
+        }
+    }
+  };
+
+  const selectWalkInService = (service) => {
+      setWalkInService(service);
+      setShowServiceSelector(false);
+      setShowBooking(true); // Re-use booking modal in Walk-In mode
+  };
+
   const handleReschedule = (apt) => {
     setRescheduleApt(apt);
     setShowReschedule(true);
@@ -480,6 +510,7 @@ function AppointmentManager({ user }) {
     }
     await fetchAppointments();
     setShowBooking(false);
+    setWalkInService(null);
   };
 
   const handleRescheduleSuccess = async () => {
@@ -582,6 +613,9 @@ function AppointmentManager({ user }) {
      // Can Delete if: older than 6 months OR (dev mode enabled if you want to test)
      const canDelete = appointmentDate <= sixMonthsAgo;
 
+     // 🆕 Check if Walk-In (Identified by Reference starting with WALK-IN)
+     const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
+
      return (
         <div
             key={apt.id}
@@ -602,14 +636,17 @@ function AppointmentManager({ user }) {
                 </div>
             )}
 
-            <h4>{apt.service_name}</h4>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                <h4>{apt.service_name}</h4>
+                {isWalkIn && <span className="walk-in-badge" style={{background:'#dbeafe', color:'#1e40af', padding:'2px 8px', borderRadius:'12px', fontSize:'0.75rem', fontWeight:'600'}}>Walk-In</span>}
+            </div>
 
             {user.user_type === "client" ? (
                 <p><strong>With:</strong> {apt.provider_name}</p>
             ) : (
                 <div>
                 <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
-                {(apt.status === 'pending' || apt.status === 'scheduled') && (
+                {(apt.status === 'pending' || apt.status === 'scheduled') && !isWalkIn && (
                     <div style={{ marginTop: '5px', marginBottom: '8px' }}>
                         {getRiskBadge(apt.no_show_risk)}
                     </div>
@@ -626,10 +663,13 @@ function AppointmentManager({ user }) {
                 </p>
             )}
 
+            {/* Standard Payment Details (Hidden for Walk-Ins if simplified view desired, but shown for transparency) */}
             <div className="payment-details">
-                <p className="payment-line">
-                <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
-                </p>
+                {!isWalkIn && (
+                    <p className="payment-line">
+                    <strong>Deposit (30%):</strong> KES {deposit.toLocaleString()}
+                    </p>
+                )}
 
                 <p className="payment-line">
                 <strong>Amount Paid:</strong> KES {paid.toLocaleString()}
@@ -662,54 +702,58 @@ function AppointmentManager({ user }) {
                 <span className="amount">KES {total.toLocaleString()}</span>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-                <p style={{ color: pending > 0 ? "#b30000" : "#007b55", margin: 0 }}>
-                    <strong>Balance:</strong> KES {pending.toLocaleString()}
-                </p>
+                {!isWalkIn && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                    <p style={{ color: pending > 0 ? "#b30000" : "#007b55", margin: 0 }}>
+                        <strong>Balance:</strong> KES {pending.toLocaleString()}
+                    </p>
 
-                {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && apt.payment_status !== 'refunded' && (
-                    <PaystackButton
-                        {...paystackConfig}
-                        text={processingPayment === apt.id ? "Processing..." : (user.user_type === 'client' ? "Pay Balance" : "Process Payment")}
-                        className={`small-btn ${user.user_type === 'client' ? 'btn-primary' : 'btn-secondary'}`}
-                        onSuccess={(res) => handlePaystackSuccess(res, apt, pending)}
-                        onClose={() => console.log("Payment cancelled")}
-                        style={{
-                        background: user.user_type === 'client' ? "#16a34a" : "#4f46e5", 
-                        border: "none", 
-                        marginLeft: "10px", 
-                        fontSize: "12px", 
-                        padding: "6px 10px", 
-                        cursor: "pointer", 
-                        color: "white", 
-                        borderRadius: "6px", 
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px"
-                        }}
-                    >
-                    </PaystackButton>
+                    {pending > 0 && apt.status !== 'cancelled' && apt.status !== 'no-show' && apt.payment_status !== 'refunded' && (
+                        <PaystackButton
+                            {...paystackConfig}
+                            text={processingPayment === apt.id ? "Processing..." : (user.user_type === 'client' ? "Pay Balance" : "Process Payment")}
+                            className={`small-btn ${user.user_type === 'client' ? 'btn-primary' : 'btn-secondary'}`}
+                            onSuccess={(res) => handlePaystackSuccess(res, apt, pending)}
+                            onClose={() => console.log("Payment cancelled")}
+                            style={{
+                            background: user.user_type === 'client' ? "#16a34a" : "#4f46e5", 
+                            border: "none", 
+                            marginLeft: "10px", 
+                            fontSize: "12px", 
+                            padding: "6px 10px", 
+                            cursor: "pointer", 
+                            color: "white", 
+                            borderRadius: "6px", 
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px"
+                            }}
+                        >
+                        </PaystackButton>
+                    )}
+                    </div>
                 )}
-                </div>
             </div>
 
             {renderAddons(apt)}
 
-            <div className="total-cost-box">
-                <div className="total-row">
-                <span>Base Price:</span>
-                <strong>KES {basePrice.toLocaleString()}</strong>
+            {!isWalkIn && (
+                <div className="total-cost-box">
+                    <div className="total-row">
+                    <span>Base Price:</span>
+                    <strong>KES {basePrice.toLocaleString()}</strong>
+                    </div>
+                    <div className="total-row">
+                    <span>Add-ons:</span>
+                    <strong>+ KES {addonsTotal.toLocaleString()}</strong>
+                    </div>
+                    <div className="total-divider" />
+                    <div className="total-row total-final">
+                    <span>Total:</span>
+                    <strong>KES {total.toLocaleString()}</strong>
+                    </div>
                 </div>
-                <div className="total-row">
-                <span>Add-ons:</span>
-                <strong>+ KES {addonsTotal.toLocaleString()}</strong>
-                </div>
-                <div className="total-divider" />
-                <div className="total-row total-final">
-                <span>Total:</span>
-                <strong>KES {total.toLocaleString()}</strong>
-                </div>
-            </div>
+            )}
             </div>
 
             <div className="appointment-actions">
@@ -755,25 +799,38 @@ function AppointmentManager({ user }) {
                     </button>
                 )}
 
-                {/* Dropdown for Scheduled items (Upcoming Tab) */}
-                {type === "upcoming" && apt.status === "scheduled" && (
+                {/* 🆕 Dropdown for Scheduled items (Including Walk-Ins) */}
+                {type === "upcoming" && (apt.status === "scheduled" || apt.status === "completed") && (
                     <div className="status-dropdown-container">
                     <div style={{display:'flex', alignItems:'center', gap:'8px', width:'100%'}}>
-                        {actionsDisabled && <Clock size={16} color="#94a3b8" title="Available when appointment time reached" />}
-                        <select
-                            value={apt.status}
-                            onChange={handleStatusChange} 
-                            disabled={updating === apt.id || actionsDisabled}
-                            className={`status-select ${actionsDisabled ? 'disabled-select' : ''}`}
-                            title={actionsDisabled ? "Actions disabled for future appointments (Enable Test Mode to override)" : ""}
-                        >
-                            <option value="scheduled">Scheduled</option>
-                            <option value="completed">{pending > 0 ? "🔒 Completed (Pay Balance First)" : "Completed"}</option>
-                            <option value="cancelled">Cancelled</option>
-                            <option value="no-show">No Show</option>
-                        </select>
+                        {actionsDisabled && !isWalkIn && <Clock size={16} color="#94a3b8" title="Available when appointment time reached" />}
+                        
+                        {/* 🆕 If it's a Walk-In, show 'Mark Complete' button instead of just dropdown */}
+                        {isWalkIn && apt.status === 'scheduled' ? (
+                            <button 
+                                className="btn btn-success small-btn"
+                                onClick={() => handleStatusUpdate(apt.id, 'completed')}
+                                disabled={updating === apt.id}
+                                style={{width: '100%', backgroundColor: '#16a34a', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px'}}
+                            >
+                                <CheckSquare size={14} /> {updating === apt.id ? 'Updating...' : 'Mark Completed'}
+                            </button>
+                        ) : (
+                            <select
+                                value={apt.status}
+                                onChange={handleStatusChange} 
+                                disabled={updating === apt.id || (actionsDisabled && !isWalkIn)}
+                                className={`status-select ${actionsDisabled && !isWalkIn ? 'disabled-select' : ''}`}
+                                title={actionsDisabled ? "Actions disabled for future appointments (Enable Test Mode to override)" : ""}
+                            >
+                                <option value="scheduled">Scheduled</option>
+                                <option value="completed">{pending > 0 && !isWalkIn ? "🔒 Completed (Pay Balance First)" : "Completed"}</option>
+                                <option value="cancelled">Cancelled</option>
+                                <option value="no-show">No Show</option>
+                            </select>
+                        )}
                     </div>
-                    {actionsDisabled && <small style={{color:'#94a3b8', fontSize:'11px', marginTop:'4px', display:'block'}}>Action available on date</small>}
+                    {actionsDisabled && !isWalkIn && <small style={{color:'#94a3b8', fontSize:'11px', marginTop:'4px', display:'block'}}>Action available on date</small>}
                     </div>
                 )}
 
@@ -932,8 +989,18 @@ function AppointmentManager({ user }) {
                 {user.user_type === "provider" ? "Manage Appointments" : "My Appointments"}
             </h2>
             
-            {/* 🆕 Search & Sort Bar (Similar to Service List) */}
             <div className="am-controls" style={{ display: 'flex', gap: '10px' }}>
+                {/* 🆕 WALK-IN BUTTON (Provider Only) */}
+                {user.user_type === 'provider' && (
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={handleWalkInClick}
+                        style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px 16px', borderRadius:'8px', fontSize:'13px'}}
+                    >
+                        <UserPlus size={16} /> Walk-In / Block Time
+                    </button>
+                )}
+
                 <div className="search-box" style={{ position: 'relative', width: '220px' }}>
                     <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input 
@@ -1026,10 +1093,11 @@ function AppointmentManager({ user }) {
 
         {showBooking && (
           <BookingModal
-            service={rebookService}
+            service={walkInService || rebookService}
             user={user}
-            onClose={() => setShowBooking(false)}
+            onClose={() => { setShowBooking(false); setWalkInService(null); }}
             onBookingSuccess={handleRebookSuccess}
+            isWalkIn={!!walkInService} // 🚩 Passes true if initiated from Walk-In flow
           />
         )}
 
@@ -1047,6 +1115,38 @@ function AppointmentManager({ user }) {
             user={user} 
             onClose={() => setSelectedPayment(null)}
           />
+        )}
+
+        {/* 🆕 Service Selector Modal for Walk-Ins */}
+        {showServiceSelector && (
+            <div className="modal-overlay" onClick={() => setShowServiceSelector(false)}>
+                <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px', padding: '20px'}}>
+                    <h3 style={{marginTop:0, marginBottom:'15px', color:'#1e293b'}}>Select Service to Block</h3>
+                    {loadingServices ? (
+                        <p>Loading services...</p>
+                    ) : providerServices.length > 0 ? (
+                        <div style={{display:'flex', flexDirection:'column', gap:'10px', maxHeight:'300px', overflowY:'auto'}}>
+                            {providerServices.map(s => (
+                                <button 
+                                    key={s.id} 
+                                    onClick={() => selectWalkInService(s)}
+                                    className="service-select-btn"
+                                    style={{
+                                        textAlign:'left', padding:'12px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer',
+                                        display:'flex', justifyContent:'space-between', alignItems:'center'
+                                    }}
+                                >
+                                    <span style={{fontWeight:'600', color:'#334155'}}>{s.name}</span>
+                                    <span style={{fontSize:'0.85em', color:'#64748b'}}>{s.duration}m</span>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <p>No services found. Please create a service first.</p>
+                    )}
+                    <button className="btn btn-secondary" onClick={() => setShowServiceSelector(false)} style={{marginTop:'15px', width:'100%'}}>Cancel</button>
+                </div>
+            </div>
         )}
       </div>
     </div>

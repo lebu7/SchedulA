@@ -3,20 +3,21 @@ import api from "../services/auth";
 import { PaystackButton } from "react-paystack";
 import "./BookingModal.css";
 
-function BookingModal({ service, user, onClose, onBookingSuccess }) {
+function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = false }) {
   const [step, setStep] = useState(1);
   
   // Data States
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
-  const [slots, setSlots] = useState([]); // Array of { time, available } objects
+  const [slots, setSlots] = useState([]); 
   const [notes, setNotes] = useState("");
   
   // UI States
   const [error, setError] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [processingBooking, setProcessingBooking] = useState(false);
   
-  // Initialize serviceMeta. If rebooking, 'service' is an appointment object.
+  // Initialize serviceMeta. 
   const [serviceMeta, setServiceMeta] = useState(service || {});
   const [showAddonDropdown, setShowAddonDropdown] = useState(false);
   
@@ -28,27 +29,26 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const [totalPrice, setTotalPrice] = useState(parseFloat(service?.price || 0));
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // ✅ Determine Real Service ID
-  // If 'service_id' exists, it's an appointment (rebooking). If not, it's a service object (id).
+  // Walk-In Payment States
+  const [walkInAmount, setWalkInAmount] = useState(service?.price || "");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+
   const realServiceId = serviceMeta.service_id || serviceMeta.id;
 
-  // ✅ 0. FETCH FULL SERVICE DETAILS (For Rebooking - to get Capacity & Provider ID)
+  // ✅ 0. FETCH FULL SERVICE DETAILS
   useEffect(() => {
     const fetchServiceDetails = async () => {
-      // If we are rebooking (we have a service_id property), fetch the original service
       if (service.service_id) {
         try {
           const res = await api.get(`/services/${service.service_id}`);
-          // Merge the original service data (capacity, provider_id) into our meta
-          // This ensures provider_id is correct for the availability check
           setServiceMeta(prev => ({ 
             ...prev, 
             ...res.data, 
-            // Ensure we keep the appointment's provider_id if the service fetch fails or returns partial data
             provider_id: res.data.provider_id || prev.provider_id 
-          })); 
+          }));
+          if (isWalkIn && !walkInAmount) setWalkInAmount(res.data.price);
         } catch (err) {
-          console.error("Failed to fetch service details for rebooking", err);
+          console.error("Failed to fetch service details", err);
         }
       }
     };
@@ -62,14 +62,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   }, [service, realServiceId]);
 
 
-  // ---------- 1. Availability Logic (Updated) ----------
+  // ---------- 1. Availability Logic ----------
 
   useEffect(() => {
-    // Only fetch if we have a date and a provider ID
     if (selectedDate && serviceMeta?.provider_id) {
       fetchAvailability();
     }
-  }, [selectedDate, serviceMeta]); // Depend on serviceMeta to re-run if provider_id updates
+  }, [selectedDate, serviceMeta]);
 
   const fetchAvailability = async () => {
     setLoadingSlots(true);
@@ -82,12 +81,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         api.get(`/appointments/providers/${serviceMeta.provider_id}/availability`, {
           params: { date: selectedDate }
         }),
-        api.get('/appointments') // Fetches user's history to check for conflicts
+        api.get('/appointments')
       ]);
 
       const availabilityData = availabilityRes.data;
-
-      // Process User's Bookings
+      
+      // For Providers: This list contains ALL bookings for everyone.
+      // For Clients: This list contains only THEIR bookings.
       const userAppsObj = userRes.data.appointments || {};
       const allUserActiveApps = [
         ...(userAppsObj.pending || []),
@@ -95,7 +95,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         ...(userAppsObj.upcoming || [])
       ];
 
-      // Filter for THIS date and THIS service (to prevent double-booking same service)
       const myBookingsForThisService = allUserActiveApps.filter(apt => {
         const aptDate = new Date(apt.appointment_date).toDateString();
         const selDate = new Date(selectedDate).toDateString();
@@ -133,29 +132,30 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     end.setHours(closeH, closeM, 0, 0);
 
     const now = new Date(); 
-    // ✅ CRITICAL FIX: Use capacity from fetched meta, default to 1
     const serviceCapacity = serviceMeta.capacity || 1;
 
     while (current < end) {
-      const timeString = current.toTimeString().slice(0, 5); // "08:00"
+      const timeString = current.toTimeString().slice(0, 5);
       
       const slotEndTime = new Date(current.getTime() + (serviceMeta.duration || 30) * 60000);
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
-      // 1. Check Global Capacity (How many people have booked this slot?)
+      // 1. Check Global Capacity
       const overlapCount = bookedRanges.filter(booking => {
         return (timeString >= booking.start && timeString < booking.end) || 
                (timeStringEnd > booking.start && timeStringEnd <= booking.end) || 
                (timeString <= booking.start && timeStringEnd >= booking.end); 
       }).length;
 
-      // 2. Check if USER already booked this slot (Prevent user from booking same slot twice)
-      const isBookedByMe = myBookings.some(myAppt => {
+      // 2. Check "Already Booked" status
+      // ⚠️ FIX: If user is a PROVIDER, we ignore this check. 
+      // Providers see ALL bookings, so this check would always return true if anyone is booked.
+      // Providers should only be blocked by 'isFull' (Capacity).
+      const isBookedByMe = user.user_type === 'client' && !isWalkIn && myBookings.some(myAppt => {
         const myTime = new Date(myAppt.appointment_date).toTimeString().slice(0, 5);
         return myTime === timeString;
       });
 
-      // Logic: Slot is full if overlap >= capacity.
       const isFull = overlapCount >= serviceCapacity;
       const isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
 
@@ -196,7 +196,37 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     setSelectedAddons((prev) => checked ? [...prev, addon] : prev.filter((a) => a.id !== addon.id));
   };
 
-  // ---------- 3. Payment Calculations ----------
+  // ---------- 3. WALK-IN SUBMIT LOGIC ----------
+  const handleWalkInSubmit = async () => {
+    if (!selectedDate || !selectedTime) return;
+    setProcessingBooking(true);
+    
+    try {
+      const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
+      
+      const payload = {
+        service_id: realServiceId,
+        appointment_date: appointmentDateTime.toISOString(),
+        notes: notes.trim() || "Walk-in Booking",
+        addons: selectedAddons,
+        is_walk_in: true, 
+        payment_reference: `WALK-IN-${paymentMethod.toUpperCase()}-${Date.now()}`, 
+        payment_amount: Number(walkInAmount)
+      };
+
+      await api.post("/appointments", payload);
+      alert("✅ Walk-in recorded & time blocked!");
+      onBookingSuccess?.();
+      onClose?.();
+    } catch (err) {
+      console.error("❌ Walk-in failed:", err);
+      setError(err.response?.data?.error || "Failed to block slot.");
+    } finally {
+      setProcessingBooking(false);
+    }
+  };
+
+  // ---------- 4. Regular Payment Config ----------
   const depositPercentage = 0.3;
   const basePrice = Number(serviceMeta?.price || 0);
   const addonsTotal = selectedAddons.reduce((sum, a) => sum + Number(a.price ?? a.additional_price ?? 0), 0);
@@ -212,7 +242,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
     return depositKES;
   };
 
-  // ---------- 4. Paystack Config ----------
   const buildPaystackConfig = (forOption) => {
     const amount = (() => {
       if (forOption === "full") return totalKES * 100;
@@ -247,13 +276,12 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
         setError("");
 
         try {
-          const token = localStorage.getItem("token");
           const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
           const paidAmountKES = amount / 100;
           let payment_status = paidAmountKES >= totalKES ? "paid" : "deposit-paid";
 
           const payload = {
-            service_id: realServiceId, // ✅ Use real Service ID
+            service_id: realServiceId, 
             appointment_date: appointmentDateTime.toISOString(),
             notes: notes.trim(),
             addons: selectedAddons,
@@ -266,9 +294,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
             payment_status: payment_status,
           };
 
-          const { data } = await api.post("/appointments", payload, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const { data } = await api.post("/appointments", payload);
 
           if (data?.appointmentId) {
             await api.put(`/appointments/${data.appointmentId}/payment`, {
@@ -277,8 +303,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                 amount_paid: paidAmountKES,
                 payment_status: payment_status,
                 total_price: totalKES,
-              }, { headers: { Authorization: `Bearer ${token}` } }
-            );
+              });
             onBookingSuccess?.();
             onClose?.();
           } else {
@@ -306,6 +331,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   const getMinDate = () => {
+    if (isWalkIn) return new Date().toISOString().split("T")[0];
     const today = new Date();
     today.setDate(today.getDate() + 1);
     return today.toISOString().split("T")[0];
@@ -322,10 +348,10 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
       <div className="modal-content booking-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <h3>Book {serviceMeta?.name}</h3>
-            <span className="subtitle">with {serviceMeta?.provider_name}</span>
+            <h3>{isWalkIn ? "Record Walk-In" : `Book ${serviceMeta?.name}`}</h3>
+            <span className="subtitle">{isWalkIn ? "Blocks 1 slot & records revenue" : `with ${serviceMeta?.provider_name}`}</span>
           </div>
-          <button className="close-btn" onClick={() => { if (!processingPayment) onClose?.(); }} disabled={processingPayment}>×</button>
+          <button className="close-btn" onClick={() => { if (!processingPayment && !processingBooking) onClose?.(); }} disabled={processingPayment || processingBooking}>×</button>
         </div>
 
         <div className="modal-body">
@@ -337,7 +363,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
           <form onSubmit={handleSubmit} className="booking-form">
             {error && <div className="error-message">⚠️ {error}</div>}
 
-            {/* STEP 1: DATE & TIME */}
             {step === 1 ? (
               <div className="step-1">
                 <div className="form-group">
@@ -354,10 +379,8 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                           key={slot.time} 
                           type="button" 
                           className={`time-slot ${selectedTime === slot.time ? 'selected' : ''}`} 
-                          // 🧠 Disable if unavailable (Full OR Already booked by user)
                           disabled={!slot.available} 
                           onClick={() => setSelectedTime(slot.time)}
-                          // 🧠 Tooltip Logic
                           title={slot.status === 'booked' ? "You already booked this slot" : slot.status === 'full' ? "Slot Full" : ""}
                         >
                           {slot.status === 'booked' ? 'Booked' : slot.time}
@@ -367,15 +390,55 @@ function BookingModal({ service, user, onClose, onBookingSuccess }) {
                   )}
                 </div>
 
+                {isWalkIn && (
+                  <div className="walk-in-payment-section" style={{background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px'}}>
+                    <h4 style={{fontSize: '0.9em', color: '#1e293b', marginBottom: '10px', marginTop: 0}}>💰 Record Payment</h4>
+                    <div className="form-group">
+                        <label style={{fontSize: '0.85em'}}>Amount Collected (KES)</label>
+                        <input 
+                            type="number" 
+                            className="styled-input" 
+                            value={walkInAmount} 
+                            onChange={(e) => setWalkInAmount(e.target.value)} 
+                            placeholder={serviceMeta?.price}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label style={{fontSize: '0.85em'}}>Payment Method</label>
+                        <select 
+                            className="styled-input" 
+                            value={paymentMethod} 
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                        >
+                            <option value="Cash">Cash</option>
+                            <option value="M-Pesa">M-Pesa</option>
+                            <option value="Card">Card</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-group">
-                  <label>Notes (Optional)</label>
-                  <textarea rows="2" className="styled-input textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Special requests..." />
+                  <label>Notes ({isWalkIn ? "Client Name/Ref" : "Optional"})</label>
+                  <textarea rows="2" className="styled-input textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={isWalkIn ? "Enter client name here..." : "Special requests..."} />
                 </div>
 
-                <button type="button" className="btn btn-primary btn-block" disabled={!selectedTime} onClick={() => setStep(2)}>Next: Customize & Pay</button>
+                {isWalkIn ? (
+                    <button 
+                        type="button" 
+                        className="btn btn-primary btn-block" 
+                        disabled={!selectedTime || processingBooking || !walkInAmount} 
+                        onClick={handleWalkInSubmit}
+                        style={{backgroundColor: '#16a34a'}} 
+                    >
+                        {processingBooking ? "Processing..." : "Confirm & Record Payment"}
+                    </button>
+                ) : (
+                    <button type="button" className="btn btn-primary btn-block" disabled={!selectedTime} onClick={() => setStep(2)}>Next: Customize & Pay</button>
+                )}
               </div>
             ) : (
-              // STEP 2: ADDONS & PAYMENT
               <div className="step-2">
                 <div className="two-column-layout">
                   <div className="column left-col">

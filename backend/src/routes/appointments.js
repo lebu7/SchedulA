@@ -26,7 +26,6 @@ async function calculateNoShowRisk({
   deposit_amount,
 }) {
   try {
-    // 1. Get Client History
     const clientHistory = await new Promise((resolve, reject) => {
       db.all(
         `SELECT status, total_price, amount_paid 
@@ -42,7 +41,6 @@ async function calculateNoShowRisk({
       );
     });
 
-    // 2. Calculate History Metrics
     const totalAppointments = clientHistory.length;
     const noShowCount = clientHistory.filter(
       (a) => a.status === "no-show"
@@ -51,9 +49,8 @@ async function calculateNoShowRisk({
       (a) => a.status === "cancelled"
     ).length;
     const lastReceipt = clientHistory[0]?.total_price || 0;
-    const recency = totalAppointments > 0 ? 7 : 30; // Days since last appointment (simplified)
+    const recency = totalAppointments > 0 ? 7 : 30;
 
-    // 3. Get Service Category
     const service = await new Promise((resolve, reject) => {
       db.get(
         `SELECT category FROM services WHERE id = ?`,
@@ -65,7 +62,6 @@ async function calculateNoShowRisk({
       );
     });
 
-    // 4. Prepare AI Input
     const appointmentTime = new Date(appointment_date).getHours();
     let timeOfDay = "morning";
     if (appointmentTime >= 12 && appointmentTime < 17) timeOfDay = "afternoon";
@@ -85,32 +81,27 @@ async function calculateNoShowRisk({
       historyCancel: cancelCount,
     };
 
-    // 5. Get Base AI Risk Score
     const baseRisk = await predictNoShow(aiInput);
 
-    // 6. Apply Payment Adjustment
     const paymentRatio = amount_paid / total_price;
     let paymentAdjustment = 0;
 
     if (paymentRatio >= 1.0) {
-      paymentAdjustment = -0.3; // Full payment = -30% risk
+      paymentAdjustment = -0.3;
     } else if (paymentRatio >= 0.5) {
-      paymentAdjustment = -0.15; // 50%+ paid = -15% risk
+      paymentAdjustment = -0.15;
     } else if (paymentRatio >= deposit_amount / total_price) {
-      paymentAdjustment = 0; // Just deposit = no change
+      paymentAdjustment = 0;
     }
 
-    // 7. Apply Client History Factor
     let historyFactor = 0;
     if (totalAppointments > 0) {
       const reliabilityScore =
         1 - (noShowCount + cancelCount) / totalAppointments;
-      if (reliabilityScore >= 0.9)
-        historyFactor = -0.2; // Reliable client
-      else if (reliabilityScore <= 0.5) historyFactor = +0.3; // Unreliable client
+      if (reliabilityScore >= 0.9) historyFactor = -0.2;
+      else if (reliabilityScore <= 0.5) historyFactor = +0.3;
     }
 
-    // 8. Calculate Final Risk Score
     const finalRisk = Math.max(
       0,
       Math.min(1, baseRisk + paymentAdjustment + historyFactor)
@@ -138,7 +129,6 @@ async function calculateNoShowRisk({
 --------------------------------------------- */
 async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
   return new Promise((resolve, reject) => {
-    // Get all payment transactions for this appointment
     db.all(
       `SELECT * FROM transactions 
        WHERE appointment_id = ? 
@@ -155,7 +145,6 @@ async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
         let remainingRefund = totalRefundAmount;
         const refundResults = [];
 
-        // Process refunds in reverse order (latest first)
         for (
           let i = transactions.length - 1;
           i >= 0 && remainingRefund > 0;
@@ -355,7 +344,7 @@ router.get("/sms-stats", authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Check provider availability
+   ✅ Check provider availability (UPDATED)
 --------------------------------------------- */
 router.get("/providers/:id/availability", (req, res) => {
   const providerId = req.params.id;
@@ -377,6 +366,8 @@ router.get("/providers/:id/availability", (req, res) => {
         (err2, closedDay) => {
           if (err2) return res.status(500).json({ error: "Database error" });
 
+          // ⚠️ FIX: REMOVED 'completed' so completed appointments DO NOT block slots anymore.
+          // Only 'pending', 'scheduled', and 'paid' block slots.
           db.all(
             `SELECT a.appointment_date, s.duration 
              FROM appointments a
@@ -419,7 +410,7 @@ router.get("/providers/:id/availability", (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment
+   ✅ Create appointment (Updated Walk-In Status)
 --------------------------------------------- */
 router.post(
   "/",
@@ -429,6 +420,7 @@ router.post(
     body("appointment_date").isISO8601(),
     body("notes").optional().trim(),
     body("rebook_from").optional().isInt(),
+    body("is_walk_in").optional().isBoolean(),
   ],
   (req, res) => {
     const errors = validationResult(req);
@@ -443,20 +435,36 @@ router.post(
       payment_reference,
       payment_amount,
       addons,
+      is_walk_in,
     } = req.body;
 
-    if (!payment_reference || !payment_amount || Number(payment_amount) <= 0) {
-      return res.status(400).json({
-        error: "Payment required before booking.",
-      });
+    const userType = req.user.user_type;
+
+    if (is_walk_in && userType !== "provider") {
+      return res
+        .status(403)
+        .json({ error: "Only providers can perform walk-ins." });
+    }
+
+    if (!is_walk_in) {
+      if (
+        !payment_reference ||
+        !payment_amount ||
+        Number(payment_amount) <= 0
+      ) {
+        return res.status(400).json({
+          error: "Payment required before booking.",
+        });
+      }
     }
 
     const client_id = req.user.userId;
     const appointmentDate = new Date(appointment_date);
-    if (appointmentDate <= new Date())
+    if (appointmentDate <= new Date() && !is_walk_in) {
       return res
         .status(400)
         .json({ error: "Appointment date must be in the future" });
+    }
 
     db.get(
       "SELECT * FROM services WHERE id = ?",
@@ -515,6 +523,7 @@ router.post(
                   appointmentDate.getTime() + service.duration * 60000
                 ).toISOString();
 
+                // ⚠️ FIX: Check active slots (excluding completed) for capacity check
                 db.all(
                   `SELECT a.id 
                  FROM appointments a
@@ -535,7 +544,7 @@ router.post(
 
                     if (existingBookings.length >= maxCapacity) {
                       return res.status(400).json({
-                        error: `This time slot is fully booked. Please choose another time.`,
+                        error: `This time slot is fully booked.`,
                       });
                     }
 
@@ -552,8 +561,20 @@ router.post(
                       Number(service.price || 0) + addons_total;
                     const deposit_amount = Math.round(total_price * 0.3);
                     const paymentAmt = Number(payment_amount || 0);
-                    let payment_status =
-                      paymentAmt >= total_price ? "paid" : "deposit-paid";
+
+                    let payment_status;
+                    let status;
+
+                    if (is_walk_in) {
+                      payment_status =
+                        paymentAmt >= total_price ? "paid" : "deposit-paid";
+                      // Walk-ins are scheduled (blocking time) until marked complete
+                      status = "scheduled";
+                    } else {
+                      payment_status =
+                        paymentAmt >= total_price ? "paid" : "deposit-paid";
+                      status = "pending";
+                    }
 
                     const { riskScore, baseRisk, paymentRatio, historyFactor } =
                       await calculateNoShowRisk({
@@ -564,8 +585,6 @@ router.post(
                         total_price,
                         deposit_amount,
                       });
-
-                    const status = "pending";
 
                     db.run(
                       `INSERT INTO appointments (
@@ -580,16 +599,16 @@ router.post(
                         service.provider_id,
                         service_id,
                         appointment_date,
-                        notes || "",
+                        is_walk_in ? notes || "Walk-in Booking" : notes || "",
                         status,
-                        payment_reference || null,
+                        is_walk_in ? "WALK-IN-CASH" : payment_reference || null,
                         payment_status,
                         total_price,
                         deposit_amount,
                         addons_total,
                         JSON.stringify(Array.isArray(addons) ? addons : []),
                         paymentAmt || 0,
-                        riskScore || 0,
+                        is_walk_in ? 0 : riskScore || 0,
                       ],
                       function (err4) {
                         if (err4) {
@@ -601,10 +620,18 @@ router.post(
 
                         const newId = this.lastID;
 
-                        db.run(
-                          `INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`,
-                          [newId, paymentAmt, payment_reference]
-                        );
+                        if (paymentAmt > 0) {
+                          db.run(
+                            `INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`,
+                            [
+                              newId,
+                              paymentAmt,
+                              is_walk_in
+                                ? `WALKIN_${Date.now()}`
+                                : payment_reference,
+                            ]
+                          );
+                        }
 
                         db.run(
                           `INSERT INTO ai_predictions (
@@ -613,7 +640,7 @@ router.post(
                         ) VALUES (?, ?, ?, ?, ?, ?)`,
                           [
                             newId,
-                            riskScore,
+                            is_walk_in ? 0 : riskScore,
                             paymentAmt,
                             baseRisk,
                             paymentRatio,
@@ -630,91 +657,94 @@ router.post(
                           );
                         }
 
-                        db.get(
-                          `SELECT a.*, 
-                                    c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
-                                    s.name AS service_name,
-                                    p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
-                            FROM appointments a
-                            JOIN users c ON a.client_id = c.id
-                            JOIN services s ON a.service_id = s.id
-                            JOIN users p ON a.provider_id = p.id
-                            WHERE a.id = ?`,
-                          [newId],
-                          async (e, fullApt) => {
-                            if (e) return;
+                        if (!is_walk_in) {
+                          db.get(
+                            `SELECT a.*, 
+                                        c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
+                                        s.name AS service_name,
+                                        p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
+                                FROM appointments a
+                                JOIN users c ON a.client_id = c.id
+                                JOIN services s ON a.service_id = s.id
+                                JOIN users p ON a.provider_id = p.id
+                                WHERE a.id = ?`,
+                            [newId],
+                            async (e, fullApt) => {
+                              if (e) return;
 
-                            const clientObj = {
-                              name: fullApt.client_name,
-                              phone: fullApt.client_phone,
-                              notification_preferences: fullApt.client_prefs,
-                            };
-                            const providerObj = {
-                              name: fullApt.provider_name,
-                              business_name: fullApt.business_name,
-                              phone: fullApt.provider_phone,
-                              notification_preferences: fullApt.provider_prefs,
-                            };
+                              const clientObj = {
+                                name: fullApt.client_name,
+                                phone: fullApt.client_phone,
+                                notification_preferences: fullApt.client_prefs,
+                              };
+                              const providerObj = {
+                                name: fullApt.provider_name,
+                                business_name: fullApt.business_name,
+                                phone: fullApt.provider_phone,
+                                notification_preferences:
+                                  fullApt.provider_prefs,
+                              };
 
-                            if (
-                              shouldNotify(
-                                fullApt.client_prefs,
-                                "booking_alerts"
-                              )
-                            ) {
-                              createNotification(
-                                client_id,
-                                "booking",
-                                "Booking Sent",
-                                `Your booking for ${service.name} is pending approval.`,
-                                newId
+                              if (
+                                shouldNotify(
+                                  fullApt.client_prefs,
+                                  "booking_alerts"
+                                )
+                              ) {
+                                createNotification(
+                                  client_id,
+                                  "booking",
+                                  "Booking Sent",
+                                  `Your booking for ${service.name} is pending approval.`,
+                                  newId
+                                );
+                              }
+
+                              let alertMsg = `${fullApt.client_name} booked ${service.name}.`;
+                              if (fullApt.no_show_risk > 0.7) {
+                                alertMsg += ` ⚠️ High No-Show Risk detected (${(fullApt.no_show_risk * 100).toFixed(0)}%).`;
+                              }
+                              if (
+                                shouldNotify(
+                                  fullApt.provider_prefs,
+                                  "booking_alerts"
+                                )
+                              ) {
+                                createNotification(
+                                  service.provider_id,
+                                  "booking",
+                                  "New Booking Request",
+                                  alertMsg,
+                                  newId
+                                );
+                              }
+
+                              await smsService.sendBookingConfirmation(
+                                {
+                                  id: newId,
+                                  appointment_date: fullApt.appointment_date,
+                                  total_price: fullApt.total_price,
+                                  amount_paid: fullApt.amount_paid,
+                                },
+                                clientObj,
+                                { name: fullApt.service_name },
+                                providerObj
+                              );
+
+                              await smsService.sendProviderNotification(
+                                {
+                                  id: newId,
+                                  appointment_date: fullApt.appointment_date,
+                                  total_price: fullApt.total_price,
+                                  amount_paid: fullApt.amount_paid,
+                                },
+                                providerObj,
+                                clientObj,
+                                { name: fullApt.service_name }
                               );
                             }
-
-                            let alertMsg = `${fullApt.client_name} booked ${service.name}.`;
-                            if (fullApt.no_show_risk > 0.7) {
-                              alertMsg += ` ⚠️ High No-Show Risk detected (${(fullApt.no_show_risk * 100).toFixed(0)}%).`;
-                            }
-                            if (
-                              shouldNotify(
-                                fullApt.provider_prefs,
-                                "booking_alerts"
-                              )
-                            ) {
-                              createNotification(
-                                service.provider_id,
-                                "booking",
-                                "New Booking Request",
-                                alertMsg,
-                                newId
-                              );
-                            }
-
-                            await smsService.sendBookingConfirmation(
-                              {
-                                id: newId,
-                                appointment_date: fullApt.appointment_date,
-                                total_price: fullApt.total_price,
-                                amount_paid: fullApt.amount_paid,
-                              },
-                              clientObj,
-                              { name: fullApt.service_name },
-                              providerObj
-                            );
-
-                            await smsService.sendProviderNotification(
-                              {
-                                id: newId,
-                                appointment_date: fullApt.appointment_date,
-                                total_price: fullApt.total_price,
-                                amount_paid: fullApt.amount_paid,
-                              },
-                              providerObj,
-                              clientObj,
-                              { name: fullApt.service_name }
-                            );
-                          }
-                        );
+                          );
+                        }
 
                         res.status(201).json({
                           message: "Appointment booked successfully",
@@ -901,7 +931,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
       if (err2)
         return res.status(500).json({ error: "Failed to update appointment" });
 
-      // ✅ Log Prediction outcome if status changed to final state
       if (["completed", "no-show", "cancelled"].includes(effectiveStatus)) {
         db.run(
           `UPDATE ai_predictions SET actual_outcome = ? WHERE appointment_id = ?`,
@@ -909,7 +938,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
         );
       }
 
-      // ✅ AUTOMATIC REFUND LOGIC
       if (status === "cancelled") {
         try {
           await handleAutomaticRefund(id, userType, notes);
@@ -918,7 +946,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
         }
       }
 
-      // Notifications
       db.get(
         `SELECT a.*, 
                   c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
@@ -964,7 +991,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
             if (status === "cancelled") {
               if (userType === "client") {
-                // Client notifies themselves
                 if (shouldNotify(fullApt.client_prefs, "booking_alerts")) {
                   createNotification(
                     fullApt.client_id,
@@ -975,7 +1001,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
                   );
                 }
 
-                // Provider gets notified that client cancelled
                 if (shouldNotify(fullApt.provider_prefs, "booking_alerts")) {
                   createNotification(
                     fullApt.provider_id,
@@ -997,7 +1022,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
                 }
               }
 
-              // Send SMS notification
               await smsService.sendCancellationNotice(
                 {
                   ...fullApt,
@@ -1032,7 +1056,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
                 createNotification(targetUser, "reschedule", title, msg, id);
               }
 
-              // 🧠 Alert Provider if RISK CHANGED to HIGH
               if (newRiskScore && newRiskScore > 0.7 && userType === "client") {
                 if (shouldNotify(fullApt.provider_prefs, "booking_alerts")) {
                   createNotification(
@@ -1073,7 +1096,6 @@ router.delete("/:id", authenticateToken, (req, res) => {
   const delField =
     userType === "client" ? "client_deleted" : "provider_deleted";
 
-  // 1. Fetch appointment first to check dates
   db.get(
     "SELECT appointment_date, status FROM appointments WHERE id = ? AND (client_id = ? OR provider_id = ?)",
     [id, userId, userId],
@@ -1081,12 +1103,10 @@ router.delete("/:id", authenticateToken, (req, res) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (!apt) return res.status(404).json({ error: "Appointment not found" });
 
-      // 2. Universal 6-Month History Rule
       const aptDate = new Date(apt.appointment_date);
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-      // If the appointment is in the future OR happened less than 6 months ago
       if (aptDate > sixMonthsAgo) {
         return res.status(403).json({
           error:
@@ -1094,7 +1114,6 @@ router.delete("/:id", authenticateToken, (req, res) => {
         });
       }
 
-      // 3. Perform Soft Delete ONLY (Preserve data for AI)
       db.run(
         `UPDATE appointments SET ${delField} = 1 WHERE id = ? AND ${userType}_id = ?`,
         [id, userId],
@@ -1104,7 +1123,6 @@ router.delete("/:id", authenticateToken, (req, res) => {
               .status(500)
               .json({ error: "Failed to remove appointment" });
 
-          // 4. Hard Delete Check (Only if > 1 year old AND both parties deleted)
           const oneYearAgo = new Date();
           oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
@@ -1145,8 +1163,6 @@ router.put("/:id/payment", authenticateToken, (req, res) => {
 
     const finalStatus = paid >= row.total_price ? "paid" : "deposit-paid";
 
-    // 🧠 RE-CALCULATE RISK ON PAYMENT
-    // Destructure for improved logging
     const { riskScore, baseRisk, paymentRatio, historyFactor } =
       await calculateNoShowRisk({
         client_id: row.client_id,
@@ -1157,7 +1173,6 @@ router.put("/:id/payment", authenticateToken, (req, res) => {
         deposit_amount: row.deposit_amount,
       });
 
-    // Update Query
     let updateQuery = `
         UPDATE appointments
         SET payment_reference = ?,
@@ -1177,7 +1192,6 @@ router.put("/:id/payment", authenticateToken, (req, res) => {
         [id, paid, payment_reference]
       );
 
-      // 🧠 Update Prediction Tracker
       db.run(
         `UPDATE ai_predictions 
                   SET predicted_risk = ?, payment_amount = ?, base_risk_before_payment = ?, payment_ratio = ?, client_history_factor = ? 
@@ -1245,7 +1259,6 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
     const finalStatus =
       newPaid >= Number(row.total_price || 0) ? "paid" : "deposit-paid";
 
-    // 🧠 RE-CALCULATE RISK ON BALANCE PAYMENT
     const { riskScore, baseRisk, paymentRatio, historyFactor } =
       await calculateNoShowRisk({
         client_id: row.client_id,
@@ -1280,7 +1293,6 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
         [id, amount_paid, payment_reference]
       );
 
-      // 🧠 Update Prediction Tracker
       db.run(
         `UPDATE ai_predictions 
                 SET predicted_risk = ?, payment_amount = ?, base_risk_before_payment = ?, payment_ratio = ?, client_history_factor = ? 
