@@ -64,7 +64,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
   // ---------- 1. Availability Logic ----------
 
-  // 🆕 Helper to validate if a date is allowed based on provider settings
   const handleDateChange = async (dateValue) => {
     setError("");
     setSelectedTime("");
@@ -76,7 +75,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     }
 
     const dateObj = new Date(dateValue);
-    const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
+    const dayOfWeek = dateObj.getDay(); 
 
     try {
       const providerRes = await api.get(`/auth/public-profile/${serviceMeta.provider_id}`);
@@ -88,7 +87,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
       if (isSatClosed || isSunClosed) {
         const dayName = dayOfWeek === 6 ? "Saturdays" : "Sundays";
         setError(`This provider is closed on ${dayName}. Please pick another date.`);
-        setSelectedDate(""); // 🆕 Clear the picker if they chose a closed day
+        setSelectedDate(""); 
         return;
       }
 
@@ -157,10 +156,10 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     const [openH, openM] = openTime.split(':').map(Number);
     const [closeH, closeM] = closeTime.split(':').map(Number);
     
-    let current = new Date();
+    let current = new Date(selectedDate); // Base current on selected date
     current.setHours(openH, openM, 0, 0);
     
-    const end = new Date();
+    const end = new Date(selectedDate);
     end.setHours(closeH, closeM, 0, 0);
 
     const now = new Date(); 
@@ -186,14 +185,13 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
       const isFull = overlapCount >= serviceCapacity;
       
-      const bufferTime = new Date(now.getTime() - 15 * 60000); 
-      
+      // ✅ Dynamic Past Logic: Disable slot if it's today and time has passed
       let isPast = false;
+      const isToday = new Date(selectedDate).toDateString() === now.toDateString();
       
-      if (isWalkIn) {
-         isPast = current < bufferTime;
-      } else {
-         isPast = new Date(selectedDate).toDateString() === now.toDateString() && current < now;
+      if (isToday) {
+         // Slot is past if its start time is before current time
+         isPast = current.getTime() < now.getTime();
       }
 
       generated.push({
@@ -368,14 +366,11 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   const getMinDate = () => {
-    if (isWalkIn) return new Date().toISOString().split("T")[0];
-    const today = new Date();
-    today.setDate(today.getDate() + 1);
-    return today.toISOString().split("T")[0];
+    // ✅ Enabled same-day booking by returning today
+    return new Date().toISOString().split("T")[0];
   };
 
   const getMaxDate = () => {
-    if (isWalkIn) return new Date().toISOString().split("T")[0];
     const maxDate = new Date();
     maxDate.setDate(maxDate.getDate() + 30);
     return maxDate.toISOString().split("T")[0];
@@ -409,7 +404,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                     type="date" 
                     className="styled-input" 
                     value={selectedDate} 
-                    onChange={(e) => handleDateChange(e.target.value)} // 🆕 Updated handler
+                    onChange={(e) => handleDateChange(e.target.value)} 
                     min={getMinDate()} 
                     max={getMaxDate()}
                     readOnly={isWalkIn} 
@@ -554,7 +549,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                   <button type="button" className="btn btn-text" onClick={() => setStep(1)} disabled={processingPayment}>Back</button>
                   <div className="pay-btn-wrapper">
                     {paymentOption === "deposit" && <PaystackButton className="btn btn-primary btn-block" {...{ ...depositConfig, text: processingPayment ? "Processing..." : `Pay KES ${depositKES.toLocaleString()}` }} disabled={payDisabled} />}
-                    {paymentOption === "full" && <PaystackButton className="btn btn-primary btn-block" {...{ ...fullConfig, text: processingPayment ? "Processing..." : `Pay KES ${totalKES.toLocaleString()}` }} disabled={payDisabled} />}
+                    {fullConfig.publicKey && paymentOption === "full" && <PaystackButton className="btn btn-primary btn-block" {...{ ...fullConfig, text: processingPayment ? "Processing..." : `Pay KES ${totalKES.toLocaleString()}` }} disabled={payDisabled} />}
                     {paymentOption === "custom" && <PaystackButton className="btn btn-primary btn-block" {...{ ...customConfig, text: processingPayment ? "Processing..." : `Pay KES ${computeSelectedAmountKES().toLocaleString()}` }} disabled={payDisabled} />}
                   </div>
                 </div>
