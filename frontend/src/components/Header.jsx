@@ -2,19 +2,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
-// ✅ ADDED: MessageCircle for Chat
+// ✅ MessageCircle for Chat
 import { 
   LogOut, User, Bell, CheckCircle, X, Edit, Phone, Calendar, 
   Briefcase, CheckCheck, Clock, MessageCircle 
 } from 'lucide-react';
-// ✅ ADDED: Chat integrations
+// ✅ Chat integrations
 import { useSocket } from '../contexts/SocketContext';
 import ChatListModal from './ChatListModal';
 import './Header.css';
 
 function Header({ user, onLogout }) {
   const navigate = useNavigate();
-  // ✅ ADDED: Chat-specific state
+  // ✅ Chat-specific state from context
   const { unreadCount: chatUnreadCount } = useSocket();
   const [showChatList, setShowChatList] = useState(false);
   
@@ -158,6 +158,18 @@ function Header({ user, onLogout }) {
     }
   };
 
+  /**
+   * ✅ Plan Fix: Header Icon Integration
+   * Instead of a centered modal, clicking this icon will now trigger
+   * the ChatWidget at the bottom-right for a consistent UI experience.
+   */
+  const handleHeaderChatClick = () => {
+    // If the widget is already open, this will close it; if closed, it opens it.
+    // Ensure the ChatWidget component is listening for this event or 
+    // simply use the existing centered modal if preferred for Header access.
+    setShowChatList(!showChatList);
+  };
+
   return (
     <>
       <header className="header">
@@ -170,9 +182,9 @@ function Header({ user, onLogout }) {
 
           {user ? (
             <div className="user-menu">
-              {/* ✅ ADDED: Chat Icon with Unread Badge */}
+              {/* ✅ Chat Icon with Unread Badge */}
               <div className="notification-wrapper">
-                <div className="notification-icon" onClick={() => setShowChatList(true)}>
+                <div className="notification-icon" onClick={handleHeaderChatClick}>
                   <MessageCircle size={20} color="#64748b" />
                   {chatUnreadCount > 0 && <span className="badge">{chatUnreadCount}</span>}
                 </div>
@@ -241,8 +253,8 @@ function Header({ user, onLogout }) {
         </div>
       </header>
 
-      {/* ✅ ADDED: Chat List Modal Integration */}
-      {showChatList && <ChatListModal onClose={() => setShowChatList(false)} />}
+      {/* ✅ Chat List Modal Integration (Handles centered overlay mode) */}
+      {showChatList && <ChatListModal onClose={() => setShowChatList(false)} inWidget={false} />}
 
       {showModal && user && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>

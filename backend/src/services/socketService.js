@@ -36,9 +36,17 @@ export const initializeSocket = (server) => {
 
     socket.join(`user:${socket.userId}`);
 
+    // ✅ Step 7: Updated join_room to provide enriched room info
     socket.on("join_room", async ({ roomId }) => {
       db.get(
-        `SELECT * FROM chat_rooms WHERE id = ? AND (client_id = ? OR provider_id = ?)`,
+        `SELECT cr.*, 
+                u1.name AS client_name, 
+                u2.name AS provider_name, 
+                u2.business_name
+         FROM chat_rooms cr
+         JOIN users u1 ON cr.client_id = u1.id
+         JOIN users u2 ON cr.provider_id = u2.id
+         WHERE cr.id = ? AND (cr.client_id = ? OR cr.provider_id = ?)`,
         [roomId, socket.userId, socket.userId],
         (err, room) => {
           if (err || !room) {
@@ -46,7 +54,8 @@ export const initializeSocket = (server) => {
             return;
           }
           socket.join(`room:${roomId}`);
-          socket.emit("joined_room", { roomId });
+          // ✅ Send enriched room info back to client
+          socket.emit("joined_room", { roomId, roomInfo: room });
         },
       );
     });

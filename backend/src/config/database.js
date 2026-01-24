@@ -17,14 +17,27 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, "schedula.db");
 console.log(`📊 Database path: ${dbPath}`);
 
-export const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error("❌ Error opening database:", err.message);
-  } else {
-    console.log("✅ Connected to SQLite database successfully");
-    initializeDatabase();
-  }
-});
+// ✅ Open the database with explicit READWRITE | CREATE modes to prevent readonly errors
+export const db = new sqlite3.Database(
+  dbPath,
+  sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
+  (err) => {
+    if (err) {
+      console.error("❌ Error opening database:", err.message);
+    } else {
+      console.log("✅ Connected to SQLite database successfully");
+      // Ensure the file itself is writable by the current process
+      try {
+        fs.accessSync(dbPath, fs.constants.W_OK);
+        initializeDatabase();
+      } catch (accessErr) {
+        console.error(
+          "❌ Database file is not writable! Check folder permissions.",
+        );
+      }
+    }
+  },
+);
 
 function initializeDatabase() {
   /* ---------------------------------------------

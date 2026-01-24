@@ -5,7 +5,8 @@ import api from '../services/auth';
 import ChatModal from './ChatModal';
 import './ChatListModal.css';
 
-const ChatListModal = ({ onClose }) => {
+// ✅ UPDATED: Added inWidget prop to handle widget vs overlay modes
+const ChatListModal = ({ onClose, inWidget = false }) => {
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [contextInfo, setContextInfo] = useState(null);
@@ -24,29 +25,47 @@ const ChatListModal = ({ onClose }) => {
     setSelectedRoom(room);
   };
 
+  // ✅ Pass inWidget down to ChatModal to ensure consistent UI behavior
   if (selectedRoom) {
-    return <ChatModal room={selectedRoom} contextInfo={contextInfo} onClose={() => setSelectedRoom(null)} />;
+    return (
+      <ChatModal 
+        room={selectedRoom} 
+        contextInfo={contextInfo} 
+        onClose={() => setSelectedRoom(null)} 
+        inWidget={inWidget} 
+      />
+    );
   }
 
-  return (
-    <div className="chat-list-overlay" onClick={onClose}>
-      <div className="chat-list-modal" onClick={e => e.stopPropagation()}>
+  // ✅ Conditional content: use widget body or modal overlay header
+  const content = (
+    <>
+      {!inWidget && (
         <div className="chat-list-header">
           <h3>💬 Messages</h3>
           <button onClick={onClose}><X size={20} /></button>
         </div>
-        <div className="chat-list-body">
-          {rooms.map(room => (
-            <div key={room.id} className="chat-preview" onClick={() => openChat(room)}>
-              <div className="preview-info">
-                <strong>{room.provider_name || room.client_name}</strong>
-                {room.context_type !== 'profile' && <small className="context-label">{room.context_type}</small>}
-              </div>
-              {room.unread_count > 0 && <span className="badge">{room.unread_count}</span>}
+      )}
+      <div className="chat-list-body">
+        {rooms.map(room => (
+          <div key={room.id} className="chat-preview" onClick={() => openChat(room)}>
+            <div className="preview-info">
+              <strong>{room.provider_name || room.client_name}</strong>
+              {room.context_type !== 'profile' && <small className="context-label">{room.context_type}</small>}
             </div>
-          ))}
-          {rooms.length === 0 && <p className="empty-msg">No active conversations</p>}
-        </div>
+            {room.unread_count > 0 && <span className="badge">{room.unread_count}</span>}
+          </div>
+        ))}
+        {rooms.length === 0 && <p className="empty-msg">No active conversations</p>}
+      </div>
+    </>
+  );
+
+  // ✅ Return unwrapped content if in widget, otherwise wrap in centered overlay
+  return inWidget ? content : (
+    <div className="chat-list-overlay" onClick={onClose}>
+      <div className="chat-list-modal" onClick={e => e.stopPropagation()}>
+        {content}
       </div>
     </div>
   );
