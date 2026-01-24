@@ -99,7 +99,7 @@
 
 /* ✅ CRITICAL FIX: Sent Messages - RIGHT Alignment with Blue Background */
 .msg.sent {
-  align-self: flex-end; /* Push to RIGHT side */
+  align-self: flex-start;
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: white;
   border-bottom-right-radius: 4px; /* Tail effect */
@@ -113,7 +113,7 @@
 
 /* ✅ CRITICAL FIX: Received Messages - LEFT Alignment with Gray Background */
 .msg.received {
-  align-self: flex-start; /* Push to LEFT side */
+  align-self: flex-end;
   background: #e2e8f0;
   color: #1e293b;
   border-bottom-left-radius: 4px; /* Tail effect */
