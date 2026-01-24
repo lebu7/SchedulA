@@ -1,22 +1,19 @@
-/* frontend/src/components/Header.jsx */
+/* frontend/src/components/Header.jsx - FIXED VERSION */
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
-// ✅ MessageCircle for Chat
 import { 
   LogOut, User, Bell, CheckCircle, X, Edit, Phone, Calendar, 
   Briefcase, CheckCheck, Clock, MessageCircle 
 } from 'lucide-react';
-// ✅ Chat integrations
+// ✅ REMOVED: ChatListModal import - we only use the widget now
 import { useSocket } from '../contexts/SocketContext';
-import ChatListModal from './ChatListModal';
 import './Header.css';
 
 function Header({ user, onLogout }) {
   const navigate = useNavigate();
-  // ✅ Chat-specific state from context
+  // ✅ Chat unread count from context
   const { unreadCount: chatUnreadCount } = useSocket();
-  const [showChatList, setShowChatList] = useState(false);
   
   const [showModal, setShowModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -159,15 +156,12 @@ function Header({ user, onLogout }) {
   };
 
   /**
-   * ✅ Plan Fix: Header Icon Integration
-   * Instead of a centered modal, clicking this icon will now trigger
-   * the ChatWidget at the bottom-right for a consistent UI experience.
+   * ✅ FIXED: Header Chat Icon now triggers the ChatWidget
+   * Instead of opening a modal, we'll dispatch a custom event that the ChatWidget listens to
    */
   const handleHeaderChatClick = () => {
-    // If the widget is already open, this will close it; if closed, it opens it.
-    // Ensure the ChatWidget component is listening for this event or 
-    // simply use the existing centered modal if preferred for Header access.
-    setShowChatList(!showChatList);
+    // Dispatch custom event to toggle the widget
+    window.dispatchEvent(new CustomEvent('toggleChatWidget'));
   };
 
   return (
@@ -182,9 +176,9 @@ function Header({ user, onLogout }) {
 
           {user ? (
             <div className="user-menu">
-              {/* ✅ Chat Icon with Unread Badge */}
+              {/* ✅ FIXED: Chat Icon now triggers widget instead of modal */}
               <div className="notification-wrapper">
-                <div className="notification-icon" onClick={handleHeaderChatClick}>
+                <div className="notification-icon" onClick={handleHeaderChatClick} title="Open Messages">
                   <MessageCircle size={20} color="#64748b" />
                   {chatUnreadCount > 0 && <span className="badge">{chatUnreadCount}</span>}
                 </div>
@@ -253,8 +247,7 @@ function Header({ user, onLogout }) {
         </div>
       </header>
 
-      {/* ✅ Chat List Modal Integration (Handles centered overlay mode) */}
-      {showChatList && <ChatListModal onClose={() => setShowChatList(false)} inWidget={false} />}
+      {/* ✅ REMOVED: ChatListModal - only using the widget now */}
 
       {showModal && user && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
