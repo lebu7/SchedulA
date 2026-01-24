@@ -466,7 +466,7 @@ router.get("/profile", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE PROFILE (Fix: Separate Profile Update Notifications)
+   ✅ UPDATE PROFILE
 --------------------------------------------- */
 router.put(
   "/profile",
@@ -532,7 +532,7 @@ router.put(
         if (err)
           return res.status(500).json({ error: "Failed to update profile" });
 
-        // Targeted Fix: Skip profile notification if this is triggered by hours update
+        // FIX: Remove redundant logic that was causing ReferenceError
         if (!is_hours_update) {
           const updatedFields = [];
           if (business_address) updatedFields.push("address");
@@ -544,59 +544,11 @@ router.put(
               ? `Updated: ${updatedFields.join(", ")}`
               : "Your profile details have been successfully updated.";
 
-          db.get(
-            "SELECT opening_time, closing_time, is_open_sat, is_open_sun FROM users WHERE id = ?",
-            [req.user.userId],
-            (err, user) => {
-              if (err || !user)
-                return res
-                  .status(500)
-                  .json({ error: "Failed to fetch user settings" });
-
-              db.run(
-                `UPDATE users SET opening_time = ?, closing_time = ?, is_open_sat = ?, is_open_sun = ? WHERE id = ?`,
-                [
-                  opening_time,
-                  closing_time,
-                  is_open_sat ? 1 : 0,
-                  is_open_sun ? 1 : 0,
-                  req.user.userId,
-                ],
-                function (err) {
-                  if (err)
-                    return res
-                      .status(500)
-                      .json({ error: "Failed to update hours" });
-
-                  // ✅ DYNAMIC NOTIFICATION
-                  const changedFields = [];
-                  if (
-                    opening_time !== user.opening_time ||
-                    closing_time !== user.closing_time
-                  ) {
-                    changedFields.push("business hours");
-                  }
-                  if ((is_open_sat ? 1 : 0) !== user.is_open_sat)
-                    changedFields.push("Saturday availability");
-                  if ((is_open_sun ? 1 : 0) !== user.is_open_sun)
-                    changedFields.push("Sunday availability");
-
-                  const message =
-                    changedFields.length > 0
-                      ? `Updated: ${changedFields.join(", ")}.`
-                      : "Business settings updated.";
-
-                  createNotification(
-                    req.user.userId,
-                    "system",
-                    "Business Info Updated",
-                    message,
-                  );
-
-                  res.json({ message: "Business hours updated" });
-                },
-              );
-            },
+          createNotification(
+            req.user.userId,
+            "system",
+            "Profile Updated",
+            notifMsg,
           );
         }
 
@@ -701,7 +653,7 @@ router.put("/notifications", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE BUSINESS HOURS (Fix: Dynamic Notification Messages)
+   ✅ UPDATE BUSINESS HOURS
 --------------------------------------------- */
 router.put(
   "/business-hours",
@@ -726,7 +678,6 @@ router.put(
         .status(400)
         .json({ error: "Closing time must be later than opening time" });
 
-    // Targeted Fix: Dynamic notification based on what changed
     db.get(
       "SELECT opening_time, closing_time, is_open_sat, is_open_sun FROM users WHERE id = ?",
       [req.user.userId],
@@ -756,9 +707,9 @@ router.put(
             ) {
               changedFields.push("business hours");
             }
-            if (is_open_sat !== (user.is_open_sat === 1))
+            if ((is_open_sat ? 1 : 0) !== user.is_open_sat)
               changedFields.push("Saturday availability");
-            if (is_open_sun !== (user.is_open_sun === 1))
+            if ((is_open_sun ? 1 : 0) !== user.is_open_sun)
               changedFields.push("Sunday availability");
 
             const message =

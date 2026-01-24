@@ -108,7 +108,7 @@ const Settings = ({ user, setUser }) => {
     }
   }, [user]);
 
-  // ✅ DEEP COMPARISON LOGIC TO TRACK REAL CHANGES
+  // ✅ IMPROVED COMPARISON LOGIC
   useEffect(() => {
     if (!user) return;
 
@@ -136,6 +136,23 @@ const Settings = ({ user, setUser }) => {
     }
   }, [location.state]);
 
+  // ✅ AUTOMATIC +254 HANDLER
+  const handlePhoneChange = (e) => {
+    let val = e.target.value;
+    
+    // If the field is empty or user tries to delete the prefix, reset to +254
+    if (!val.startsWith('+254')) {
+      val = '+254';
+    }
+    
+    // Only allow digits after the prefix
+    const prefix = '+254';
+    const rest = val.slice(4).replace(/\D/g, '').slice(0, 9); // Limit to 9 digits after prefix
+    
+    setProfile({ ...profile, phone: prefix + rest });
+    setHasChanges(true);
+  };
+
   const showMsg = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
@@ -161,15 +178,8 @@ const Settings = ({ user, setUser }) => {
     e.preventDefault();
     setLoading(true);
 
-    let formattedPhone = profile.phone.trim();
-    if (formattedPhone.startsWith('0')) {
-      formattedPhone = '+254' + formattedPhone.substring(1);
-    } else if (formattedPhone.startsWith('254')) {
-      formattedPhone = '+' + formattedPhone;
-    }
-
     try {
-      const res = await api.put('/auth/profile', { ...profile, phone: formattedPhone });
+      const res = await api.put('/auth/profile', profile);
       showMsg('success', 'Profile updated successfully!');
       
       const updatedUser = { ...user, ...res.data.user };
@@ -286,11 +296,18 @@ const Settings = ({ user, setUser }) => {
             <form onSubmit={handleProfileUpdate} className="settings-form">
               <div className="form-group">
                 <label>Full Name</label>
-                <input type="text" value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})} required />
+                <input type="text" value={profile.name} onChange={e => { setProfile({...profile, name: e.target.value}); setHasChanges(true); }} required />
               </div>
               <div className="form-group">
                 <label>Mobile Number</label>
-                <input type="tel" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} required />
+                {/* ✅ UPDATED INPUT WITH PREFIX HANDLER */}
+                <input 
+                  type="tel" 
+                  value={profile.phone} 
+                  onChange={handlePhoneChange}
+                  placeholder="+254XXXXXXXXX"
+                  required 
+                />
               </div>
               <div className="form-group">
                 <label>Gender <small style={{color:'#888'}}>(Cannot be changed)</small></label>
@@ -309,7 +326,7 @@ const Settings = ({ user, setUser }) => {
               {user.user_type === 'provider' && (
                 <div className="form-group">
                   <label>Business Name</label>
-                  <input type="text" value={profile.business_name} onChange={e => setProfile({...profile, business_name: e.target.value})} />
+                  <input type="text" value={profile.business_name} onChange={e => { setProfile({...profile, business_name: e.target.value}); setHasChanges(true); }} />
                 </div>
               )}
               <button type="submit" className="save-btn" disabled={loading || !hasChanges}>
@@ -402,7 +419,7 @@ const Settings = ({ user, setUser }) => {
                 <div style={{display:'flex', gap:'20px', marginBottom: '15px'}}>
                     <div className="form-group" style={{flex: 1}}>
                         <label>Suburb *</label>
-                        <select value={profile.suburb} onChange={(e) => setProfile(p => ({ ...p, suburb: e.target.value }))} className="suburb-dropdown" required>
+                        <select value={profile.suburb} onChange={(e) => { setProfile(p => ({ ...p, suburb: e.target.value })); setHasChanges(true); }} className="suburb-dropdown" required>
                             <option value="">Select Suburb</option>
                             {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
                                 <optgroup key={letter} label={letter}>
@@ -413,12 +430,12 @@ const Settings = ({ user, setUser }) => {
                     </div>
                     <div className="form-group" style={{flex: 2}}>
                         <label>Business Address / Landmark *</label>
-                        <input type="text" value={profile.business_address} onChange={e => setProfile({...profile, business_address: e.target.value})} placeholder="e.g. 2nd Floor, City Mall" style={smallInputStyle} required />
+                        <input type="text" value={profile.business_address} onChange={e => { setProfile({...profile, business_address: e.target.value}); setHasChanges(true); }} placeholder="e.g. 2nd Floor, City Mall" style={smallInputStyle} required />
                     </div>
                 </div>
                 <div className="form-group">
                     <label>Google Maps Link <small style={{color:'#64748b'}}>(Optional)</small></label>
-                    <input type="url" value={profile.google_maps_link} onChange={e => setProfile({...profile, google_maps_link: e.target.value})} placeholder="Paste link here" style={smallInputStyle} />
+                    <input type="url" value={profile.google_maps_link} onChange={e => { setProfile({...profile, google_maps_link: e.target.value}); setHasChanges(true); }} placeholder="Paste link here" style={smallInputStyle} />
                 </div>
              </div>
              <div style={{display: 'flex', gap: '30px', alignItems: 'flex-start'}}>
@@ -427,20 +444,19 @@ const Settings = ({ user, setUser }) => {
                     <div className="form-group-row" style={{display:'flex', gap:'15px'}}>
                         <div className="form-group" style={{flex:1}}>
                             <label>Opening</label>
-                            <input type="time" value={hours.opening_time} onChange={e => setHours({...hours, opening_time: e.target.value})} style={smallInputStyle} />
+                            <input type="time" value={hours.opening_time} onChange={e => { setHours({...hours, opening_time: e.target.value}); setHasChanges(true); }} style={smallInputStyle} />
                         </div>
                         <div className="form-group" style={{flex:1}}>
                             <label>Closing</label>
-                            <input type="time" value={hours.closing_time} onChange={e => setHours({...hours, closing_time: e.target.value})} style={smallInputStyle} />
+                            <input type="time" value={hours.closing_time} onChange={e => { setHours({...hours, closing_time: e.target.value}); setHasChanges(true); }} style={smallInputStyle} />
                         </div>
                     </div>
                 </div>
-                {/* RESTORED WEEKEND OPERATIONS CARD */}
                 <div style={{flex: 1.2, padding: '15px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0'}}>
                     <h5 style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px' }}>Weekend Operations</h5>
-                    <Toggle label="Open on Saturdays" desc="Operate on Saturdays" checked={hours.is_open_sat} onChange={() => setHours({...hours, is_open_sat: !hours.is_open_sat})} />
+                    <Toggle label="Open on Saturdays" desc="Operate on Saturdays" checked={hours.is_open_sat} onChange={() => { setHours({...hours, is_open_sat: !hours.is_open_sat}); setHasChanges(true); }} />
                     <div style={{ height: '12px' }}></div>
-                    <Toggle label="Open on Sundays" desc="Operate on Sundays" checked={hours.is_open_sun} onChange={() => setHours({...hours, is_open_sun: !hours.is_open_sun})} />
+                    <Toggle label="Open on Sundays" desc="Operate on Sundays" checked={hours.is_open_sun} onChange={() => { setHours({...hours, is_open_sun: !hours.is_open_sun}); setHasChanges(true); }} />
                 </div>
              </div>
              <button type="submit" className="save-btn" style={{marginTop: '30px'}} disabled={loading || !hasChanges}>
