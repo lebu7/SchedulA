@@ -477,7 +477,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                         {processingBooking ? "Processing..." : "Confirm & Record Payment"}
                     </button>
                 ) : (
-                    <button type="button" className="btn btn-primary btn-block" disabled={!selectedTime} onClick={() => setStep(2)}>Next: Customize & Pay</button>
+                    <button type="button" className="btn btn-primary btn-block" disabled={!selectedTime} onClick={() => setStep(2)}>Customize & Pay</button>
                 )}
               </div>
             ) : (
