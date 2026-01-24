@@ -3,13 +3,16 @@ import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 
+// ✅ 1. Import the new Socket Context Provider
+import { SocketProvider } from './contexts/SocketContext'
+
 // Components
 import Header from './components/Header'
 import Login from './components/Login'
 import Register from './components/Register'
 import Dashboard from './components/Dashboard'
 import ForgotPassword from './components/ForgotPassword'
-import ProviderProfile from './components/ProviderProfile' // 🆕 Import for the new feature
+import ProviderProfile from './components/ProviderProfile' 
 
 // Services
 import { authService } from './services/auth'
@@ -50,53 +53,55 @@ function App() {
 
   return (
     <Router>
-      <div className="App">
-        <Header user={user} onLogout={handleLogout} />
-        
-        <main className="main-content">
-          <Routes>
-            <Route 
-              path="/login" 
-              element={
-                !user ? <Login onLogin={handleLogin} /> : <Navigate to="/dashboard" />
-              } 
-            />
-            <Route 
-              path="/register" 
-              element={
-                !user ? <Register onLogin={handleLogin} /> : <Navigate to="/dashboard" />
-              } 
-            />
-            
-            <Route 
-              path="/forgot-password" 
-              element={
-                !user ? <ForgotPassword /> : <Navigate to="/dashboard" />
-              } 
-            />
-            
-            {/* 🆕 New Public Provider Profile Route */}
-            <Route 
-              path="/provider/:id" 
-              element={
-                user ? <ProviderProfile user={user} /> : <Navigate to="/login" />
-              } 
-            />
-            
-            <Route 
-              path="/dashboard" 
-              element={
-                user ? <Dashboard user={user} setUser={setUser} /> : <Navigate to="/login" />
-              } 
-            />
-            
-            <Route 
-              path="/" 
-              element={<Navigate to={user ? "/dashboard" : "/login"} />} 
-            />
-          </Routes>
-        </main>
-      </div>
+      {/* ✅ 2. Wrap the application logic with SocketProvider */}
+      <SocketProvider user={user}>
+        <div className="App">
+          <Header user={user} onLogout={handleLogout} />
+          
+          <main className="main-content">
+            <Routes>
+              <Route 
+                path="/login" 
+                element={
+                  !user ? <Login onLogin={handleLogin} /> : <Navigate to="/dashboard" />
+                } 
+              />
+              <Route 
+                path="/register" 
+                element={
+                  !user ? <Register onLogin={handleLogin} /> : <Navigate to="/dashboard" />
+                } 
+              />
+              
+              <Route 
+                path="/forgot-password" 
+                element={
+                  !user ? <ForgotPassword /> : <Navigate to="/dashboard" />
+                } 
+              />
+              
+              <Route 
+                path="/provider/:id" 
+                element={
+                  user ? <ProviderProfile user={user} /> : <Navigate to="/login" />
+                } 
+              />
+              
+              <Route 
+                path="/dashboard" 
+                element={
+                  user ? <Dashboard user={user} setUser={setUser} /> : <Navigate to="/login" />
+                } 
+              />
+              
+              <Route 
+                path="/" 
+                element={<Navigate to={user ? "/dashboard" : "/login"} />} 
+              />
+            </Routes>
+          </main>
+        </div>
+      </SocketProvider>
     </Router>
   )
 }

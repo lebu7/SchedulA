@@ -41,19 +41,13 @@ function initializeDatabase() {
       dob DATE,
       user_type TEXT CHECK(user_type IN ('client', 'provider')) NOT NULL,
       business_name TEXT,
-      
-      -- 🆕 Location Columns
       suburb TEXT,
       business_address TEXT,
       google_maps_link TEXT,
-
       opening_time TEXT DEFAULT '08:00',
       closing_time TEXT DEFAULT '18:00',
-
-      -- 🆕 Weekend Operations
       is_open_sat INTEGER DEFAULT 0,
       is_open_sun INTEGER DEFAULT 0,
-
       notification_preferences TEXT,
       reset_otp TEXT,
       reset_otp_expires DATETIME,
@@ -106,21 +100,61 @@ function initializeDatabase() {
       addons_total REAL DEFAULT 0,
       addons TEXT DEFAULT '[]',
       reminder_sent INTEGER DEFAULT 0,
-      
       refund_status TEXT DEFAULT NULL CHECK(refund_status IN (NULL, 'pending', 'processing', 'completed', 'failed')),
       refund_reference TEXT,
       refund_amount REAL DEFAULT 0,
       refund_initiated_at DATETIME,
       refund_completed_at DATETIME,
-
       no_show_risk REAL DEFAULT 0,
-
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (client_id) REFERENCES users (id),
       FOREIGN KEY (provider_id) REFERENCES users (id),
       FOREIGN KEY (service_id) REFERENCES services (id)
     )
   `);
+
+  /* ---------------------------------------------
+     📱 IN-APP CHAT TABLES (🆕 Added Step 1.2)
+  --------------------------------------------- */
+
+  /* Chat Rooms Table */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      provider_id INTEGER NOT NULL,
+      context_type TEXT CHECK(context_type IN ('appointment', 'service', 'profile')),
+      context_id INTEGER,
+      last_message_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES users(id),
+      FOREIGN KEY (provider_id) REFERENCES users(id),
+      UNIQUE(client_id, provider_id, context_type, context_id)
+    )
+  `);
+
+  /* Chat Messages Table */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      sender_id INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      is_read INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME DEFAULT (datetime('now', '+12 hours')),
+      FOREIGN KEY (room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id)
+    )
+  `);
+
+  /* Indexes for faster chat queries */
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_messages_expires ON chat_messages(expires_at)`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_messages_room ON chat_messages(room_id, created_at DESC)`,
+  );
 
   /* ---------------------------------------------
      💰 TRANSACTIONS TABLE
@@ -152,7 +186,7 @@ function initializeDatabase() {
           }
         });
       }
-    }
+    },
   );
 
   /* ---------------------------------------------
@@ -219,7 +253,7 @@ function initializeDatabase() {
           db.run("PRAGMA foreign_keys=on;");
         });
       }
-    }
+    },
   );
 
   function createSMSLogsTable() {
@@ -239,7 +273,6 @@ function initializeDatabase() {
   /* ---------------------------------------------
      🔍 Ensure missing columns exist (MIGRATIONS)
   --------------------------------------------- */
-  // Users Migrations
   tryAddColumn("users", "gender", "TEXT");
   tryAddColumn("users", "dob", "DATE");
   tryAddColumn("users", "reset_otp", "TEXT");
@@ -247,8 +280,6 @@ function initializeDatabase() {
   tryAddColumn("users", "opening_time", "TEXT DEFAULT '08:00'");
   tryAddColumn("users", "closing_time", "TEXT DEFAULT '18:00'");
   tryAddColumn("users", "notification_preferences", "TEXT");
-
-  // 🆕 Users Migrations for Location & Weekends
   tryAddColumn("users", "suburb", "TEXT");
   tryAddColumn("users", "business_address", "TEXT");
   tryAddColumn("users", "google_maps_link", "TEXT");
@@ -295,9 +326,9 @@ function tryAddColumn(table, column, definition) {
           if (alterErr)
             console.error(
               `⚠️ Failed to add column ${column} to ${table}:`,
-              alterErr.message
+              alterErr.message,
             );
-        }
+        },
       );
     }
   });

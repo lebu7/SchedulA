@@ -1,16 +1,20 @@
+/* backend/src/server.js */
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
-import cron from "node-cron"; // ✅ Import Cron
+import cron from "node-cron";
+import { createServer } from "http"; // ✅ Added for Socket.IO
 import { db } from "./config/database.js";
+import { initializeSocket } from "./services/socketService.js"; // ✅ Added for Socket.IO
 
 // Import routes
 import authRoutes from "./routes/auth.js";
 import serviceRoutes from "./routes/services.js";
 import appointmentRoutes from "./routes/appointments.js";
-import notificationRoutes from "./routes/notifications.js"; // ✅ Import Notification Routes
-import analyticsRoutes from "./routes/analytics.js"; // ✅ Import Analytics Routes (File name stays same)
+import notificationRoutes from "./routes/notifications.js";
+import analyticsRoutes from "./routes/analytics.js";
+import chatRoutes from "./routes/chat.js"; // ✅ Added Chat Routes
 
 // ✅ Import SMS Scheduled Reminders
 import { sendScheduledReminders } from "./services/smsService.js";
@@ -19,6 +23,9 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// ✅ CREATE HTTP SERVER
+const httpServer = createServer(app);
 
 // Middleware
 app.use(helmet());
@@ -30,8 +37,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/notifications", notificationRoutes);
-// 🔄 RENAMED ROUTE to avoid 'blocked by client' errors
 app.use("/api/insights", analyticsRoutes);
+app.use("/api/chat", chatRoutes); // ✅ Mounted Chat Routes
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -42,21 +49,18 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    error: "Something went wrong!",
-    message:
-      process.env.NODE_ENV === "development"
-        ? err.message
-        : "Internal server error",
-  });
-});
+// ✅ INITIALIZE SOCKET.IO
+initializeSocket(httpServer);
 
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({ error: "Route not found" });
+// ✅ Auto-cleanup expired chat messages (Runs hourly)
+cron.schedule("0 * * * *", () => {
+  db.run(
+    `DELETE FROM chat_messages WHERE expires_at < datetime('now')`,
+    (err) => {
+      if (err) console.error("❌ Cleanup Error:", err);
+      else console.log("🧹 12-hour cleanup: Expired messages deleted");
+    },
+  );
 });
 
 // ✅ Auto-cancel past pending appointments function
@@ -78,8 +82,6 @@ const autoCancelPastAppointments = async () => {
    ⏰ BACKGROUND SCHEDULER (Cron Jobs)
 ===================================================== */
 
-// 1. SMS Reminders: Runs every 10 minutes
-// Checks for appointments 24-26 hours away and sends SMS
 cron.schedule("*/10 * * * *", async () => {
   console.log("🔔 CRON: Checking for SMS reminders...");
   try {
@@ -89,8 +91,6 @@ cron.schedule("*/10 * * * *", async () => {
   }
 });
 
-// 2. Cleanup: Runs every hour (at minute 0)
-// Cancels stale pending appointments
 cron.schedule("0 * * * *", async () => {
   console.log("🧹 CRON: Running cleanup tasks...");
   try {
@@ -102,13 +102,14 @@ cron.schedule("0 * * * *", async () => {
 
 // ---------------------------------------------------------
 
-// Run tasks immediately on startup
 console.log("🚀 Initializing background tasks...");
 autoCancelPastAppointments();
 sendScheduledReminders();
 
-app.listen(PORT, () => {
+// ✅ Use httpServer instead of app.listen
+httpServer.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
   console.log(`⏰ Scheduler active: Reminders (Every 10m), Cleanup (Hourly)`);
+  console.log(`💬 Socket.IO ready`);
 });

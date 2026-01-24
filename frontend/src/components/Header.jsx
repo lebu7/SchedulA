@@ -2,17 +2,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
-import { LogOut, User, Bell, CheckCircle, X, Edit, Phone, Calendar, Briefcase, CheckCheck, Clock } from 'lucide-react';
+// ✅ ADDED: MessageCircle for Chat
+import { 
+  LogOut, User, Bell, CheckCircle, X, Edit, Phone, Calendar, 
+  Briefcase, CheckCheck, Clock, MessageCircle 
+} from 'lucide-react';
+// ✅ ADDED: Chat integrations
+import { useSocket } from '../contexts/SocketContext';
+import ChatListModal from './ChatListModal';
 import './Header.css';
 
 function Header({ user, onLogout }) {
   const navigate = useNavigate();
+  // ✅ ADDED: Chat-specific state
+  const { unreadCount: chatUnreadCount } = useSocket();
+  const [showChatList, setShowChatList] = useState(false);
+  
   const [showModal, setShowModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   
-  // ✅ Initialize with defaults to avoid 'undefined' errors
   const [userStats, setUserStats] = useState({ 
     total_services: 0, 
     total_staff: 0, 
@@ -21,22 +31,20 @@ function Header({ user, onLogout }) {
   
   const notifRef = useRef(null);
 
-  // ✅ 1. Fetch Data
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      fetchStats(); // Fetch immediately
+      fetchStats();
 
       const interval = setInterval(() => {
         fetchNotifications();
         fetchStats();
-      }, 15000); // Refresh every 15s
+      }, 15000);
       
       return () => clearInterval(interval);
     }
   }, [user]);
 
-  // ✅ 2. Close dropdowns
   useEffect(() => {
     function handleClickOutside(event) {
       if (notifRef.current && !notifRef.current.contains(event.target)) {
@@ -63,9 +71,7 @@ function Header({ user, onLogout }) {
       const res = await api.get('/notifications');
       setNotifications(res.data.notifications || []);
       setUnreadCount(res.data.unread_count || 0);
-    } catch (err) {
-      // Fail silently
-    }
+    } catch (err) {}
   };
 
   const markAsRead = async (id) => {
@@ -102,13 +108,11 @@ function Header({ user, onLogout }) {
         navState = { tab: 'appointments', subTab: 'upcoming', targetId: notif.reference_id };
     }
     else if (type === 'system') {
-        // ✅ Corrected Routing for Location, Business Info, and Schedule
         if (title.includes('service')) {
           navState = { tab: 'services', targetId: notif.reference_id };
         } else if (title.includes('Profile Updated')) {
           navState = { tab: 'settings', subTab: 'profile' };
         } else if (title.includes('Business Info') || title.includes('Location Updated') || title.includes('Schedule Update')) {
-          // ✅ Specifically route to the Business Info (hours) subtab
           navState = { tab: 'settings', subTab: 'hours' }; 
         } else if (title.includes('Password')) {
           navState = { tab: 'settings', subTab: 'profile' };
@@ -116,7 +120,6 @@ function Header({ user, onLogout }) {
           navState = { tab: 'settings', subTab: 'notifications' };
         }
     }
-
     navigate('/dashboard', { state: navState });
   };
 
@@ -134,37 +137,26 @@ function Header({ user, onLogout }) {
     );
   };
 
-  // ✅ FIXED: Better Dynamic timeAgo helper with correct pluralization
   const timeAgo = (dateStr) => {
-  if (!dateStr) return 'Just now';
-  
-  try {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
-
-    // Handle invalid dates
-    if (isNaN(diffInSeconds)) return 'Just now';
-
-    if (diffInSeconds < 60) return 'Just now';
-    
-    const diffInMinutes = Math.floor(diffInSeconds / 60);
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays === 1) return 'Yesterday';
-    if (diffInDays < 7) return `${diffInDays}d ago`;
-    
-    // For older notifications, show the actual date
-    return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-  } catch (error) {
-    console.error('Error calculating time ago:', error);
-    return 'Recently';
-  }
-};
+    if (!dateStr) return 'Just now';
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffInSeconds = Math.floor((now - date) / 1000);
+      if (isNaN(diffInSeconds)) return 'Just now';
+      if (diffInSeconds < 60) return 'Just now';
+      const diffInMinutes = Math.floor(diffInSeconds / 60);
+      if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+      const diffInHours = Math.floor(diffInMinutes / 60);
+      if (diffInHours < 24) return `${diffInHours}h ago`;
+      const diffInDays = Math.floor(diffInHours / 24);
+      if (diffInDays === 1) return 'Yesterday';
+      if (diffInDays < 7) return `${diffInDays}d ago`;
+      return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+    } catch (error) {
+      return 'Recently';
+    }
+  };
 
   return (
     <>
@@ -178,6 +170,14 @@ function Header({ user, onLogout }) {
 
           {user ? (
             <div className="user-menu">
+              {/* ✅ ADDED: Chat Icon with Unread Badge */}
+              <div className="notification-wrapper">
+                <div className="notification-icon" onClick={() => setShowChatList(true)}>
+                  <MessageCircle size={20} color="#64748b" />
+                  {chatUnreadCount > 0 && <span className="badge">{chatUnreadCount}</span>}
+                </div>
+              </div>
+
               <div className="notification-wrapper" ref={notifRef}>
                 <div className="notification-icon" onClick={() => setShowNotifications(!showNotifications)}>
                   <Bell size={20} color="#64748b" />
@@ -204,7 +204,6 @@ function Header({ user, onLogout }) {
                             <div className="notif-text">
                               <p className="notif-title">{notif.title}</p>
                               <p className="notif-message">{notif.message}</p>
-                              {/* ✅ FIXED: Now uses dynamic timeAgo */}
                               <p className="notif-time">{timeAgo(notif.created_at)}</p>
                             </div>
                             {!notif.is_read && <div className="unread-dot"></div>}
@@ -241,6 +240,9 @@ function Header({ user, onLogout }) {
           )}
         </div>
       </header>
+
+      {/* ✅ ADDED: Chat List Modal Integration */}
+      {showChatList && <ChatListModal onClose={() => setShowChatList(false)} />}
 
       {showModal && user && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>

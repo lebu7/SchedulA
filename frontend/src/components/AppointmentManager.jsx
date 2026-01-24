@@ -1,10 +1,14 @@
+/* frontend/src/components/AppointmentManager.jsx */
 import React, { useState, useEffect, useMemo } from "react";
 import { PaystackButton } from "react-paystack";
 import { useLocation } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
-import CalendarView from "./CalendarView"; // 🆕 Integrated
+import CalendarView from "./CalendarView"; 
+// ✅ ADDED: Chat Components
+import ChatButton from './ChatButton';
+import ChatModal from './ChatModal';
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
   Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare, List 
@@ -297,6 +301,10 @@ function AppointmentManager({ user }) {
   const [loadingServices, setLoadingServices] = useState(false);
   const [walkInService, setWalkInService] = useState(null);
 
+  // ✅ ADDED: Chat-specific state
+  const [chatRoom, setChatRoom] = useState(null);
+  const [chatContext, setChatContext] = useState(null);
+
   useEffect(() => {
     fetchAppointments();
   }, []);
@@ -414,6 +422,26 @@ function AppointmentManager({ user }) {
   const handleReschedule = (apt) => {
     setRescheduleApt(apt);
     setShowReschedule(true);
+  };
+
+  // ✅ ADDED: Open Appointment-Context Chat
+  const openAppointmentChat = async (apt) => {
+    const recipientId = user.user_type === 'client' ? apt.provider_id : apt.client_id;
+    try {
+      const res = await api.post('/chat/rooms', {
+        recipientId,
+        contextType: 'appointment',
+        contextId: apt.id
+      });
+      setChatRoom(res.data.room);
+      setChatContext({ 
+        service_name: apt.service_name, 
+        appointment_date: apt.appointment_date 
+      });
+    } catch (err) {
+      console.error("Failed to initialize chat room:", err);
+      alert("Could not open chat at this time.");
+    }
   };
 
   const formatDate = (dateString) =>
@@ -611,10 +639,18 @@ function AppointmentManager({ user }) {
             </div>
 
             {user.user_type === "client" ? (
-                <p><strong>With:</strong> {apt.provider_name}</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <p><strong>With:</strong> {apt.provider_name}</p>
+                    {/* ✅ Integrated Chat Button */}
+                    <ChatButton onClick={() => openAppointmentChat(apt)} size="small" />
+                </div>
             ) : (
                 <div>
-                <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                    {/* ✅ Integrated Chat Button */}
+                    <ChatButton onClick={() => openAppointmentChat(apt)} size="small" />
+                </div>
                 {(apt.status === 'pending' || apt.status === 'scheduled') && !isWalkIn && (
                     <div style={{ marginTop: '5px', marginBottom: '8px' }}>
                         {getRiskBadge(apt.no_show_risk)}
@@ -936,7 +972,6 @@ function AppointmentManager({ user }) {
             </h2>
             
             <div className="am-controls" style={{ display: 'flex', gap: '10px' }}>
-                {/* 🆕 View Toggle for Provider */}
                 {user.user_type === 'provider' && (
                     <div className="view-toggle-pills" style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
                         <button 
@@ -996,7 +1031,6 @@ function AppointmentManager({ user }) {
             </div>
         </div>
 
-        {/* 🆕 Conditional Rendering for Calendar View */}
         {viewMode === 'calendar' && user.user_type === 'provider' ? (
             <CalendarView user={user} />
         ) : (
@@ -1085,6 +1119,15 @@ function AppointmentManager({ user }) {
             payment={selectedPayment}
             user={user} 
             onClose={() => setSelectedPayment(null)}
+          />
+        )}
+
+        {/* ✅ Integrated Chat Modal */}
+        {chatRoom && (
+          <ChatModal 
+            room={chatRoom} 
+            contextInfo={chatContext} 
+            onClose={() => setChatRoom(null)} 
           />
         )}
 

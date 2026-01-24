@@ -1,7 +1,11 @@
+/* frontend/src/components/ProviderProfile.jsx */
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import BookingModal from './BookingModal';
+// ✅ ADDED: Chat Components
+import ChatButton from './ChatButton';
+import ChatModal from './ChatModal';
 import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Calendar, Phone } from 'lucide-react';
 import './ProviderProfile.css';
 
@@ -13,6 +17,9 @@ const ProviderProfile = ({ user }) => {
     const [error, setError] = useState(null);
     const [selectedService, setSelectedService] = useState(null);
     const [showBookingModal, setShowBookingModal] = useState(false);
+
+    // ✅ ADDED: Chat-specific state
+    const [chatRoom, setChatRoom] = useState(null);
 
     useEffect(() => {
         const fetchProviderData = async () => {
@@ -27,6 +34,21 @@ const ProviderProfile = ({ user }) => {
         };
         fetchProviderData();
     }, [id]);
+
+    // ✅ ADDED: Open Profile-Context Chat
+    const openProfileChat = async () => {
+        try {
+            const res = await api.post('/chat/rooms', {
+                recipientId: data.provider.id,
+                contextType: 'profile',
+                contextId: null
+            });
+            setChatRoom(res.data.room);
+        } catch (err) {
+            console.error("Failed to initialize chat:", err);
+            alert("Could not start conversation at this time.");
+        }
+    };
 
     const handleBook = (service) => {
         setSelectedService({
@@ -54,8 +76,14 @@ const ProviderProfile = ({ user }) => {
 
             <header className="profile-header">
                 <div className="header-top">
-                    <h1>{provider.business_name || provider.name}</h1>
-                    <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
+                    <div className="header-titles">
+                        <h1>{provider.business_name || provider.name}</h1>
+                        <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
+                    </div>
+                    {/* ✅ ADDED: Chat Button Integration in Header */}
+                    <div className="header-actions">
+                        <ChatButton onClick={openProfileChat} />
+                    </div>
                 </div>
                 
                 <div className="header-stats">
@@ -112,7 +140,6 @@ const ProviderProfile = ({ user }) => {
                             <strong>{provider.opening_time} - {provider.closing_time}</strong>
                         </div>
                         
-                        {/* ✅ NEW: Dynamic Saturday Display */}
                         <div className="hours-row">
                             <span>Saturday</span>
                             {provider.is_open_sat ? (
@@ -122,7 +149,6 @@ const ProviderProfile = ({ user }) => {
                             )}
                         </div>
 
-                        {/* ✅ NEW: Dynamic Sunday Display */}
                         <div className="hours-row">
                             <span>Sunday</span>
                             {provider.is_open_sun ? (
@@ -144,6 +170,15 @@ const ProviderProfile = ({ user }) => {
                         setShowBookingModal(false);
                         alert("Booking Successful!");
                     }}
+                />
+            )}
+
+            {/* ✅ ADDED: Chat Modal Overlay */}
+            {chatRoom && (
+                <ChatModal 
+                    room={chatRoom} 
+                    contextInfo={{ name: "General Inquiry" }} 
+                    onClose={() => setChatRoom(null)} 
                 />
             )}
         </div>

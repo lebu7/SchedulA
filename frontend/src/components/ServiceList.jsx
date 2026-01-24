@@ -1,7 +1,11 @@
+/* frontend/src/components/ServiceList.jsx */
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
+// ✅ ADDED: Chat Components
+import ChatButton from './ChatButton';
+import ChatModal from './ChatModal';
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
   Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink 
@@ -66,6 +70,10 @@ function ServiceList({ user }) {
 
   // 🆕 Location Modal State
   const [mapService, setMapService] = useState(null);
+
+  // ✅ ADDED: Chat-specific state
+  const [chatRoom, setChatRoom] = useState(null);
+  const [chatContext, setChatContext] = useState(null);
 
   useEffect(() => {
     fetchAllServices();
@@ -232,6 +240,23 @@ function ServiceList({ user }) {
     if (cat.includes("spa")) return "spa-header";
     if (cat.includes("barber")) return "barber-header";
     return "default-category";
+  };
+
+  // ✅ ADDED: Open Service-Context Chat
+  const openServiceChat = async (e, service) => {
+    e.stopPropagation(); // Prevent card click
+    try {
+      const res = await api.post('/chat/rooms', {
+        recipientId: service.provider_id,
+        contextType: 'service',
+        contextId: service.id
+      });
+      setChatRoom(res.data.room);
+      setChatContext({ name: service.name, price: service.price });
+    } catch (err) {
+      console.error("Failed to initialize service chat:", err);
+      alert("Could not start conversation with provider.");
+    }
   };
 
   return (
@@ -445,7 +470,6 @@ function ServiceList({ user }) {
                             <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
                               <div className="header-content">
                                 <h3 className="service-name">{service.name}</h3>
-                                {/* 🆕 Provider name is now a link to their profile */}
                                 <p 
                                   className="service-provider" 
                                   onClick={(e) => {
@@ -481,11 +505,15 @@ function ServiceList({ user }) {
                                 </div>
                               )}
 
-                              <div className="meta-row">
-                                  <span className="meta-badge category">{service.category}</span>
-                                  <span className="meta-badge duration">
-                                      <Clock size={12} /> {service.duration}m
-                                  </span>
+                              <div className="meta-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '5px' }}>
+                                      <span className="meta-badge category">{service.category}</span>
+                                      <span className="meta-badge duration">
+                                          <Clock size={12} /> {service.duration}m
+                                      </span>
+                                  </div>
+                                  {/* ✅ ADDED: Chat Button in Service Card */}
+                                  <ChatButton onClick={(e) => openServiceChat(e, service)} size="small" />
                               </div>
 
                               <p className="service-description">
@@ -544,6 +572,11 @@ function ServiceList({ user }) {
           <div className="success-message">
             ✅ Appointment booked successfully! Check your appointments page.
           </div>
+        )}
+
+        {/* ✅ ADDED: Chat Modal Integration */}
+        {chatRoom && (
+          <ChatModal room={chatRoom} contextInfo={chatContext} onClose={() => setChatRoom(null)} />
         )}
 
         {/* 🆕 Map Popup Modal */}
