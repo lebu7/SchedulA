@@ -47,14 +47,23 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
       }
     };
 
-    socket?.on('new_message', handleNewMessage);
+    // ✅ Listen for read receipts
+    const handleMessagesRead = ({ roomId, readerId }) => {
+      if (roomId === room.id && Number(readerId) !== userId) {
+        setMessages(prev => prev.map(msg => ({ ...msg, is_read: 1 })));
+      }
+    };
 
-    // Mark as read
+    socket?.on('new_message', handleNewMessage);
+    socket?.on('messages_read', handleMessagesRead); // ✅ Added
+
+    // Mark as read immediately on open
     socket?.emit('mark_read', { roomId: room.id });
 
     return () => {
       isMounted = false;
       socket?.off('new_message', handleNewMessage);
+      socket?.off('messages_read', handleMessagesRead);
     };
   }, [room, socket, userId, otherParticipant.name]);
 
@@ -95,11 +104,7 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     <div className={inWidget ? "chat-widget-inner" : "chat-modal-overlay"}>
       <div className={`chat-modal ${inWidget ? 'in-widget' : ''}`}>
         
-        {/* ❌ REMOVED INTERNAL HEADER 
-           The Widget header now handles Recipient Name & Role.
-        */}
-
-        {/* ✅ FIXED CONTEXT BANNER (Placed outside scrollable area) */}
+        {/* ✅ Context Banner */}
         {contextInfo && (
           <div className="chat-context-banner-centered">
             <div className="context-icon">
