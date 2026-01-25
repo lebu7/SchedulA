@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import { db } from "../config/database.js";
 
 let io;
+// ✅ Track online users (using a Set for unique user IDs)
+const onlineUsers = new Set();
 
 export const initializeSocket = (server) => {
   io = new Server(server, {
@@ -24,17 +26,25 @@ export const initializeSocket = (server) => {
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) return next(new Error("Invalid token"));
       socket.user = user;
-      socket.userId = Number(user.id);
+      socket.userId = Number(user.userId);
       next();
     });
   });
 
   io.on("connection", (socket) => {
-    console.log(`✅ User ${socket.user.userId} connected to Chat`);
+    const userId = socket.userId;
+    console.log(`✅ User ${userId} connected to Chat`);
 
-    socket.join(`user:${socket.user.userId}`);
+    // ✅ Online Status Logic
+    onlineUsers.add(userId);
+    socket.join(`user:${userId}`);
 
-    // ✅ Step 7: Updated join_room to provide enriched room info
+    // 1. Send current list of online users to the newly connected user
+    socket.emit("online_users", Array.from(onlineUsers));
+
+    // 2. Broadcast to everyone else that this user came online
+    socket.broadcast.emit("user_connected", userId);
+
     socket.on("join_room", async ({ roomId }) => {
       db.get(
         `SELECT cr.*, 
@@ -45,21 +55,20 @@ export const initializeSocket = (server) => {
          JOIN users u1 ON cr.client_id = u1.id
          JOIN users u2 ON cr.provider_id = u2.id
          WHERE cr.id = ? AND (cr.client_id = ? OR cr.provider_id = ?)`,
-        [roomId, socket.user.userId, socket.user.userId],
+        [roomId, userId, userId],
         (err, room) => {
           if (err || !room) {
             socket.emit("error", { message: "Access denied" });
             return;
           }
           socket.join(`room:${roomId}`);
-          // ✅ Send enriched room info back to client
           socket.emit("joined_room", { roomId, roomInfo: room });
         },
       );
     });
 
     socket.on("send_message", ({ roomId, message }) => {
-      const senderId = socket.user.userId; // ✅ REAL sender
+      const senderId = userId;
 
       db.get(
         `SELECT cr.*, 
@@ -109,10 +118,8 @@ export const initializeSocket = (server) => {
                 expires_at: expiresAt,
               };
 
-              // Send to both users in room
               io.to(`room:${roomId}`).emit("new_message", messageData);
 
-              // Notify recipient
               const recipientId =
                 room.client_id === senderId ? room.provider_id : room.client_id;
 
@@ -126,12 +133,15 @@ export const initializeSocket = (server) => {
     socket.on("mark_read", ({ roomId }) => {
       db.run(
         `UPDATE chat_messages SET is_read = 1 WHERE room_id = ? AND sender_id != ?`,
-        [roomId, socket.user.userId],
+        [roomId, userId],
       );
     });
 
     socket.on("disconnect", () => {
-      console.log(`❌ User ${socket.user.userId} disconnected from Chat`);
+      console.log(`❌ User ${userId} disconnected from Chat`);
+      // ✅ Handle Disconnect
+      onlineUsers.delete(userId);
+      io.emit("user_disconnected", userId);
     });
   });
 

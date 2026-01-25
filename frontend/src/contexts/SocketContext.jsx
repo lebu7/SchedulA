@@ -9,12 +9,11 @@ export const useSocket = () => useContext(SocketContext);
 export const SocketProvider = ({ children, user }) => {
   const [socket, setSocket] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState(new Set()); // ✅ Track online users
 
-  // ✅ Initialize Socket and Global Listeners
   useEffect(() => {
     if (!user) return;
 
-    // Use environment variable or fallback to localhost
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     
     const newSocket = io(socketUrl, {
@@ -25,22 +24,44 @@ export const SocketProvider = ({ children, user }) => {
       console.log('✅ Connected to real-time chat');
     });
 
-    // Listen for global unread updates (e.g., when a message arrives in any room)
+    // ✅ Listen for Online Status Events
+    newSocket.on('online_users', (users) => {
+      setOnlineUsers(new Set(users)); // Initialize list
+    });
+
+    newSocket.on('user_connected', (userId) => {
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.add(userId);
+        return newSet;
+      });
+    });
+
+    newSocket.on('user_disconnected', (userId) => {
+      setOnlineUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+    });
+
+    // Listen for unread updates
     newSocket.on('unread_count_update', () => {
       fetchUnreadCount();
     });
 
     setSocket(newSocket);
 
-    // Cleanup on logout or unmount
     return () => {
       newSocket.off('connect');
+      newSocket.off('online_users');
+      newSocket.off('user_connected');
+      newSocket.off('user_disconnected');
       newSocket.off('unread_count_update');
       newSocket.close();
     };
   }, [user]);
 
-  // ✅ Fetch unread count via REST API
   const fetchUnreadCount = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/chat/unread-count`, {
@@ -57,13 +78,12 @@ export const SocketProvider = ({ children, user }) => {
     }
   };
 
-  // Initial fetch when user logs in
   useEffect(() => {
     if (user) fetchUnreadCount();
   }, [user]);
 
   return (
-    <SocketContext.Provider value={{ socket, unreadCount, setUnreadCount, fetchUnreadCount }}>
+    <SocketContext.Provider value={{ socket, unreadCount, setUnreadCount, fetchUnreadCount, onlineUsers }}>
       {children}
     </SocketContext.Provider>
   );

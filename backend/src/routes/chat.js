@@ -45,6 +45,7 @@ router.post("/rooms", authenticateToken, (req, res) => {
   );
 });
 
+// ✅ UPDATED: Filter out blank chats (no messages or all messages expired)
 router.get("/rooms", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   db.all(
@@ -52,16 +53,32 @@ router.get("/rooms", authenticateToken, (req, res) => {
             u1.name as client_name, 
             u2.name as provider_name, 
             u2.business_name,
-            (SELECT COUNT(*) FROM chat_messages WHERE room_id = cr.id AND sender_id != ? AND is_read = 0) as unread_count
+            (SELECT COUNT(*) FROM chat_messages WHERE room_id = cr.id AND sender_id != ? AND is_read = 0 AND expires_at > datetime('now')) as unread_count,
+            (SELECT message FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_content,
+            (SELECT sender_id FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_sender,
+            (SELECT created_at FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_time
      FROM chat_rooms cr
      JOIN users u1 ON cr.client_id = u1.id
      JOIN users u2 ON cr.provider_id = u2.id
-     WHERE cr.client_id = ? OR cr.provider_id = ?
+     WHERE (cr.client_id = ? OR cr.provider_id = ?)
+     AND EXISTS (SELECT 1 FROM chat_messages m WHERE m.room_id = cr.id AND m.expires_at > datetime('now'))
      ORDER BY cr.last_message_at DESC`,
     [userId, userId, userId],
     (err, rooms) => {
       if (err) return res.status(500).json({ error: "Database error" });
-      res.json({ rooms });
+
+      const formattedRooms = rooms.map((room) => ({
+        ...room,
+        last_message: room.last_msg_content
+          ? {
+              message: room.last_msg_content,
+              sender_id: room.last_msg_sender,
+              created_at: room.last_msg_time,
+            }
+          : null,
+      }));
+
+      res.json({ rooms: formattedRooms });
     },
   );
 });
@@ -91,7 +108,6 @@ router.get("/rooms/:roomId/messages", authenticateToken, (req, res) => {
   );
 });
 
-// ✅ UPDATED: GET CONTEXT INFO (Display appointment/service details in chat)
 router.get("/context/:type/:id", authenticateToken, (req, res) => {
   const { type, id } = req.params;
 

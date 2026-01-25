@@ -7,10 +7,16 @@ import ChatModal from './ChatModal';
 import './ChatWidget.css';
 
 const ChatWidget = () => {
-  const { unreadCount, socket } = useSocket();
+  // ✅ Get onlineUsers from context
+  const { unreadCount, socket, onlineUsers } = useSocket();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  
+  // Header Info State
   const [recipientName, setRecipientName] = useState('');
+  const [recipientRole, setRecipientRole] = useState('');
+  const [recipientId, setRecipientId] = useState(null); // ✅ Track ID for status check
+
   const widgetRef = useRef(null);
 
   // Toggle widget via event (from Header)
@@ -20,15 +26,13 @@ const ChatWidget = () => {
     return () => window.removeEventListener('toggleChatWidget', handleToggle);
   }, []);
 
-  // Fix Widget Badge Real-Time Updates
+  // Listen for real-time unread updates
   useEffect(() => {
     const handleUnreadUpdate = () => {
-      // Trigger re-fetch from context
       window.dispatchEvent(new CustomEvent('updateChatBadge'));
     };
     
     socket?.on('unread_count_update', handleUnreadUpdate);
-    
     return () => {
       socket?.off('unread_count_update', handleUnreadUpdate);
     };
@@ -38,14 +42,51 @@ const ChatWidget = () => {
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (isOpen && widgetRef.current && !widgetRef.current.contains(e.target)) {
+        const btn = document.querySelector('.chat-widget-button');
+        if (btn && btn.contains(e.target)) return;
+
         setIsOpen(false);
-        setSelectedRoom(null);
-        setRecipientName('');
+        setTimeout(() => {
+          resetHeader();
+        }, 300);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
+
+  const resetHeader = () => {
+    setSelectedRoom(null);
+    setRecipientName('');
+    setRecipientRole('');
+    setRecipientId(null);
+  };
+
+  const handleRoomSelect = (room, name) => {
+    setSelectedRoom(room);
+    setRecipientName(name);
+    
+    // Determine Role & ID
+    const userId = Number(localStorage.getItem('userId'));
+    const isClient = room.client_id === userId;
+    
+    setRecipientRole(isClient ? 'Service Provider' : 'Client');
+    setRecipientId(isClient ? room.provider_id : room.client_id); // ✅ Store ID
+  };
+
+  const handleBack = () => {
+    resetHeader();
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setTimeout(() => {
+      resetHeader();
+    }, 300);
+  };
+
+  // ✅ Check Online Status
+  const isOnline = recipientId && onlineUsers.has(recipientId);
 
   return (
     <>
@@ -64,34 +105,34 @@ const ChatWidget = () => {
       {/* Widget Panel */}
       {isOpen && (
         <div className="chat-widget-panel" ref={widgetRef}>
-          {/* Header - Fix Back/Close Navigation Logic */}
+          {/* Header */}
           <div className="chat-widget-header">
             {selectedRoom ? (
-              <>
-                {/* Back Button */}
+              <div className="header-left">
                 <button 
-                  onClick={() => {
-                    setSelectedRoom(null);
-                    setRecipientName('');
-                  }} 
+                  onClick={handleBack} 
                   className="nav-btn"
                   title="Back to list"
                 >
                   <ArrowLeft size={18} />
                 </button>
-                <span className="recipient-name">{recipientName}</span>
-              </>
+                <div className="header-info">
+                  <span className="recipient-name-header">{recipientName}</span>
+                  {/* ✅ Online Status Logic */}
+                  {isOnline ? (
+                    <span className="recipient-status-online">Online</span>
+                  ) : (
+                    <span className="recipient-role-header">{recipientRole}</span>
+                  )}
+                </div>
+              </div>
             ) : (
-              <h3 style={{margin:0, fontSize:'16px'}}>Messages</h3>
+              <h3 className="widget-title">Messages</h3>
             )}
             
-            {/* Close Button (Always visible) */}
+            {/* Close Button */}
             <button 
-              onClick={() => {
-                setIsOpen(false);
-                setSelectedRoom(null);
-                setRecipientName('');
-              }}
+              onClick={handleClose}
               className="nav-btn close-btn"
               title="Close chat"
             >
@@ -99,31 +140,23 @@ const ChatWidget = () => {
             </button>
           </div>
 
-          {/* Chat List or Chat Modal */}
-          {selectedRoom ? (
-            <ChatModal
-              room={selectedRoom}
-              contextInfo={selectedRoom.contextInfo || null}
-              onClose={() => {
-                setSelectedRoom(null);
-                setRecipientName('');
-              }}
-              inWidget={true}
-            />
-          ) : (
-            <ChatListModal
-              onClose={() => {
-                setIsOpen(false);
-                setSelectedRoom(null);
-                setRecipientName('');
-              }}
-              inWidget={true}
-              onRoomSelect={(room, name) => {
-                setSelectedRoom(room);
-                setRecipientName(name);
-              }}
-            />
-          )}
+          {/* Content */}
+          <div className="chat-widget-content">
+            {selectedRoom ? (
+              <ChatModal
+                room={selectedRoom}
+                contextInfo={selectedRoom.contextInfo || null}
+                onClose={handleClose}
+                inWidget={true}
+              />
+            ) : (
+              <ChatListModal
+                onClose={handleClose}
+                inWidget={true}
+                onRoomSelect={handleRoomSelect}
+              />
+            )}
+          </div>
         </div>
       )}
     </>
