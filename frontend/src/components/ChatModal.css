@@ -91,7 +91,7 @@
 .msg.sent {
   align-self: flex-end; /* Changed from flex-start */
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  color: white;
+  color: #1e293b;
   border-bottom-right-radius: 4px;
 }
 
@@ -113,12 +113,12 @@
 }
 
 .msg.sent .msg-sender {
-  color: #64748b;
+  color: #0056ce;
   text-align: right;
 }
 
 .msg.received .msg-sender {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(62, 4, 255, 0.9);
 }
 
 /* Message Text Content */
