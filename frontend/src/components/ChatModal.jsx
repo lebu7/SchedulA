@@ -12,41 +12,43 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
   const messagesEndRef = useRef(null);
   const userId = parseInt(localStorage.getItem('userId'));
 
-  // ✅ NEW: Determine other participant's info
-  const otherParticipant = room.client_id === userId 
-    ? { name: room.provider_name || room.business_name, type: 'provider' }
-    : { name: room.client_name, type: 'client' };
+// ✅ FIXED: Determine other participant's info
+const otherParticipant = room.client_id === userId 
+  ? { name: room.provider_name || room.business_name, type: 'provider' }
+  : { name: room.client_name, type: 'client' };
 
-  useEffect(() => {
-    if (!room) return;
+useEffect(() => {
+  if (!room) return;
 
-    // Fetch existing messages and enrich with sender names
-    api.get(`/chat/rooms/${room.id}/messages`).then(res => {
-      const enrichedMessages = res.data.messages.map(msg => ({
+  // Fetch existing messages and enrich with correct sender names
+  api.get(`/chat/rooms/${room.id}/messages`).then(res => {
+    const enrichedMessages = res.data.messages.map(msg => ({
+      ...msg,
+      // ✅ FIX: Show correct sender name
+      sender_name: msg.sender_id === userId ? 'You' : otherParticipant.name
+    }));
+    setMessages(enrichedMessages);
+  });
+
+  socket?.emit('join_room', { roomId: room.id });
+
+  socket?.on('new_message', (msg) => {
+    if (msg.room_id === room.id) {
+      const enriched = {
         ...msg,
+        // ✅ FIX: Show correct sender name for real-time messages
         sender_name: msg.sender_id === userId ? 'You' : otherParticipant.name
-      }));
-      setMessages(enrichedMessages);
-    });
+      };
+      setMessages(prev => [...prev, enriched]);
+    }
+  });
 
-    socket?.emit('join_room', { roomId: room.id });
+  socket?.emit('mark_read', { roomId: room.id });
 
-    socket?.on('new_message', (msg) => {
-      if (msg.room_id === room.id) {
-        const enriched = {
-          ...msg,
-          sender_name: msg.sender_id === userId ? 'You' : otherParticipant.name
-        };
-        setMessages(prev => [...prev, enriched]);
-      }
-    });
-
-    socket?.emit('mark_read', { roomId: room.id });
-
-    return () => {
-      socket?.off('new_message');
-    };
-  }, [room, socket, userId, otherParticipant.name]);
+  return () => {
+    socket?.off('new_message');
+  };
+}, [room, socket, userId, otherParticipant.name]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

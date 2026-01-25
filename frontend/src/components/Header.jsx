@@ -178,7 +178,15 @@ function Header({ user, onLogout }) {
             <div className="user-menu">
               {/* ✅ FIXED: Chat Icon now triggers widget instead of modal */}
               <div className="notification-wrapper">
-                <div className="notification-icon" onClick={handleHeaderChatClick} title="Open Messages">
+                <div 
+                  className="notification-icon" 
+                  onClick={() => {
+                    // Trigger widget toggle via DOM event
+                    const event = new CustomEvent('toggleChatWidget');
+                    window.dispatchEvent(event);
+                  }} 
+                  title="Open Messages"
+                >
                   <MessageCircle size={20} color="#64748b" />
                   {chatUnreadCount > 0 && <span className="badge">{chatUnreadCount}</span>}
                 </div>

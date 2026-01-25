@@ -1,6 +1,5 @@
-/* frontend/src/components/ChatWidget.jsx */
-import React, { useState } from 'react';
-import { MessageCircle, X, Minimize2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageCircle, X } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import ChatListModal from './ChatListModal';
 import './ChatWidget.css';
@@ -8,6 +7,13 @@ import './ChatWidget.css';
 const ChatWidget = () => {
   const { unreadCount } = useSocket();
   const [isOpen, setIsOpen] = useState(false);
+
+  // ✅ FIX: Listen for header icon clicks
+  useEffect(() => {
+    const handleToggle = () => setIsOpen(prev => !prev);
+    window.addEventListener('toggleChatWidget', handleToggle);
+    return () => window.removeEventListener('toggleChatWidget', handleToggle);
+  }, []);
 
   return (
     <>
@@ -21,7 +27,7 @@ const ChatWidget = () => {
         {unreadCount > 0 && <span className="chat-widget-badge">{unreadCount}</span>}
       </button>
 
-      {/* Chat List Panel (Slides from bottom-right) */}
+      {/* Chat List Panel */}
       {isOpen && (
         <div className="chat-widget-panel">
           <div className="chat-widget-header">
@@ -31,7 +37,7 @@ const ChatWidget = () => {
               <X size={20} />
             </button>
           </div>
-          {/* Reuse the updated ChatListModal in widget mode */}
+          {/* ✅ FIX: Pass inWidget prop */}
           <ChatListModal onClose={() => setIsOpen(false)} inWidget={true} />
         </div>
       )}

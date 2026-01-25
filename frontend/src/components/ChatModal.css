@@ -69,7 +69,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px; /* Space between messages */
+  gap: 12px;
   background-color: #fafafa;
 }
 
@@ -87,7 +87,22 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* ✅ FIXED: Sender Label Styling */
+/* ✅ CRITICAL FIX: Sent Messages - RIGHT Alignment */
+.msg.sent {
+  align-self: flex-end; /* Changed from flex-start */
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+/* ✅ CRITICAL FIX: Received Messages - LEFT Alignment */
+.msg.received {
+  align-self: flex-start; /* Changed from flex-end */
+  background: #e2e8f0;
+  color: #1e293b;
+  border-bottom-left-radius: 4px;
+}
+
 .msg-sender {
   font-size: 10px;
   font-weight: 700;
@@ -97,27 +112,9 @@
   opacity: 0.8;
 }
 
-/* ✅ CRITICAL FIX: Sent Messages - RIGHT Alignment with Blue Background */
-.msg.sent {
-  align-self: flex-start;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  color: white;
-  border-bottom-right-radius: 4px; /* Tail effect */
-  margin-left: auto; /* Force to right */
-}
-
 .msg.sent .msg-sender {
   color: rgba(255, 255, 255, 0.9);
   text-align: right;
-}
-
-/* ✅ CRITICAL FIX: Received Messages - LEFT Alignment with Gray Background */
-.msg.received {
-  align-self: flex-end;
-  background: #e2e8f0;
-  color: #1e293b;
-  border-bottom-left-radius: 4px; /* Tail effect */
-  margin-right: auto; /* Force to left */
 }
 
 .msg.received .msg-sender {
