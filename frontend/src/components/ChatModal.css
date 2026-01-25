@@ -62,18 +62,20 @@
   gap: 12px;
 }
 
-/* ✅ FIXED: Message Container - Proper Flexbox Column Layout */
+/* ✅ REINFORCED: Message Container */
 .chat-messages {
   flex: 1;
   padding: 15px;
   overflow-y: auto;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: column; /* Stack vertically */
+  align-items: stretch; /* Allow children to use align-self */
+  gap: 12px;
   background-color: #fafafa;
+  width: 100%; /* Ensure full width for alignment */
 }
 
-/* ✅ FIXED: Message Bubble Base Styles */
+/* ✅ Base Message Bubble */
 .msg {
   max-width: 75%;
   padding: 10px 14px;
@@ -84,23 +86,34 @@
   display: flex;
   flex-direction: column;
   word-wrap: break-word;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* ✅ CRITICAL FIX: Sent Messages - RIGHT Alignment */
+/* ✅ RIGHT (Sent by You): GREY BUBBLE */
 .msg.sent {
-  align-self: flex-end; /* Changed from flex-start */
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  align-self: flex-end !important; /* Forces to the right side */
+  background-color: #e2e8f0; /* Grey color */
   color: #1e293b;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 2px;
+  margin-left: auto; /* Backup for flex-end */
 }
 
-/* ✅ CRITICAL FIX: Received Messages - LEFT Alignment */
+.msg.sent .msg-sender {
+  color: #64748b;
+  text-align: right;
+}
+
+/* ✅ LEFT (Received): BLUE BUBBLE */
 .msg.received {
-  align-self: flex-start; /* Changed from flex-end */
-  background: #e2e8f0;
-  color: #1e293b;
+  align-self: flex-start !important; /* Forces to the left side */
+  background: linear-gradient(135deg, #2563eb, #1d4ed8); /* Blue color */
+  color: white;
   border-bottom-left-radius: 2px;
+  margin-right: auto; /* Backup for flex-start */
+}
+
+.msg.received .msg-sender {
+  color: rgba(255, 255, 255, 0.9);
+  text-align: left;
 }
 
 .msg-sender {
@@ -108,27 +121,13 @@
   font-weight: 700;
   margin-bottom: 2px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0.8;
+  display: block;
 }
 
-.msg.sent .msg-sender {
-  color: #0056ce;
-  text-align: right;
-}
-
-.msg.received .msg-sender {
-  color: rgba(62, 4, 255, 0.9);
-}
-
-/* Message Text Content */
 .msg-text {
   margin: 0;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
 }
 
-/* Timestamp */
 .msg .time {
   font-size: 9px;
   opacity: 0.7;

@@ -10,45 +10,40 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
-  const userId = parseInt(localStorage.getItem('userId'));
+  
+  // ✅ Ensure userId is always treated as a number for comparison
+  const userId = Number(localStorage.getItem('userId')|| localStorage.getItem('id'));
 
-// ✅ FIXED: Determine other participant's info
-const otherParticipant = room.client_id === userId 
-  ? { name: room.provider_name || room.business_name, type: 'provider' }
-  : { name: room.client_name, type: 'client' };
+  // Determine other participant's info
+  const otherParticipant = room.client_id === userId 
+    ? { name: room.provider_name || room.business_name, type: 'provider' }
+    : { name: room.client_name, type: 'client' };
 
-useEffect(() => {
-  if (!room) return;
+  useEffect(() => {
+    if (!room) return;
 
-  // Fetch existing messages and enrich with correct sender names
-  api.get(`/chat/rooms/${room.id}/messages`).then(res => {
-    const enrichedMessages = res.data.messages.map(msg => ({
-      ...msg,
-      // ✅ FIX: Show correct sender name
-      sender_name: msg.sender_id === userId ? 'You' : otherParticipant.name
-    }));
-    setMessages(enrichedMessages);
-  });
+    // Fetch existing messages
+    api.get(`/chat/rooms/${room.id}/messages`).then(res => {
+      setMessages(res.data.messages);
+    });
 
-  socket?.emit('join_room', { roomId: room.id });
+    // Join room
+    socket?.emit('join_room', { roomId: room.id });
 
-  socket?.on('new_message', (msg) => {
-    if (msg.room_id === room.id) {
-      const enriched = {
-        ...msg,
-        // ✅ FIX: Show correct sender name for real-time messages
-        sender_name: msg.sender_id === userId ? 'You' : otherParticipant.name
-      };
-      setMessages(prev => [...prev, enriched]);
-    }
-  });
+    // Listen for new messages
+    socket?.on('new_message', (msg) => {
+      if (msg.room_id === room.id) {
+        setMessages(prev => [...prev, msg]);
+      }
+    });
 
-  socket?.emit('mark_read', { roomId: room.id });
+    // Mark as read
+    socket?.emit('mark_read', { roomId: room.id });
 
-  return () => {
-    socket?.off('new_message');
-  };
-}, [room, socket, userId, otherParticipant.name]);
+    return () => {
+      socket?.off('new_message');
+    };
+  }, [room, socket, userId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,16 +51,15 @@ useEffect(() => {
 
   const handleSend = () => {
     if (!newMessage.trim()) return;
+    // Send message via socket
     socket?.emit('send_message', { roomId: room.id, message: newMessage });
     setNewMessage('');
   };
 
   return (
-    // ✅ Apply conditional overlay class based on inWidget prop
-    <div className={inWidget ? "chat-widget-inner" : "chat-modal-overlay"} onClick={!inWidget ? onClose : undefined}>
-      <div className={inWidget ? "chat-modal in-widget" : "chat-modal"} onClick={e => e.stopPropagation()}>
-        
-        {/* HEADER - Show who you're chatting with */}
+    <div className={(inWidget || !inWidget) ? "chat-widget-inner" : "chat-modal-overlay"}>
+      <div className="chat-modal in-widget">
+        {/* HEADER */}
         <div className="chat-header">
           <div>
             <h3>💬 {otherParticipant.name}</h3>
@@ -98,22 +92,32 @@ useEffect(() => {
           </div>
         )}
 
-        {/* MESSAGES - Now with sender names and visual alignment */}
+        {/* MESSAGES */}
         <div className="chat-messages">
-          <div className="chat-start-notice">Messages expire after 12 hours.</div>
-          {messages.map(msg => (
-            <div key={msg.id} className={`msg ${msg.sender_id === userId ? 'sent' : 'received'}`}>
-              <span className="msg-sender">{msg.sender_name}</span>
-              <p className="msg-text">{msg.message}</p>
-              <span className="time">
-                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </span>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+            <div className="chat-start-notice">Messages expire after 12 hours.</div>
+            {messages.map(msg => {
+                // ✅ Force both to numbers to ensure "===" works correctly
+                const isMe = Number(msg.sender_id) === Number(userId);
+                
+                // DEBUG: Uncomment the line below to see why they might not match
+                // console.log(`Comparing Msg Sender: ${msg.sender_id} (${typeof msg.sender_id}) to Local User: ${userId} (${typeof userId})`);
 
-        {/* INPUT AREA */}
+                return (
+                <div key={msg.id} className={`msg ${isMe ? 'sent' : 'received'}`}>
+                    <span className="msg-sender">
+                    {isMe ? 'You' : msg.sender_name || otherParticipant.name}
+                    </span>
+                    <p className="msg-text">{msg.message}</p>
+                    <span className="time">
+                    {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </span>
+                </div>
+                );
+            })}
+            <div ref={messagesEndRef} />
+            </div>
+
+        {/* INPUT */}
         <div className="chat-input">
           <input 
             type="text" 

@@ -89,10 +89,11 @@ export const initializeSocket = (server) => {
               const messageData = {
                 id: this.lastID,
                 room_id: roomId,
-                sender_id: socket.userId,
+                sender_id: Number(socket.userId),
                 message,
                 created_at: new Date().toISOString(),
                 expires_at: expiresAt,
+                sender_name: "You"
               };
 
               io.to(`room:${roomId}`).emit("new_message", messageData);
