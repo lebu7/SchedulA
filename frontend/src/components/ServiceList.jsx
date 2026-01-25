@@ -3,9 +3,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
-// ✅ ADDED: Chat Components
+// ✅ ADDED: Chat Button (No ChatModal import needed anymore)
 import ChatButton from './ChatButton';
-import ChatModal from './ChatModal';
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
   Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink 
@@ -70,10 +69,6 @@ function ServiceList({ user }) {
 
   // 🆕 Location Modal State
   const [mapService, setMapService] = useState(null);
-
-  // ✅ ADDED: Chat-specific state
-  const [chatRoom, setChatRoom] = useState(null);
-  const [chatContext, setChatContext] = useState(null);
 
   useEffect(() => {
     fetchAllServices();
@@ -242,7 +237,7 @@ function ServiceList({ user }) {
     return "default-category";
   };
 
-  // ✅ ADDED: Open Service-Context Chat
+  // ✅ UPDATED: Open Service-Context Chat via Global Event
   const openServiceChat = async (e, service) => {
     e.stopPropagation(); // Prevent card click
     try {
@@ -251,8 +246,16 @@ function ServiceList({ user }) {
         contextType: 'service',
         contextId: service.id
       });
-      setChatRoom(res.data.room);
-      setChatContext({ name: service.name, price: service.price });
+      
+      const contextData = { name: service.name, price: service.price };
+      
+      // Dispatch Event to Widget
+      window.dispatchEvent(new CustomEvent('openChatRoom', {
+        detail: {
+          room: res.data.room,
+          context: contextData
+        }
+      }));
     } catch (err) {
       console.error("Failed to initialize service chat:", err);
       alert("Could not start conversation with provider.");
@@ -572,11 +575,6 @@ function ServiceList({ user }) {
           <div className="success-message">
             ✅ Appointment booked successfully! Check your appointments page.
           </div>
-        )}
-
-        {/* ✅ ADDED: Chat Modal Integration */}
-        {chatRoom && (
-          <ChatModal room={chatRoom} contextInfo={chatContext} onClose={() => setChatRoom(null)} />
         )}
 
         {/* 🆕 Map Popup Modal */}

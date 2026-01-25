@@ -7,7 +7,6 @@ import ChatModal from './ChatModal';
 import './ChatWidget.css';
 
 const ChatWidget = () => {
-  // ✅ Get onlineUsers from context
   const { unreadCount, socket, onlineUsers } = useSocket();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -15,15 +14,47 @@ const ChatWidget = () => {
   // Header Info State
   const [recipientName, setRecipientName] = useState('');
   const [recipientRole, setRecipientRole] = useState('');
-  const [recipientId, setRecipientId] = useState(null); // ✅ Track ID for status check
+  const [recipientId, setRecipientId] = useState(null);
 
   const widgetRef = useRef(null);
 
-  // Toggle widget via event (from Header)
+  // ✅ NEW: Listen for "openChatRoom" event from other components
   useEffect(() => {
+    const handleOpenSpecificChat = (e) => {
+      // ✅ Accept 'recipientName' from the event detail
+      const { room, context, recipientName } = e.detail;
+      
+      // 1. Open Widget
+      setIsOpen(true);
+
+      // 2. Determine User details
+      const userId = Number(localStorage.getItem('userId'));
+      const isClient = room.client_id === userId;
+      
+      // ✅ Priority: Use the name passed in event -> Room Name -> Fallback
+      const name = recipientName || (isClient 
+        ? room.provider_name || room.business_name 
+        : room.client_name) || "Chat";
+
+      const role = isClient ? 'Service Provider' : 'Client';
+      const rId = isClient ? room.provider_id : room.client_id;
+
+      // 3. Set Active Room
+      setSelectedRoom({ ...room, contextInfo: context });
+      setRecipientName(name);
+      setRecipientRole(role);
+      setRecipientId(rId);
+    };
+
     const handleToggle = () => setIsOpen(prev => !prev);
+
+    window.addEventListener('openChatRoom', handleOpenSpecificChat);
     window.addEventListener('toggleChatWidget', handleToggle);
-    return () => window.removeEventListener('toggleChatWidget', handleToggle);
+
+    return () => {
+      window.removeEventListener('openChatRoom', handleOpenSpecificChat);
+      window.removeEventListener('toggleChatWidget', handleToggle);
+    };
   }, []);
 
   // Listen for real-time unread updates
@@ -46,9 +77,6 @@ const ChatWidget = () => {
         if (btn && btn.contains(e.target)) return;
 
         setIsOpen(false);
-        setTimeout(() => {
-          resetHeader();
-        }, 300);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -66,12 +94,11 @@ const ChatWidget = () => {
     setSelectedRoom(room);
     setRecipientName(name);
     
-    // Determine Role & ID
     const userId = Number(localStorage.getItem('userId'));
     const isClient = room.client_id === userId;
     
     setRecipientRole(isClient ? 'Service Provider' : 'Client');
-    setRecipientId(isClient ? room.provider_id : room.client_id); // ✅ Store ID
+    setRecipientId(isClient ? room.provider_id : room.client_id);
   };
 
   const handleBack = () => {
@@ -85,7 +112,6 @@ const ChatWidget = () => {
     }, 300);
   };
 
-  // ✅ Check Online Status
   const isOnline = recipientId && onlineUsers.has(recipientId);
 
   return (
@@ -97,7 +123,7 @@ const ChatWidget = () => {
           onClick={() => setIsOpen(true)}
           aria-label="Open messages"
         >
-          <MessageCircle size={24} />
+          <MessageCircle size={28} />
           {unreadCount > 0 && <span className="chat-widget-badge">{unreadCount}</span>}
         </button>
       )}
@@ -118,7 +144,6 @@ const ChatWidget = () => {
                 </button>
                 <div className="header-info">
                   <span className="recipient-name-header">{recipientName}</span>
-                  {/* ✅ Online Status Logic */}
                   {isOnline ? (
                     <span className="recipient-status-online">Online</span>
                   ) : (
@@ -130,7 +155,6 @@ const ChatWidget = () => {
               <h3 className="widget-title">Messages</h3>
             )}
             
-            {/* Close Button */}
             <button 
               onClick={handleClose}
               className="nav-btn close-btn"

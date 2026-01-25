@@ -6,9 +6,8 @@ import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
 import CalendarView from "./CalendarView"; 
-// ✅ ADDED: Chat Components
+// ✅ ADDED: Chat Button (No ChatModal import needed anymore)
 import ChatButton from './ChatButton';
-import ChatModal from './ChatModal';
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
   Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare, List 
@@ -301,10 +300,6 @@ function AppointmentManager({ user }) {
   const [loadingServices, setLoadingServices] = useState(false);
   const [walkInService, setWalkInService] = useState(null);
 
-  // ✅ ADDED: Chat-specific state
-  const [chatRoom, setChatRoom] = useState(null);
-  const [chatContext, setChatContext] = useState(null);
-
   useEffect(() => {
     fetchAppointments();
   }, []);
@@ -424,20 +419,30 @@ function AppointmentManager({ user }) {
     setShowReschedule(true);
   };
 
-  // ✅ ADDED: Open Appointment-Context Chat
+  // ✅ UPDATED: Open Chat via Widget Event
   const openAppointmentChat = async (apt) => {
     const recipientId = user.user_type === 'client' ? apt.provider_id : apt.client_id;
     try {
+      // 1. Ensure room exists
       const res = await api.post('/chat/rooms', {
         recipientId,
         contextType: 'appointment',
         contextId: apt.id
       });
-      setChatRoom(res.data.room);
-      setChatContext({ 
+      
+      const contextData = { 
         service_name: apt.service_name, 
         appointment_date: apt.appointment_date 
-      });
+      };
+
+      // 2. Dispatch event to Global Widget
+      window.dispatchEvent(new CustomEvent('openChatRoom', {
+        detail: {
+          room: res.data.room,
+          context: contextData
+        }
+      }));
+
     } catch (err) {
       console.error("Failed to initialize chat room:", err);
       alert("Could not open chat at this time.");
@@ -1119,15 +1124,6 @@ function AppointmentManager({ user }) {
             payment={selectedPayment}
             user={user} 
             onClose={() => setSelectedPayment(null)}
-          />
-        )}
-
-        {/* ✅ Integrated Chat Modal */}
-        {chatRoom && (
-          <ChatModal 
-            room={chatRoom} 
-            contextInfo={chatContext} 
-            onClose={() => setChatRoom(null)} 
           />
         )}
 

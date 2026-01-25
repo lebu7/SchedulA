@@ -3,11 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import BookingModal from './BookingModal';
-// ✅ ADDED: Chat Components
-import ChatButton from './ChatButton';
-import ChatModal from './ChatModal';
-import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Calendar, Phone } from 'lucide-react';
+// ✅ ADDED: MessageCircle icon & ChatButton CSS for styling
+import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle } from 'lucide-react';
 import './ProviderProfile.css';
+import './ChatButton.css'; // Ensure we get the consistent button style
 
 const ProviderProfile = ({ user }) => {
     const { id } = useParams();
@@ -18,8 +17,7 @@ const ProviderProfile = ({ user }) => {
     const [selectedService, setSelectedService] = useState(null);
     const [showBookingModal, setShowBookingModal] = useState(false);
 
-    // ✅ ADDED: Chat-specific state
-    const [chatRoom, setChatRoom] = useState(null);
+    // ❌ REMOVED: Local chatRoom state (handled globally now)
 
     useEffect(() => {
         const fetchProviderData = async () => {
@@ -35,15 +33,25 @@ const ProviderProfile = ({ user }) => {
         fetchProviderData();
     }, [id]);
 
-    // ✅ ADDED: Open Profile-Context Chat
+    // ✅ UPDATED: Open Chat via Global Widget Event
     const openProfileChat = async () => {
+        if (!data?.provider) return;
+
         try {
+            // 1. Get/Create Room
             const res = await api.post('/chat/rooms', {
                 recipientId: data.provider.id,
                 contextType: 'profile',
                 contextId: null
             });
-            setChatRoom(res.data.room);
+
+            // 2. Dispatch Event to open Global Widget
+            window.dispatchEvent(new CustomEvent('openChatRoom', {
+                detail: {
+                    room: res.data.room,
+                    context: { name: "General Inquiry" } // Generic context context
+                }
+            }));
         } catch (err) {
             console.error("Failed to initialize chat:", err);
             alert("Could not start conversation at this time.");
@@ -80,9 +88,13 @@ const ProviderProfile = ({ user }) => {
                         <h1>{provider.business_name || provider.name}</h1>
                         <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
                     </div>
-                    {/* ✅ ADDED: Chat Button Integration in Header */}
+                    
+                    {/* ✅ UPDATED: Chat Button with Text ("Open Chat") */}
                     <div className="header-actions">
-                        <ChatButton onClick={openProfileChat} />
+                        <button className="chat-btn" onClick={openProfileChat}>
+                            <MessageCircle size={20} />
+                            <span>Open Chat</span>
+                        </button>
                     </div>
                 </div>
                 
@@ -173,14 +185,6 @@ const ProviderProfile = ({ user }) => {
                 />
             )}
 
-            {/* ✅ ADDED: Chat Modal Overlay */}
-            {chatRoom && (
-                <ChatModal 
-                    room={chatRoom} 
-                    contextInfo={{ name: "General Inquiry" }} 
-                    onClose={() => setChatRoom(null)} 
-                />
-            )}
         </div>
     );
 };
