@@ -60,7 +60,8 @@ const Settings = ({ user, setUser }) => {
   const [passwordError, setPasswordError] = useState(''); 
   
   const [notifications, setNotifications] = useState({
-    confirmation: true, acceptance: true, reminder: true, cancellation: true, receipt: true, new_request: true, refund: true 
+    confirmation: true, acceptance: true, reminder: true, cancellation: true, receipt: true, new_request: true, refund: true,
+    chat_msg: true // ✅ ADDED: Default to true for Chat SMS Reminders
   });
 
   const [inAppPrefs, setInAppPrefs] = useState({
@@ -391,6 +392,10 @@ const Settings = ({ user, setUser }) => {
               <div className="notif-group fade-in">
                   <Toggle label="Booking Confirmation" desc="Sent immediately after booking." checked={true} disabled />
                   <Toggle label="Booking Accepted" desc="When provider confirms." checked={notifications.acceptance} onChange={() => handleNotificationToggle('acceptance')} />
+                  
+                  {/* ✅ ADDED: Chat Messages Toggle */}
+                  <Toggle label="Chat Messages" desc="Alert when you receive a message while offline." checked={notifications.chat_msg !== false} onChange={() => handleNotificationToggle('chat_msg')} />
+                  
                   <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
                   <Toggle label="Cancellations" desc="If appointment is cancelled." checked={notifications.cancellation} onChange={() => handleNotificationToggle('cancellation')} />
                   <Toggle label="Payment Receipts" desc="Transaction confirmations." checked={notifications.receipt} onChange={() => handleNotificationToggle('receipt')} />
