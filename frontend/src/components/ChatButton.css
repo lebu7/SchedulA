@@ -12,29 +12,58 @@
   gap: 6px;
   font-weight: 600;
   font-size: 14px;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
 }
 
 .chat-btn:hover {
   background: #dbeafe;
   transform: translateY(-1px);
+  box-shadow:
+    0 4px 6px -1px rgba(37, 99, 235, 0.1),
+    0 2px 4px -1px rgba(37, 99, 235, 0.06);
+}
+
+.chat-btn:active {
+  transform: translateY(0);
+  background: #bfdbfe;
 }
 
 .chat-btn.small {
   padding: 6px 12px;
   font-size: 12px;
+  border-radius: 16px;
 }
 
+/* Badge Styling */
 .chat-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -6px;
+  right: -6px;
   background: #ef4444;
   color: white;
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 0 5px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
   min-width: 18px;
-  text-align: center;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+  border: 2px solid #fff;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
 }

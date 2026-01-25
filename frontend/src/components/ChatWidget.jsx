@@ -1,3 +1,4 @@
+/* frontend/src/components/ChatWidget.jsx */
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, ArrowLeft } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
@@ -6,18 +7,32 @@ import ChatModal from './ChatModal';
 import './ChatWidget.css';
 
 const ChatWidget = () => {
-  const { unreadCount } = useSocket();
+  const { unreadCount, socket } = useSocket();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [recipientName, setRecipientName] = useState('');
   const widgetRef = useRef(null);
 
-  // Toggle widget via event
+  // Toggle widget via event (from Header)
   useEffect(() => {
     const handleToggle = () => setIsOpen(prev => !prev);
     window.addEventListener('toggleChatWidget', handleToggle);
     return () => window.removeEventListener('toggleChatWidget', handleToggle);
   }, []);
+
+  // Fix Widget Badge Real-Time Updates
+  useEffect(() => {
+    const handleUnreadUpdate = () => {
+      // Trigger re-fetch from context
+      window.dispatchEvent(new CustomEvent('updateChatBadge'));
+    };
+    
+    socket?.on('unread_count_update', handleUnreadUpdate);
+    
+    return () => {
+      socket?.off('unread_count_update', handleUnreadUpdate);
+    };
+  }, [socket]);
 
   // Close widget if click outside
   useEffect(() => {
@@ -49,34 +64,38 @@ const ChatWidget = () => {
       {/* Widget Panel */}
       {isOpen && (
         <div className="chat-widget-panel" ref={widgetRef}>
-          {/* Header */}
+          {/* Header - Fix Back/Close Navigation Logic */}
           <div className="chat-widget-header">
-            {selectedRoom && (
+            {selectedRoom ? (
               <>
+                {/* Back Button */}
                 <button 
                   onClick={() => {
                     setSelectedRoom(null);
                     setRecipientName('');
                   }} 
-                  className="minimize-btn"
-                  aria-label="Back to chat list"
+                  className="nav-btn"
+                  title="Back to list"
                 >
-                  <ArrowLeft size={20} />
+                  <ArrowLeft size={18} />
                 </button>
                 <span className="recipient-name">{recipientName}</span>
               </>
+            ) : (
+              <h3 style={{margin:0, fontSize:'16px'}}>Messages</h3>
             )}
-            {!selectedRoom && <div className="online-indicator" title="Live Support Active"></div>}
+            
+            {/* Close Button (Always visible) */}
             <button 
               onClick={() => {
                 setIsOpen(false);
                 setSelectedRoom(null);
                 setRecipientName('');
               }}
-              className="minimize-btn"
-              aria-label="Close chat"
+              className="nav-btn close-btn"
+              title="Close chat"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
 
