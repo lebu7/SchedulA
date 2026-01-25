@@ -41,12 +41,15 @@ function App() {
 
   const handleLogin = (userData, token) => {
     localStorage.setItem('token', token)
-    localStorage.setItem('userId', userData.id);
+    localStorage.setItem('userId', String(userData.id));
+    localStorage.setItem('userType', userData.user_type);
     setUser(userData)
   }
 
   const handleLogout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('userId') 
+    localStorage.removeItem('userType')
     setUser(null)
   }
 

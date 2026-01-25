@@ -13,6 +13,12 @@ router.post("/rooms", authenticateToken, (req, res) => {
   const clientId = userType === "client" ? userId : recipientId;
   const providerId = userType === "provider" ? userId : recipientId;
 
+  if (clientId === providerId) {
+    return res
+      .status(400)
+      .json({ error: "Client and provider cannot be the same user" });
+  }
+
   db.get(
     `SELECT * FROM chat_rooms WHERE client_id = ? AND provider_id = ? AND context_type = ? AND context_id = ?`,
     [clientId, providerId, contextType, contextId || null],
@@ -56,7 +62,7 @@ router.get("/rooms", authenticateToken, (req, res) => {
     (err, rooms) => {
       if (err) return res.status(500).json({ error: "Database error" });
       res.json({ rooms });
-    }
+    },
   );
 });
 

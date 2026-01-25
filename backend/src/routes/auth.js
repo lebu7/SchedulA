@@ -627,6 +627,30 @@ router.put(
 );
 
 /* ---------------------------------------------
+   ✅ GET Chat Room Messages
+--------------------------------------------- */
+router.get("/chat/rooms/:id/messages", authenticateToken, (req, res) => {
+  const roomId = req.params.id;
+  const userId = req.user.userId;
+
+  db.all(
+    `SELECT cm.*, 
+            u.name AS sender_name, 
+            u.user_type
+     FROM chat_messages cm
+     JOIN users u ON cm.sender_id = u.id
+     WHERE cm.room_id = ?
+     ORDER BY cm.created_at ASC`,
+    [roomId],
+    (err, messages) => {
+      if (err)
+        return res.status(500).json({ error: "Failed to fetch messages" });
+      res.json({ messages });
+    },
+  );
+});
+
+/* ---------------------------------------------
    ✅ UPDATE NOTIFICATION PREFERENCES
 --------------------------------------------- */
 router.put("/notifications", authenticateToken, (req, res) => {

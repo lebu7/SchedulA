@@ -11,8 +11,9 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
   
-  // ✅ Ensure userId is always treated as a number for comparison
-  const userId = Number(localStorage.getItem('userId')|| localStorage.getItem('id'));
+  const userId = Number(localStorage.getItem('userId'));
+  const userType = localStorage.getItem('userType');
+
 
   // Determine other participant's info
   const otherParticipant = room.client_id === userId 
@@ -22,9 +23,13 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
   useEffect(() => {
     if (!room) return;
 
-    // Fetch existing messages
+    // Fetch existing messages and process sender_name
     api.get(`/chat/rooms/${room.id}/messages`).then(res => {
-      setMessages(res.data.messages);
+        const processedMessages = res.data.messages.map(msg => ({
+        ...msg,
+        sender_name: Number(msg.sender_id) === userId ? 'You' : otherParticipant.name
+        }));
+        setMessages(processedMessages);
     });
 
     // Join room
@@ -32,18 +37,18 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
 
     // Listen for new messages
     socket?.on('new_message', (msg) => {
-      if (msg.room_id === room.id) {
-        setMessages(prev => [...prev, msg]);
-      }
+        if (msg.room_id === room.id) {
+            setMessages(prev => [...prev, msg]);
+        }
     });
 
     // Mark as read
     socket?.emit('mark_read', { roomId: room.id });
 
     return () => {
-      socket?.off('new_message');
+        socket?.off('new_message');
     };
-  }, [room, socket, userId]);
+    }, [room, socket, userId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -51,10 +56,15 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
 
   const handleSend = () => {
     if (!newMessage.trim()) return;
-    // Send message via socket
-    socket?.emit('send_message', { roomId: room.id, message: newMessage });
+
+    socket?.emit('send_message', { 
+        roomId: room.id, 
+        message: newMessage 
+    });
+
     setNewMessage('');
-  };
+    };
+
 
   return (
     <div className={(inWidget || !inWidget) ? "chat-widget-inner" : "chat-modal-overlay"}>
@@ -99,8 +109,11 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
                 // ✅ Force both to numbers to ensure "===" works correctly
                 const isMe = Number(msg.sender_id) === Number(userId);
                 
-                // DEBUG: Uncomment the line below to see why they might not match
-                // console.log(`Comparing Msg Sender: ${msg.sender_id} (${typeof msg.sender_id}) to Local User: ${userId} (${typeof userId})`);
+                console.log({
+                    msgSender: msg.sender_id,
+                    localUser: userId,
+                    isMe
+                    });
 
                 return (
                 <div key={msg.id} className={`msg ${isMe ? 'sent' : 'received'}`}>
