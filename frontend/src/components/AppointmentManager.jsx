@@ -7,6 +7,7 @@ import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
 import CalendarView from "./CalendarView"; 
 import ChatButton from './ChatButton';
+import { useSocket } from "../contexts/SocketContext";
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
   Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare, List 
@@ -298,6 +299,8 @@ function AppointmentManager({ user }) {
   const [providerServices, setProviderServices] = useState([]);
   const [loadingServices, setLoadingServices] = useState(false);
   const [walkInService, setWalkInService] = useState(null);
+
+  const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
   useEffect(() => {
     fetchAppointments();
@@ -651,11 +654,15 @@ function AppointmentManager({ user }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p><strong>With:</strong> {apt.provider_name}</p>
                     {/* ✅ Integrated Chat Button */}
-                    <ChatButton 
-                      onClick={() => openAppointmentChat(apt)} 
+                   <ChatButton 
+                      onClick={() => {
+                        openAppointmentChat(apt);
+                        resetRoomUnread(apt.id); // resets unread for this appointment room
+                      }}
                       size="small"
                       contextType="appointment"
                       contextId={apt.id}
+                      unreadCount={roomUnreadCounts[apt.id] || 0} // per-appointment unread
                       disableGlobalCounter={true}
                     />
                 </div>

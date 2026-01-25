@@ -15,12 +15,15 @@ export const SocketProvider = ({ children, user }) => {
   // 🔹 Explicit GLOBAL unread count (dashboard button only)
   const [globalUnreadCount, setGlobalUnreadCount] = useState(0);
 
+  // 🆕 Per-room unread counts
+  const [roomUnreadCounts, setRoomUnreadCounts] = useState({});
+
   const [onlineUsers, setOnlineUsers] = useState(new Set());
 
   // Fetch unread count via REST API (GLOBAL only)
   const fetchUnreadCount = async () => {
     if (!localStorage.getItem('token')) return;
-    
+
     try {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/chat/unread-count`,
@@ -45,11 +48,19 @@ export const SocketProvider = ({ children, user }) => {
     }
   };
 
+  // 🆕 Reset unread count for a specific room
+  const resetRoomUnread = (roomId) => {
+    setRoomUnreadCounts(prev => ({
+      ...prev,
+      [roomId]: 0
+    }));
+  };
+
+  // 🔹 Socket connection & event subscriptions
   useEffect(() => {
     if (!user) return;
 
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    
     const newSocket = io(socketUrl, {
       auth: { token: localStorage.getItem('token') },
       reconnection: true,
@@ -57,46 +68,43 @@ export const SocketProvider = ({ children, user }) => {
       reconnectionDelay: 1000
     });
 
-    newSocket.on('connect', () => {
-      console.log('✅ Connected to real-time chat');
-      fetchUnreadCount();
-    });
-
-    // Listen for global unread updates
-    newSocket.on('unread_count_update', () => {
-      console.log('🔔 Received unread update event (GLOBAL)');
-      fetchUnreadCount();
-    });
-
-    // Online Status Events
-    newSocket.on('online_users', (users) => {
-      setOnlineUsers(new Set(users));
-    });
-
-    newSocket.on('user_connected', (userId) => {
-      setOnlineUsers(prev => new Set(prev).add(userId));
-    });
-
-    newSocket.on('user_disconnected', (userId) => {
-      setOnlineUsers(prev => {
+    // Event handlers
+    const handlers = {
+      connect: () => {
+        console.log('✅ Connected to real-time chat');
+        fetchUnreadCount();
+      },
+      unread_count_update: () => {
+        console.log('🔔 Received unread update event (GLOBAL)');
+        fetchUnreadCount();
+      },
+      new_message: ({ roomId }) => {
+        setRoomUnreadCounts(prev => ({
+          ...prev,
+          [roomId]: (prev[roomId] || 0) + 1
+        }));
+      },
+      online_users: (users) => setOnlineUsers(new Set(users)),
+      user_connected: (userId) => setOnlineUsers(prev => new Set(prev).add(userId)),
+      user_disconnected: (userId) => setOnlineUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(userId);
         return newSet;
-      });
-    });
+      }),
+    };
+
+    // Subscribe to events
+    Object.keys(handlers).forEach(event => newSocket.on(event, handlers[event]));
 
     setSocket(newSocket);
 
     // ✅ FALLBACK: Poll every 2 seconds to ensure count is always accurate
     const intervalId = setInterval(fetchUnreadCount, 2000);
 
+    // Cleanup on unmount / user change
     return () => {
       clearInterval(intervalId);
-      newSocket.off('connect');
-      newSocket.off('unread_count_update');
-      newSocket.off('online_users');
-      newSocket.off('user_connected');
-      newSocket.off('user_disconnected');
+      Object.keys(handlers).forEach(event => newSocket.off(event));
       newSocket.close();
     };
   }, [user]);
@@ -104,9 +112,11 @@ export const SocketProvider = ({ children, user }) => {
   return (
     <SocketContext.Provider 
       value={{ 
-        socket, 
+        socket,
         unreadCount,            // legacy
-        globalUnreadCount,     // 🔹 use ONLY on dashboard main button
+        globalUnreadCount,      // 🔹 use ONLY on dashboard main button
+        roomUnreadCounts,       // 🆕 per service/room unread count
+        resetRoomUnread,        // 🆕 call when a chat opens
         setUnreadCount, 
         fetchUnreadCount, 
         onlineUsers 

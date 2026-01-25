@@ -1,12 +1,12 @@
 /* frontend/src/components/ChatModal.jsx */
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Calendar, Clock, Tag, Check, CheckCircle, X } from 'lucide-react';
+import { Send, Calendar, Clock, Tag, Check, CheckCircle } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import api from '../services/auth';
 import './ChatModal.css';
 
 const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
-  const { socket } = useSocket();
+  const { socket, resetRoomUnread } = useSocket();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
@@ -17,6 +17,11 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
   const otherParticipant = room.client_id === userId
     ? { name: room.provider_name || room.business_name, type: 'provider' }
     : { name: room.client_name, type: 'client' };
+
+  // 🔹 Reset room unread when chat opens
+  useEffect(() => {
+    if (room?.id) resetRoomUnread(room.id);
+  }, [room?.id, resetRoomUnread]);
 
   // Fetch messages + socket listeners
   useEffect(() => {
@@ -55,7 +60,7 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     };
 
     socket?.on('new_message', handleNewMessage);
-    socket?.on('messages_read', handleMessagesRead); // ✅ Added
+    socket?.on('messages_read', handleMessagesRead);
 
     // Mark as read immediately on open
     socket?.emit('mark_read', { roomId: room.id });
@@ -90,7 +95,7 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
       sender_name: 'You',
       message: text,
       created_at: new Date().toISOString(),
-      is_read: false // Default for optimistic
+      is_read: false
     };
     setMessages(prev => [...prev, tempMsg]);
 
@@ -140,7 +145,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
                   <span className="time">
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  {/* Only show checkmarks for MY messages (Sent/Grey) */}
                   {isMe && (
                     <span className="read-indicator">
                       {msg.is_read ? <CheckCircle size={12} /> : <Check size={12} />}

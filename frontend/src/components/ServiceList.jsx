@@ -3,8 +3,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
-// ✅ ADDED: Chat Button (No ChatModal import needed anymore)
 import ChatButton from './ChatButton';
+import { useSocket } from "../contexts/SocketContext";
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
   Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink 
@@ -69,6 +69,8 @@ function ServiceList({ user }) {
 
   // 🆕 Location Modal State
   const [mapService, setMapService] = useState(null);
+
+  const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
   useEffect(() => {
     fetchAllServices();
@@ -517,10 +519,14 @@ function ServiceList({ user }) {
                                   </div>
                                   {/* ✅ ADDED: Chat Button in Service Card */}
                                   <ChatButton 
-                                    onClick={(e) => openServiceChat(e, service)} 
+                                    onClick={(e) => {
+                                      openServiceChat(e, service);
+                                      resetRoomUnread(service.id); // reset unread when chat opens
+                                    }}
                                     size="small"
                                     contextType="service"
                                     contextId={service.id}
+                                    unreadCount={roomUnreadCounts[service.id] || 0} // 🆕 per-room unread
                                     disableGlobalCounter={true}
                                   />
                               </div>
