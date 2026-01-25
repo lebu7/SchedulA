@@ -42,7 +42,10 @@ router.post("/rooms", authenticateToken, (req, res) => {
 router.get("/rooms", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   db.all(
-    `SELECT cr.*, u1.name as client_name, u2.name as provider_name, u2.business_name,
+    `SELECT cr.*, 
+            u1.name as client_name, 
+            u2.name as provider_name, 
+            u2.business_name,
             (SELECT COUNT(*) FROM chat_messages WHERE room_id = cr.id AND sender_id != ? AND is_read = 0) as unread_count
      FROM chat_rooms cr
      JOIN users u1 ON cr.client_id = u1.id
@@ -53,7 +56,7 @@ router.get("/rooms", authenticateToken, (req, res) => {
     (err, rooms) => {
       if (err) return res.status(500).json({ error: "Database error" });
       res.json({ rooms });
-    },
+    }
   );
 });
 

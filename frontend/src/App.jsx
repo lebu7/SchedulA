@@ -41,6 +41,7 @@ function App() {
 
   const handleLogin = (userData, token) => {
     localStorage.setItem('token', token)
+    localStorage.setItem('userId', userData.id);
     setUser(userData)
   }
 
