@@ -651,14 +651,26 @@ function AppointmentManager({ user }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p><strong>With:</strong> {apt.provider_name}</p>
                     {/* ✅ Integrated Chat Button */}
-                    <ChatButton onClick={() => openAppointmentChat(apt)} size="small" />
+                    <ChatButton 
+                      onClick={() => openAppointmentChat(apt)} 
+                      size="small"
+                      contextType="appointment"
+                      contextId={apt.id}
+                      disableGlobalCounter={true}
+                    />
                 </div>
             ) : (
                 <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
                     {/* ✅ Integrated Chat Button */}
-                    <ChatButton onClick={() => openAppointmentChat(apt)} size="small" />
+                    <ChatButton 
+                      onClick={() => openAppointmentChat(apt)} 
+                      size="small"
+                      contextType="appointment"
+                      contextId={apt.id}
+                      disableGlobalCounter={true}
+                    />
                 </div>
                 {(apt.status === 'pending' || apt.status === 'scheduled') && !isWalkIn && (
                     <div style={{ marginTop: '5px', marginBottom: '8px' }}>

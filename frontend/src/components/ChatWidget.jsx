@@ -7,7 +7,9 @@ import ChatModal from './ChatModal';
 import './ChatWidget.css';
 
 const ChatWidget = () => {
-  const { unreadCount, socket, onlineUsers } = useSocket();
+  // 🔹 USE GLOBAL ONLY HERE
+  const { globalUnreadCount, socket, onlineUsers } = useSocket();
+
   const [isOpen, setIsOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   
@@ -27,7 +29,6 @@ const ChatWidget = () => {
 
       const userId = Number(localStorage.getItem('userId'));
       
-      // ✅ Force Number conversion for safe comparison
       const roomClientId = Number(room.client_id);
       const roomProviderId = Number(room.provider_id);
       
@@ -39,7 +40,6 @@ const ChatWidget = () => {
 
       const role = isClient ? 'Service Provider' : 'Client';
       
-      // ✅ Store the ID of the OTHER person
       const rId = isClient ? roomProviderId : roomClientId;
 
       setSelectedRoom({ ...room, contextInfo: context });
@@ -103,7 +103,6 @@ const ChatWidget = () => {
     
     setRecipientRole(isClient ? 'Service Provider' : 'Client');
     
-    // ✅ Store ID of the other person
     setRecipientId(isClient ? roomProviderId : roomClientId);
   };
 
@@ -118,12 +117,11 @@ const ChatWidget = () => {
     }, 300);
   };
 
-  // ✅ Robust check: Ensure recipientId is a Number when checking the Set
   const isOnline = recipientId && onlineUsers.has(Number(recipientId));
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Button (GLOBAL ONLY HERE) */}
       {!isOpen && (
         <button 
           className="chat-widget-button" 
@@ -131,7 +129,11 @@ const ChatWidget = () => {
           aria-label="Open messages"
         >
           <MessageCircle size={28} />
-          {unreadCount > 0 && <span className="chat-widget-badge">{unreadCount}</span>}
+          {globalUnreadCount > 0 && (
+            <span className="chat-widget-badge">
+              {globalUnreadCount}
+            </span>
+          )}
         </button>
       )}
 

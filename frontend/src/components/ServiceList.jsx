@@ -516,7 +516,13 @@ function ServiceList({ user }) {
                                       </span>
                                   </div>
                                   {/* ✅ ADDED: Chat Button in Service Card */}
-                                  <ChatButton onClick={(e) => openServiceChat(e, service)} size="small" />
+                                  <ChatButton 
+                                    onClick={(e) => openServiceChat(e, service)} 
+                                    size="small"
+                                    contextType="service"
+                                    contextId={service.id}
+                                    disableGlobalCounter={true}
+                                  />
                               </div>
 
                               <p className="service-description">

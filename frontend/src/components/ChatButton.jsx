@@ -1,14 +1,32 @@
 /* frontend/src/components/ChatButton.jsx */
 import React from 'react';
 import { MessageCircle } from 'lucide-react';
-import { useSocket } from '../contexts/SocketContext'; // ✅ Connect to Real-time Context
+import { useSocket } from '../contexts/SocketContext';
 import './ChatButton.css';
 
-const ChatButton = ({ onClick, unreadCount: propCount, size = 'normal' }) => {
-  const { unreadCount: globalCount } = useSocket();
+/**
+ * Props:
+ * - unreadCount: number (context-specific count ONLY)
+ * - disableGlobalCounter: boolean (if true, never show global)
+ * - size: 'normal' | 'small'
+ */
+const ChatButton = ({ 
+  onClick, 
+  unreadCount: propCount, 
+  size = 'normal',
+  disableGlobalCounter = false
+}) => {
+  const { globalUnreadCount } = useSocket();
 
-  // ✅ Priority: Use prop if provided (for specific chats), otherwise use Global Context
-  const countToDisplay = propCount !== undefined ? propCount : globalCount;
+  let countToDisplay = 0;
+
+  if (propCount !== undefined) {
+    countToDisplay = propCount;
+  } else if (!disableGlobalCounter) {
+    countToDisplay = globalUnreadCount;
+  } else {
+    countToDisplay = 0;
+  }
 
   return (
     <button className={`chat-btn ${size}`} onClick={onClick}>
