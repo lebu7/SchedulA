@@ -1,4 +1,4 @@
-/* frontend/src/components/Header.jsx - FIXED VERSION */
+/* frontend/src/components/Header.jsx */
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
@@ -6,14 +6,11 @@ import {
   LogOut, User, Bell, CheckCircle, X, Edit, Phone, Calendar, 
   Briefcase, CheckCheck, Clock 
 } from 'lucide-react';
-// ✅ REMOVED: ChatListModal import - we only use the widget now
-import { useSocket } from '../contexts/SocketContext';
+// ✅ REMOVED: useSocket and MessageCircle imports (Header doesn't need them anymore)
 import './Header.css';
 
 function Header({ user, onLogout }) {
   const navigate = useNavigate();
-  // ✅ Chat unread count from context
-  const { unreadCount: chatUnreadCount } = useSocket();
   
   const [showModal, setShowModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -155,15 +152,6 @@ function Header({ user, onLogout }) {
     }
   };
 
-  /**
-   * ✅ FIXED: Header Chat Icon now triggers the ChatWidget
-   * Instead of opening a modal, we'll dispatch a custom event that the ChatWidget listens to
-   */
-  const handleHeaderChatClick = () => {
-    // Dispatch custom event to toggle the widget
-    window.dispatchEvent(new CustomEvent('toggleChatWidget'));
-  };
-
   return (
     <>
       <header className="header">
@@ -176,20 +164,9 @@ function Header({ user, onLogout }) {
 
           {user ? (
             <div className="user-menu">
-              {/* ✅ FIXED: Chat Icon now triggers widget instead of modal */}
-              <div className="notification-wrapper">
-                <div 
-                  className="notification-icon" 
-                  onClick={() => {
-                    // Trigger widget toggle via DOM event
-                    const event = new CustomEvent('toggleChatWidget');
-                    window.dispatchEvent(event);
-                  }} 
-                  title="Open Messages"
-                >
-                </div>
-              </div>
+              {/* ✅ REMOVED: Extra Chat Icon Button */}
 
+              {/* Notifications Bell */}
               <div className="notification-wrapper" ref={notifRef}>
                 <div className="notification-icon" onClick={() => setShowNotifications(!showNotifications)}>
                   <Bell size={20} color="#64748b" />
@@ -231,6 +208,7 @@ function Header({ user, onLogout }) {
                 )}
               </div>
               
+              {/* User Profile */}
               <div className="user-info">
                 <span className="user-name">
                   {user.name.split(' ')[0]} 
@@ -253,8 +231,7 @@ function Header({ user, onLogout }) {
         </div>
       </header>
 
-      {/* ✅ REMOVED: ChatListModal - only using the widget now */}
-
+      {/* Profile Modal */}
       {showModal && user && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content profile-modal" onClick={e => e.stopPropagation()}>
