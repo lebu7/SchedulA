@@ -1,9 +1,9 @@
 /* frontend/src/components/ChatButton.css */
 .chat-btn {
   position: relative;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-  color: #2563eb;
+  background: #eff6ff; /* Blue-50 */
+  border: 1px solid #dbeafe; /* Blue-100 */
+  color: #2563eb; /* Blue-600 */
   padding: 8px 16px;
   border-radius: 20px;
   cursor: pointer;
@@ -17,7 +17,7 @@
 }
 
 .chat-btn:hover {
-  background: #dbeafe;
+  background: #dbeafe; /* Blue-100 */
   transform: translateY(-1px);
   box-shadow:
     0 4px 6px -1px rgba(37, 99, 235, 0.1),
@@ -26,7 +26,7 @@
 
 .chat-btn:active {
   transform: translateY(0);
-  background: #bfdbfe;
+  background: #bfdbfe; /* Blue-200 */
 }
 
 .chat-btn.small {
@@ -40,7 +40,7 @@
   position: absolute;
   top: -6px;
   right: -6px;
-  background: #ef4444;
+  background: #ef4444; /* Red-500 */
   color: white;
   font-size: 10px;
   font-weight: 700;

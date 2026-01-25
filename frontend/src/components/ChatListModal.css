@@ -6,6 +6,7 @@
   overflow-y: auto;
   height: 100%;
   padding-bottom: 20px;
+  background-color: #fff;
 }
 
 .chat-list.widget-mode {
@@ -18,26 +19,26 @@
   flex-direction: column;
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9; /* Slate-100 */
   transition: background-color 0.2s;
   background: #fff;
 }
 
 .chat-preview:hover {
-  background-color: #f8fafc;
+  background-color: #f8fafc; /* Slate-50 */
 }
 
 .chat-preview:active {
   background-color: #f1f5f9;
 }
 
-/* Highlight unread rows */
+/* Highlight unread rows - Changed to Blue tint to match App Theme */
 .chat-preview.unread {
-  background-color: #fef2f2; /* Faint red background */
+  background-color: #eff6ff; /* Blue-50 */
 }
 
 .chat-preview.unread:hover {
-  background-color: #fee2e2;
+  background-color: #dbeafe; /* Blue-100 */
 }
 
 /* Row Content Wrapper */
@@ -46,7 +47,7 @@
   flex-direction: column;
   gap: 4px;
   width: 100%;
-  overflow: hidden; /* Ensure content stays inside */
+  overflow: hidden;
 }
 
 /* --- TOP ROW: Name, Online Dot, Time --- */
@@ -59,39 +60,39 @@
 .participant-name {
   font-weight: 600;
   font-size: 14px;
-  color: #1e293b;
+  color: #1e293b; /* Slate-800 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
 
-/* ✅ ONLINE STATUS DOT */
+/* ONLINE STATUS DOT - Matches 'Success' Green */
 .online-dot {
   width: 8px;
   height: 8px;
-  background-color: #22c55e; /* Green */
+  background-color: #16a34a; /* Green-600 */
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px #fff; /* White ring for separation */
-  margin-left: 2px;
+  box-shadow: 0 0 0 1px #fff;
+  margin-left: 4px;
 }
 
 .chat-preview.unread .participant-name {
   font-weight: 700;
-  color: #111827;
+  color: #0f172a; /* Slate-900 */
 }
 
 .time {
   font-size: 11px;
-  color: #94a3b8;
+  color: #94a3b8; /* Slate-400 */
   white-space: nowrap;
   margin-left: 8px;
   flex-shrink: 0;
 }
 
 .chat-preview.unread .time {
-  color: #ef4444;
+  color: #2563eb; /* Blue-600 */
   font-weight: 600;
 }
 
@@ -103,32 +104,31 @@
   min-height: 18px;
 }
 
-/* ✅ TRUNCATED LAST MESSAGE (One Line) */
+/* TRUNCATED LAST MESSAGE */
 .last-message {
   font-size: 13px;
-  color: #64748b;
-  /* CSS Truncation Magic */
+  color: #64748b; /* Slate-500 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1; /* Takes all available space */
-  min-width: 0; /* Allows shrinking below content size */
+  flex: 1;
+  min-width: 0;
   margin-right: 12px;
 }
 
 .chat-preview.unread .last-message {
-  color: #334155;
+  color: #334155; /* Slate-700 */
   font-weight: 500;
 }
 
 .sender-prefix {
-  color: #475569;
+  color: #475569; /* Slate-600 */
   font-weight: 500;
 }
 
 /* Badges & Icons */
 .chat-list-badge {
-  background-color: #ef4444;
+  background-color: #2563eb; /* Blue-600 - Brand Blue */
   color: white;
   font-size: 10px;
   font-weight: 700;
@@ -143,7 +143,7 @@
 }
 
 .read-status-icon {
-  color: #cbd5e1;
+  color: #cbd5e1; /* Slate-300 */
   display: flex;
   align-items: center;
   flex-shrink: 0;
