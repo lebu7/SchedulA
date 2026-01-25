@@ -25,8 +25,10 @@ export const initializeSocket = (server) => {
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) return next(new Error("Invalid token"));
+      const id = user.id || user.userId;
+
       socket.user = user;
-      socket.userId = Number(user.userId);
+      socket.userId = Number(id);
       next();
     });
   });

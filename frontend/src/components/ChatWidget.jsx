@@ -18,28 +18,30 @@ const ChatWidget = () => {
 
   const widgetRef = useRef(null);
 
-  // ✅ NEW: Listen for "openChatRoom" event from other components
+  // ✅ Listen for "openChatRoom" event
   useEffect(() => {
     const handleOpenSpecificChat = (e) => {
-      // ✅ Accept 'recipientName' from the event detail
       const { room, context, recipientName } = e.detail;
       
-      // 1. Open Widget
       setIsOpen(true);
 
-      // 2. Determine User details
       const userId = Number(localStorage.getItem('userId'));
-      const isClient = room.client_id === userId;
       
-      // ✅ Priority: Use the name passed in event -> Room Name -> Fallback
+      // ✅ Force Number conversion for safe comparison
+      const roomClientId = Number(room.client_id);
+      const roomProviderId = Number(room.provider_id);
+      
+      const isClient = roomClientId === userId;
+      
       const name = recipientName || (isClient 
         ? room.provider_name || room.business_name 
         : room.client_name) || "Chat";
 
       const role = isClient ? 'Service Provider' : 'Client';
-      const rId = isClient ? room.provider_id : room.client_id;
+      
+      // ✅ Store the ID of the OTHER person
+      const rId = isClient ? roomProviderId : roomClientId;
 
-      // 3. Set Active Room
       setSelectedRoom({ ...room, contextInfo: context });
       setRecipientName(name);
       setRecipientRole(role);
@@ -69,7 +71,6 @@ const ChatWidget = () => {
     };
   }, [socket]);
 
-  // Close widget if click outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (isOpen && widgetRef.current && !widgetRef.current.contains(e.target)) {
@@ -95,10 +96,15 @@ const ChatWidget = () => {
     setRecipientName(name);
     
     const userId = Number(localStorage.getItem('userId'));
-    const isClient = room.client_id === userId;
+    const roomClientId = Number(room.client_id);
+    const roomProviderId = Number(room.provider_id);
+
+    const isClient = roomClientId === userId;
     
     setRecipientRole(isClient ? 'Service Provider' : 'Client');
-    setRecipientId(isClient ? room.provider_id : room.client_id);
+    
+    // ✅ Store ID of the other person
+    setRecipientId(isClient ? roomProviderId : roomClientId);
   };
 
   const handleBack = () => {
@@ -112,7 +118,8 @@ const ChatWidget = () => {
     }, 300);
   };
 
-  const isOnline = recipientId && onlineUsers.has(recipientId);
+  // ✅ Robust check: Ensure recipientId is a Number when checking the Set
+  const isOnline = recipientId && onlineUsers.has(Number(recipientId));
 
   return (
     <>
