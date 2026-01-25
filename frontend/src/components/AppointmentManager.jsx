@@ -6,7 +6,6 @@ import api from "../services/auth";
 import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
 import CalendarView from "./CalendarView"; 
-// ✅ ADDED: Chat Button (No ChatModal import needed anymore)
 import ChatButton from './ChatButton';
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
@@ -269,7 +268,7 @@ function AppointmentManager({ user }) {
   });
   const [loading, setLoading] = useState(true);
   
-  const [viewMode, setViewMode] = useState('list'); // 🆕 'list' or 'calendar'
+  const [viewMode, setViewMode] = useState('list'); 
 
   const [activeTab, setActiveTab] = useState(() => {
     if (location.state?.subTab) return location.state.subTab;
@@ -419,11 +418,14 @@ function AppointmentManager({ user }) {
     setShowReschedule(true);
   };
 
-  // ✅ UPDATED: Open Chat via Widget Event
+  // ✅ FIXED: Added 'status' and 'recipientName' to Chat Event
   const openAppointmentChat = async (apt) => {
     const recipientId = user.user_type === 'client' ? apt.provider_id : apt.client_id;
+    const recipientName = user.user_type === 'client' 
+      ? apt.provider_name || apt.business_name 
+      : apt.client_name;
+
     try {
-      // 1. Ensure room exists
       const res = await api.post('/chat/rooms', {
         recipientId,
         contextType: 'appointment',
@@ -432,14 +434,16 @@ function AppointmentManager({ user }) {
       
       const contextData = { 
         service_name: apt.service_name, 
-        appointment_date: apt.appointment_date 
+        appointment_date: apt.appointment_date,
+        status: apt.status, // ✅ ADDED status so banner can display it
+        price: apt.total_price
       };
 
-      // 2. Dispatch event to Global Widget
       window.dispatchEvent(new CustomEvent('openChatRoom', {
         detail: {
           room: res.data.room,
-          context: contextData
+          context: contextData,
+          recipientName: recipientName
         }
       }));
 
