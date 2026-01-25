@@ -1,4 +1,3 @@
-/* frontend/src/components/ChatModal.jsx */
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Send, Calendar, Clock, Tag } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
@@ -10,69 +9,88 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
-  
+
   const userId = Number(localStorage.getItem('userId'));
-  const userType = localStorage.getItem('userType');
 
-
-  // Determine other participant's info
-  const otherParticipant = room.client_id === userId 
+  // Determine other participant
+  const otherParticipant = room.client_id === userId
     ? { name: room.provider_name || room.business_name, type: 'provider' }
     : { name: room.client_name, type: 'client' };
 
+  // Fetch messages + socket listeners
   useEffect(() => {
     if (!room) return;
 
-    // Fetch existing messages and process sender_name
+    let isMounted = true;
+
+    // Fetch existing messages
     api.get(`/chat/rooms/${room.id}/messages`).then(res => {
-        const processedMessages = res.data.messages.map(msg => ({
+      if (!isMounted) return;
+      const processed = res.data.messages.map(msg => ({
         ...msg,
         sender_name: Number(msg.sender_id) === userId ? 'You' : otherParticipant.name
-        }));
-        setMessages(processedMessages);
+      }));
+      setMessages(processed);
     });
 
     // Join room
     socket?.emit('join_room', { roomId: room.id });
 
     // Listen for new messages
-    socket?.on('new_message', (msg) => {
-        if (msg.room_id === room.id) {
-            setMessages(prev => [...prev, msg]);
-        }
-    });
+    const handleNewMessage = (msg) => {
+      if (msg.room_id === room.id && Number(msg.sender_id) !== userId) {
+        setMessages(prev => [...prev, {
+          ...msg,
+          sender_name: otherParticipant.name
+        }]);
+      }
+    };
+
+    socket?.on('new_message', handleNewMessage);
 
     // Mark as read
     socket?.emit('mark_read', { roomId: room.id });
 
     return () => {
-        socket?.off('new_message');
+      isMounted = false;
+      socket?.off('new_message', handleNewMessage);
     };
-    }, [room, socket, userId]);
+  }, [room, socket, userId, otherParticipant.name]);
 
+  // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Handle sending
   const handleSend = () => {
-    if (!newMessage.trim()) return;
+    const text = newMessage.trim();
+    if (!text) return;
 
-    socket?.emit('send_message', { 
-        roomId: room.id, 
-        message: newMessage 
-    });
+    // Optimistic update
+    const tempMsg = {
+      id: Date.now(),
+      room_id: room.id,
+      sender_id: userId,
+      sender_name: 'You',
+      message: text,
+      created_at: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
+    // Emit message to server
+    socket?.emit('send_message', { roomId: room.id, message: text });
 
     setNewMessage('');
-    };
-
+  };
 
   return (
     <div className={(inWidget || !inWidget) ? "chat-widget-inner" : "chat-modal-overlay"}>
       <div className="chat-modal in-widget">
         {/* HEADER */}
-        <div className="chat-header">
-          <div>
-            <h3>💬 {otherParticipant.name}</h3>
+        <div className="chat-header chat-header-custom">
+          <div className="recipient-info">
+            <h3>{otherParticipant.name}</h3>
             <small className="participant-type">
               {otherParticipant.type === 'provider' ? 'Service Provider' : 'Client'}
             </small>
@@ -80,9 +98,9 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
           <button className="close-btn" onClick={onClose}><X size={20} /></button>
         </div>
 
-        {/* CONTEXTUAL BANNER */}
+        {/* CONTEXT BANNER AT TOP */}
         {contextInfo && (
-          <div className="chat-context-banner">
+          <div className="chat-context-banner-centered">
             <div className="context-icon">
               {room.context_type === 'appointment' ? <Calendar size={18} /> : <Tag size={18} />}
             </div>
@@ -104,37 +122,26 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
 
         {/* MESSAGES */}
         <div className="chat-messages">
-            <div className="chat-start-notice">Messages expire after 12 hours.</div>
-            {messages.map(msg => {
-                // ✅ Force both to numbers to ensure "===" works correctly
-                const isMe = Number(msg.sender_id) === Number(userId);
-                
-                console.log({
-                    msgSender: msg.sender_id,
-                    localUser: userId,
-                    isMe
-                    });
-
-                return (
-                <div key={msg.id} className={`msg ${isMe ? 'sent' : 'received'}`}>
-                    <span className="msg-sender">
-                    {isMe ? 'You' : msg.sender_name || otherParticipant.name}
-                    </span>
-                    <p className="msg-text">{msg.message}</p>
-                    <span className="time">
-                    {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
-                </div>
-                );
-            })}
-            <div ref={messagesEndRef} />
-            </div>
+          <div className="chat-start-notice">Messages expire after 12 hours.</div>
+          {messages.map(msg => {
+            const isMe = Number(msg.sender_id) === userId;
+            return (
+              <div key={msg.id} className={`msg ${isMe ? 'sent' : 'received'}`}>
+                <p className="msg-text">{msg.message}</p>
+                <span className="time">
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            );
+          })}
+          <div ref={messagesEndRef} />
+        </div>
 
         {/* INPUT */}
         <div className="chat-input">
-          <input 
-            type="text" 
-            value={newMessage} 
+          <input
+            type="text"
+            value={newMessage}
             onChange={e => setNewMessage(e.target.value)}
             onKeyPress={e => e.key === 'Enter' && handleSend()}
             placeholder={`Message ${otherParticipant.name}...`}

@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import { 
   LogOut, User, Bell, CheckCircle, X, Edit, Phone, Calendar, 
-  Briefcase, CheckCheck, Clock, MessageCircle 
+  Briefcase, CheckCheck, Clock 
 } from 'lucide-react';
 // ✅ REMOVED: ChatListModal import - we only use the widget now
 import { useSocket } from '../contexts/SocketContext';
@@ -187,8 +187,6 @@ function Header({ user, onLogout }) {
                   }} 
                   title="Open Messages"
                 >
-                  <MessageCircle size={20} color="#64748b" />
-                  {chatUnreadCount > 0 && <span className="badge">{chatUnreadCount}</span>}
                 </div>
               </div>
 
