@@ -3,37 +3,71 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom'; 
 import api from '../services/auth';
-import { Bell, CheckCheck, CheckCircle, X, Star } from 'lucide-react'; // Added Star
+import { Bell, CheckCheck, CheckCircle, X, Star } from 'lucide-react'; 
 import './Header.css'; 
 
 function NotificationCenter() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [, setTick] = useState(0); // Forces re-render for real-time updates
   const bellRef = useRef(null); 
   const dropdownRef = useRef(null); 
   const navigate = useNavigate(); 
   
   const [coords, setCoords] = useState({ top: 0, right: 0 });
 
+  // ✅ Standardized UTC-to-Local Real-time formatter
   const timeAgo = (dateStr) => {
     if (!dateStr) return 'Just now';
     try {
-      const date = new Date(dateStr);
+      /**
+       * 🟢 THE FIX: 
+       * SQLite sends: "2026-01-26 21:00:00" (UTC)
+       * Standardized: "2026-01-26T21:00:00Z"
+       * This tells JS to convert it to your local time (EAT) before math.
+       */
+      const standardizedDate = dateStr.replace(' ', 'T') + 'Z';
+      const date = new Date(standardizedDate);
       const now = new Date();
-      const diffInMinutes = Math.floor((now - date) / 60000);
-      if (diffInMinutes < 1) return 'Just now';
+      
+      const diffInSeconds = Math.floor((now - date) / 1000);
+      
+      if (diffInSeconds < 5) return 'Just now';
+      if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+      
+      const diffInMinutes = Math.floor(diffInSeconds / 60);
       if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+      
       const diffInHours = Math.floor(diffInMinutes / 60);
       if (diffInHours < 24) return `${diffInHours}h ago`;
-      return date.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-    } catch { return 'Recently'; }
+
+      // Format: Day Month Year (e.g., 26 Jan 2026)
+      return date.toLocaleDateString('en-GB', { 
+        day: 'numeric', 
+        month: 'short', 
+        year: 'numeric' 
+      });
+    } catch (e) { 
+      return 'Recently'; 
+    }
   };
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 15000); 
-    return () => clearInterval(interval);
+    
+    // Poll for new notifications every 15s
+    const fetchInterval = setInterval(fetchNotifications, 15000); 
+
+    // ✅ Real-time update: Refresh UI every 30s to advance "Just now" to "1m ago"
+    const tickerInterval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000); 
+
+    return () => {
+      clearInterval(fetchInterval);
+      clearInterval(tickerInterval);
+    };
   }, []);
 
   useEffect(() => {
@@ -97,9 +131,8 @@ function NotificationCenter() {
     const title = notif.title ? notif.title.toLowerCase() : '';
     const type = notif.type;
 
-    // ✅ CHECK FOR REVIEW PROMPT
+    // Direct navigation for review prompts
     if (title.includes('appointment') && title.includes('?')) {
-        // Directs to History tab where completed appointments reside
         navState = { tab: 'appointments', subTab: 'history', targetId: notif.reference_id };
     }
     else if (['booking', 'new_request', 'reschedule'].includes(type)) {

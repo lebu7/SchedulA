@@ -270,19 +270,19 @@ function initializeDatabase() {
   /* ---------------------------------------------
      🔔 NOTIFICATIONS TABLE
   --------------------------------------------- */
-  db.run(`
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      is_read BOOLEAN DEFAULT 0,
-      reference_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `);
+db.run(`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT 0,
+    reference_id INTEGER,
+    created_at DATETIME DEFAULT (datetime('now')), 
+    FOREIGN KEY (user_id) REFERENCES users (id)
+  )
+`);
 
   /* ---------------------------------------------
      📱 SMS LOGS TABLE
