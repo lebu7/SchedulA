@@ -37,16 +37,16 @@ async function calculateNoShowRisk({
         (err, rows) => {
           if (err) reject(err);
           else resolve(rows || []);
-        }
+        },
       );
     });
 
     const totalAppointments = clientHistory.length;
     const noShowCount = clientHistory.filter(
-      (a) => a.status === "no-show"
+      (a) => a.status === "no-show",
     ).length;
     const cancelCount = clientHistory.filter(
-      (a) => a.status === "cancelled"
+      (a) => a.status === "cancelled",
     ).length;
     const lastReceipt = clientHistory[0]?.total_price || 0;
     const recency = totalAppointments > 0 ? 7 : 30;
@@ -58,7 +58,7 @@ async function calculateNoShowRisk({
         (err, row) => {
           if (err) reject(err);
           else resolve(row);
-        }
+        },
       );
     });
 
@@ -104,7 +104,7 @@ async function calculateNoShowRisk({
 
     const finalRisk = Math.max(
       0,
-      Math.min(1, baseRisk + paymentAdjustment + historyFactor)
+      Math.min(1, baseRisk + paymentAdjustment + historyFactor),
     );
 
     return {
@@ -156,7 +156,7 @@ async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
           try {
             const result = await processPaystackRefund(
               tx.reference,
-              Math.round(refundForThisTx * 100)
+              Math.round(refundForThisTx * 100),
             );
 
             if (result.success) {
@@ -181,7 +181,7 @@ async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
           refunded: totalRefundAmount - remainingRefund,
           references: refundResults.map((r) => r.refund_reference),
         });
-      }
+      },
     );
   });
 }
@@ -236,11 +236,11 @@ router.get("/", authenticateToken, (req, res) => {
       (a) =>
         a.status === "pending" ||
         (a.status === "cancelled" &&
-          (a.refund_status === "pending" || a.refund_status === "processing"))
+          (a.refund_status === "pending" || a.refund_status === "processing")),
     );
 
     const scheduledList = appointments.filter(
-      (a) => a.status === "scheduled" && a.appointment_date > now
+      (a) => a.status === "scheduled" && a.appointment_date > now,
     );
 
     const pastList = appointments.filter(
@@ -252,7 +252,7 @@ router.get("/", authenticateToken, (req, res) => {
           (a.refund_status === "completed" ||
             a.refund_status === "failed" ||
             a.refund_status === null)) ||
-        (a.status === "scheduled" && a.appointment_date <= now)
+        (a.status === "scheduled" && a.appointment_date <= now),
     );
 
     if (userType === "client") {
@@ -302,9 +302,9 @@ router.get("/:id/transactions", authenticateToken, (req, res) => {
               .status(500)
               .json({ error: "Failed to fetch transactions" });
           res.json({ transactions: rows || [] });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -341,6 +341,68 @@ router.get("/sms-stats", authenticateToken, async (req, res) => {
     console.error("Error fetching SMS stats:", error);
     res.status(500).json({ error: "Failed to fetch SMS statistics" });
   }
+});
+
+/* ---------------------------------------------
+   👤 GET Client History (Provider Only) - ✅ NEW ENDPOINT
+--------------------------------------------- */
+router.get("/client-history/:clientId", authenticateToken, (req, res) => {
+  const providerId = req.user.userId;
+  const { clientId } = req.params;
+
+  if (req.user.user_type !== "provider") {
+    return res.status(403).json({ error: "Access denied. Providers only." });
+  }
+
+  // 1. Fetch Client Profile
+  db.get(
+    `SELECT id, name, phone, email, created_at FROM users WHERE id = ?`,
+    [clientId],
+    (err, client) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (!client) return res.status(404).json({ error: "Client not found" });
+
+      // 2. Fetch Appointments strictly with this Provider
+      db.all(
+        `SELECT a.*, s.name AS service_name
+         FROM appointments a
+         JOIN services s ON a.service_id = s.id
+         WHERE a.client_id = ? AND a.provider_id = ?
+         ORDER BY a.appointment_date DESC`,
+        [clientId, providerId],
+        (err2, history) => {
+          if (err2)
+            return res.status(500).json({ error: "Failed to fetch history" });
+
+          // 3. Calculate Aggregated Stats
+          const completedApts = history.filter((a) => a.status === "completed");
+          const totalVisits = completedApts.length;
+          const totalSpent = history.reduce(
+            (sum, a) => sum + (a.amount_paid || 0),
+            0,
+          );
+          const noShows = history.filter((a) => a.status === "no-show").length;
+          const cancellations = history.filter(
+            (a) => a.status === "cancelled",
+          ).length;
+
+          const stats = {
+            total_visits: totalVisits,
+            total_spent: totalSpent,
+            no_shows: noShows,
+            cancellations: cancellations,
+            last_visit: history[0]?.appointment_date || null,
+          };
+
+          res.json({
+            client,
+            stats,
+            history,
+          });
+        },
+      );
+    },
+  );
 });
 
 /* ---------------------------------------------
@@ -401,11 +463,11 @@ router.get("/providers/:id/availability", (req, res) => {
                 closing_time: provider.closing_time || "18:00",
                 booked_slots: bookedSlots,
               });
-            }
+            },
           );
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -499,7 +561,7 @@ router.post(
                 const nairobiTime = new Date(
                   appointmentDate.toLocaleString("en-US", {
                     timeZone: "Africa/Nairobi",
-                  })
+                  }),
                 );
                 const bookingMinutes =
                   nairobiTime.getHours() * 60 + nairobiTime.getMinutes();
@@ -520,7 +582,7 @@ router.post(
 
                 const newStartISO = appointmentDate.toISOString();
                 const newEndISO = new Date(
-                  appointmentDate.getTime() + service.duration * 60000
+                  appointmentDate.getTime() + service.duration * 60000,
                 ).toISOString();
 
                 // ⚠️ FIX: Check active slots (excluding completed) for capacity check
@@ -554,7 +616,7 @@ router.post(
                         (sum, addon) =>
                           sum +
                           Number(addon.price ?? addon.additional_price ?? 0),
-                        0
+                        0,
                       );
                     }
                     const total_price =
@@ -629,7 +691,7 @@ router.post(
                               is_walk_in
                                 ? `WALKIN_${Date.now()}`
                                 : payment_reference,
-                            ]
+                            ],
                           );
                         }
 
@@ -645,7 +707,7 @@ router.post(
                             baseRisk,
                             paymentRatio,
                             historyFactor,
-                          ]
+                          ],
                         );
 
                         if (rebook_from) {
@@ -653,7 +715,7 @@ router.post(
                             `UPDATE appointments SET status = 'rebooked' WHERE id = ? AND client_id = ?`,
                             [rebook_from, client_id],
                             (e) =>
-                              e && console.error("Failed to mark rebooked:", e)
+                              e && console.error("Failed to mark rebooked:", e),
                           );
                         }
 
@@ -688,7 +750,7 @@ router.post(
                               if (
                                 shouldNotify(
                                   fullApt.client_prefs,
-                                  "booking_alerts"
+                                  "booking_alerts",
                                 )
                               ) {
                                 createNotification(
@@ -696,7 +758,7 @@ router.post(
                                   "booking",
                                   "Booking Sent",
                                   `Your booking for ${service.name} is pending approval.`,
-                                  newId
+                                  newId,
                                 );
                               }
 
@@ -707,7 +769,7 @@ router.post(
                               if (
                                 shouldNotify(
                                   fullApt.provider_prefs,
-                                  "booking_alerts"
+                                  "booking_alerts",
                                 )
                               ) {
                                 createNotification(
@@ -715,7 +777,7 @@ router.post(
                                   "booking",
                                   "New Booking Request",
                                   alertMsg,
-                                  newId
+                                  newId,
                                 );
                               }
 
@@ -728,7 +790,7 @@ router.post(
                                 },
                                 clientObj,
                                 { name: fullApt.service_name },
-                                providerObj
+                                providerObj,
                               );
 
                               await smsService.sendProviderNotification(
@@ -740,9 +802,9 @@ router.post(
                                 },
                                 providerObj,
                                 clientObj,
-                                { name: fullApt.service_name }
+                                { name: fullApt.service_name },
                               );
-                            }
+                            },
                           );
                         }
 
@@ -750,17 +812,17 @@ router.post(
                           message: "Appointment booked successfully",
                           appointmentId: newId,
                         });
-                      }
+                      },
                     );
-                  }
+                  },
                 );
-              }
+              },
             );
-          }
+          },
         );
-      }
+      },
     );
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -782,7 +844,7 @@ router.put("/providers/:id/closed", authenticateToken, (req, res) => {
           ? "Provider marked as closed"
           : "Provider marked as open",
       });
-    }
+    },
   );
 });
 
@@ -824,9 +886,9 @@ router.put(
           opening_time,
           closing_time,
         });
-      }
+      },
     );
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -885,7 +947,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
           result.baseRisk,
           result.paymentRatio,
           result.historyFactor,
-        ]
+        ],
       );
     }
 
@@ -934,7 +996,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
       if (["completed", "no-show", "cancelled"].includes(effectiveStatus)) {
         db.run(
           `UPDATE ai_predictions SET actual_outcome = ? WHERE appointment_id = ?`,
-          [effectiveStatus, id]
+          [effectiveStatus, id],
         );
       }
 
@@ -978,14 +1040,14 @@ router.put("/:id", authenticateToken, async (req, res) => {
                   "booking",
                   "Booking Confirmed",
                   `Your booking for ${fullApt.service_name} has been confirmed.`,
-                  id
+                  id,
                 );
               }
               await smsService.sendBookingAccepted(
                 { ...fullApt, id: id },
                 clientObj,
                 { name: fullApt.service_name },
-                providerObj
+                providerObj,
               );
             }
 
@@ -997,7 +1059,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                     "cancellation",
                     "Booking Cancelled",
                     `You cancelled appointment #${id}. Refund request sent.`,
-                    id
+                    id,
                   );
                 }
 
@@ -1007,7 +1069,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                     "cancellation",
                     "Booking Cancelled",
                     `${fullApt.client_name} cancelled appointment #${id}.`,
-                    id
+                    id,
                   );
                 }
               } else {
@@ -1017,7 +1079,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                     "cancellation",
                     "Booking Cancelled",
                     `Provider cancelled your appointment #${id}.`,
-                    id
+                    id,
                   );
                 }
               }
@@ -1032,7 +1094,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                 clientObj,
                 { name: fullApt.service_name },
                 notes,
-                userType
+                userType,
               );
             }
 
@@ -1063,7 +1125,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                     "reschedule",
                     "High Risk Reschedule",
                     `⚠️ ${fullApt.client_name}'s rescheduled slot has High No-Show Risk.`,
-                    id
+                    id,
                   );
                 }
               }
@@ -1074,11 +1136,11 @@ router.put("/:id", authenticateToken, async (req, res) => {
                 { name: fullApt.service_name },
                 providerObj,
                 apt.appointment_date,
-                effectiveStatus
+                effectiveStatus,
               );
             }
           }
-        }
+        },
       );
 
       res.json({ message: "Appointment updated successfully" });
@@ -1134,14 +1196,14 @@ router.delete("/:id", authenticateToken, (req, res) => {
                 if (row && row.client_deleted && row.provider_deleted) {
                   db.run("DELETE FROM appointments WHERE id = ?", [id]);
                 }
-              }
+              },
             );
           }
 
           res.json({ message: "Appointment removed from dashboard" });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -1189,14 +1251,14 @@ router.put("/:id/payment", authenticateToken, (req, res) => {
 
       db.run(
         `INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`,
-        [id, paid, payment_reference]
+        [id, paid, payment_reference],
       );
 
       db.run(
         `UPDATE ai_predictions 
                   SET predicted_risk = ?, payment_amount = ?, base_risk_before_payment = ?, payment_ratio = ?, client_history_factor = ? 
                   WHERE appointment_id = ?`,
-        [riskScore, paid, baseRisk, paymentRatio, historyFactor, id]
+        [riskScore, paid, baseRisk, paymentRatio, historyFactor, id],
       );
 
       db.get(
@@ -1213,12 +1275,12 @@ router.put("/:id/payment", authenticateToken, (req, res) => {
                   "payment",
                   "Payment Received",
                   `Payment of KES ${paid} received for Appt #${id}.`,
-                  id
+                  id,
                 );
               }
-            }
+            },
           );
-        }
+        },
       );
 
       return res.json({
@@ -1290,14 +1352,14 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
 
       db.run(
         `INSERT INTO transactions (appointment_id, amount, reference, type, status) VALUES (?, ?, ?, 'payment', 'success')`,
-        [id, amount_paid, payment_reference]
+        [id, amount_paid, payment_reference],
       );
 
       db.run(
         `UPDATE ai_predictions 
                 SET predicted_risk = ?, payment_amount = ?, base_risk_before_payment = ?, payment_ratio = ?, client_history_factor = ? 
                 WHERE appointment_id = ?`,
-        [riskScore, newPaid, baseRisk, paymentRatio, historyFactor, id]
+        [riskScore, newPaid, baseRisk, paymentRatio, historyFactor, id],
       );
 
       db.get(
@@ -1310,10 +1372,10 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
               "payment",
               "Balance Paid",
               `Balance payment of KES ${amount_paid} received for Appt #${id}.`,
-              id
+              id,
             );
           }
-        }
+        },
       );
 
       db.get(
@@ -1337,10 +1399,10 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
                 phone: fullApt.phone,
                 notification_preferences: fullApt.notification_preferences,
               },
-              { name: fullApt.service_name }
+              { name: fullApt.service_name },
             );
           }
-        }
+        },
       );
 
       res.json({
@@ -1395,19 +1457,19 @@ router.post("/:id/request-balance", authenticateToken, (req, res) => {
                   "payment",
                   "Balance Request",
                   `Provider requested balance payment of KES ${amount_requested}.`,
-                  id
+                  id,
                 );
               }
-            }
+            },
           );
 
           res.json({
             message: "Payment request created",
             request_id: this.lastID,
           });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -1449,7 +1511,7 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
 
       db.run(
         `UPDATE appointments SET refund_status = 'processing' WHERE id = ?`,
-        [id]
+        [id],
       );
 
       try {
@@ -1462,7 +1524,7 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
                  refund_completed_at = datetime('now'),
                  payment_status = 'refunded'
              WHERE id = ?`,
-          [result.references.join(","), id]
+          [result.references.join(","), id],
         );
 
         if (shouldNotify(apt.client_prefs, "payment_alerts")) {
@@ -1471,7 +1533,7 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
             "refund",
             "Refund Processed",
             `Your refund of KES ${amountToRefund} has been processed.`,
-            id
+            id,
           );
         }
 
@@ -1483,7 +1545,7 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
             notification_preferences: apt.client_prefs,
           },
           amountToRefund,
-          "completed"
+          "completed",
         );
 
         res.json({
@@ -1494,13 +1556,13 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
         console.error("Manual refund failed:", error);
         db.run(
           `UPDATE appointments SET refund_status = 'failed' WHERE id = ?`,
-          [id]
+          [id],
         );
         res
           .status(500)
           .json({ error: "Refund processing failed", details: error.message });
       }
-    }
+    },
   );
 });
 
@@ -1547,13 +1609,13 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
                  refund_initiated_at = datetime('now'),
                  payment_status = 'refund-pending'
              WHERE id = ?`,
-            [amountPaid, appointmentId]
+            [amountPaid, appointmentId],
           );
 
           try {
             const result = await processMultiTransactionRefund(
               appointmentId,
-              amountPaid
+              amountPaid,
             );
 
             db.run(
@@ -1563,7 +1625,7 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
                    refund_completed_at = datetime('now'),
                    payment_status = 'refunded'
                WHERE id = ?`,
-              [result.references.join(","), appointmentId]
+              [result.references.join(","), appointmentId],
             );
 
             if (shouldNotify(apt.client_prefs, "payment_alerts")) {
@@ -1572,7 +1634,7 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
                 "refund",
                 "Refund Processed",
                 `Your refund of KES ${amountPaid} for Appt #${appointmentId} is complete.`,
-                appointmentId
+                appointmentId,
               );
             }
 
@@ -1580,14 +1642,14 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
               { id: appointmentId, payment_reference: apt.payment_reference },
               clientObj,
               amountPaid,
-              "completed"
+              "completed",
             );
             resolve();
           } catch (refundError) {
             console.error("❌ Auto-Refund Failed:", refundError);
             db.run(
               `UPDATE appointments SET refund_status = 'failed' WHERE id = ?`,
-              [appointmentId]
+              [appointmentId],
             );
 
             if (shouldNotify(apt.provider_prefs, "payment_alerts")) {
@@ -1596,14 +1658,14 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
                 "refund",
                 "Auto-Refund Failed",
                 `Automatic refund for Appt #${appointmentId} failed. Please process it manually from dashboard.`,
-                appointmentId
+                appointmentId,
               );
             }
             resolve();
           }
         } else if (cancelledBy === "client") {
           console.log(
-            `Client cancelled. Requesting refund for Appt #${appointmentId}`
+            `Client cancelled. Requesting refund for Appt #${appointmentId}`,
           );
 
           db.run(
@@ -1613,7 +1675,7 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
                  refund_initiated_at = datetime('now'),
                  payment_status = 'refund-pending'
              WHERE id = ?`,
-            [amountPaid, appointmentId]
+            [amountPaid, appointmentId],
           );
 
           if (shouldNotify(apt.provider_prefs, "payment_alerts")) {
@@ -1622,7 +1684,7 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
               "refund",
               "Refund Request",
               `Client cancelled Appt #${appointmentId}. Please process refund.`,
-              appointmentId
+              appointmentId,
             );
           }
 
@@ -1630,11 +1692,11 @@ async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
             { id: appointmentId },
             providerObj,
             clientObj,
-            amountPaid
+            amountPaid,
           );
           resolve();
         }
-      }
+      },
     );
   });
 }

@@ -7,6 +7,8 @@ import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
 import CalendarView from "./CalendarView"; 
 import ChatButton from './ChatButton';
+// ✅ ADDED: Import Client Report Modal
+import ClientReportModal from './ClientReportModal';
 import { useSocket } from "../contexts/SocketContext";
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
@@ -300,6 +302,9 @@ function AppointmentManager({ user }) {
   const [loadingServices, setLoadingServices] = useState(false);
   const [walkInService, setWalkInService] = useState(null);
 
+  // ✅ Client Report State
+  const [reportClientId, setReportClientId] = useState(null);
+
   const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
   useEffect(() => {
@@ -421,7 +426,6 @@ function AppointmentManager({ user }) {
     setShowReschedule(true);
   };
 
-  // ✅ FIXED: Added 'status' and 'recipientName' to Chat Event
   const openAppointmentChat = async (apt) => {
     const recipientId = user.user_type === 'client' ? apt.provider_id : apt.client_id;
     const recipientName = user.user_type === 'client' 
@@ -438,7 +442,7 @@ function AppointmentManager({ user }) {
       const contextData = { 
         service_name: apt.service_name, 
         appointment_date: apt.appointment_date,
-        status: apt.status, // ✅ ADDED status so banner can display it
+        status: apt.status, 
         price: apt.total_price
       };
 
@@ -657,19 +661,30 @@ function AppointmentManager({ user }) {
                    <ChatButton 
                       onClick={() => {
                         openAppointmentChat(apt);
-                        resetRoomUnread(apt.id); // resets unread for this appointment room
+                        resetRoomUnread(apt.id); 
                       }}
                       size="small"
                       contextType="appointment"
                       contextId={apt.id}
-                      unreadCount={roomUnreadCounts[apt.id] || 0} // per-appointment unread
+                      unreadCount={roomUnreadCounts[apt.id] || 0} 
                       disableGlobalCounter={true}
                     />
                 </div>
             ) : (
                 <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <p><strong>Client:</strong> {apt.client_name} ({apt.client_phone})</p>
+                    {/* ✅ CLIENT NAME IS NOW CLICKABLE FOR REPORT */}
+                    <p>
+                        <strong>Client:</strong>{' '}
+                        <span 
+                            onClick={(e) => { e.stopPropagation(); setReportClientId(apt.client_id); }}
+                            style={{ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
+                            title="View Visit Report"
+                        >
+                            {apt.client_name}
+                        </span> 
+                        {' '}({apt.client_phone})
+                    </p>
                     {/* ✅ Integrated Chat Button */}
                     <ChatButton 
                       onClick={() => openAppointmentChat(apt)} 
@@ -1147,6 +1162,14 @@ function AppointmentManager({ user }) {
             payment={selectedPayment}
             user={user} 
             onClose={() => setSelectedPayment(null)}
+          />
+        )}
+
+        {/* ✅ RENDER CLIENT REPORT MODAL */}
+        {reportClientId && (
+          <ClientReportModal
+            clientId={reportClientId}
+            onClose={() => setReportClientId(null)}
           />
         )}
 
