@@ -10,7 +10,8 @@ import ProviderAnalytics from './ProviderAnalytics';
 import BookingModal from './BookingModal'; 
 import { 
   Calendar, Clock, User, DollarSign, Plus, Bell, RefreshCw, 
-  ChevronRight, Briefcase, Zap, Star, Heart, MapPin, List
+  ChevronRight, Briefcase, Zap, Star, Heart, MapPin, List,
+  BarChart2, TrendingUp 
 } from 'lucide-react';
 import './Dashboard.css';
 
@@ -46,7 +47,6 @@ function Dashboard({ user, setUser }) {
         const el = document.getElementById(`target-${targetId}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Optional: Add a flash effect class here if you want
         }
       }, 300);
     }
@@ -67,7 +67,7 @@ function Dashboard({ user, setUser }) {
     }
   }, [activeTab, user]);
 
-  // Carousel Logic for Services
+  // Carousel Logic
   useEffect(() => {
     if (favorites.services.length > 1) {
       const interval = setInterval(() => {
@@ -77,7 +77,6 @@ function Dashboard({ user, setUser }) {
     }
   }, [favorites.services]);
 
-  // Carousel Logic for Providers
   useEffect(() => {
     if (favorites.providers.length > 2) {
       const interval = setInterval(() => {
@@ -87,7 +86,6 @@ function Dashboard({ user, setUser }) {
     }
   }, [favorites.providers]);
 
-  // Helper for Category Colors
   const getCategoryColor = (category) => {
     const cat = category?.toLowerCase() || '';
     if (cat.includes('salon')) return 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)';
@@ -117,6 +115,12 @@ function Dashboard({ user, setUser }) {
     return "Good Evening";
   };
 
+  // ✅ New Handler: Ensures Appointments tab opens in 'list' view
+  const handleAppointmentsTabClick = () => {
+    navigate('.', { state: { tab: 'appointments', viewMode: 'list' }, replace: true });
+    setActiveTab('appointments');
+  };
+
   const renderOverview = () => (
     <div className="dashboard-overview">
       <div className="main-feed">
@@ -141,10 +145,11 @@ function Dashboard({ user, setUser }) {
           </button>
         </div>
 
+        {/* --- CLIENT VIEW --- */}
         {user.user_type === 'client' && favorites.services.length > 0 && (
             <div className="section-block fade-in">
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-                    <h3>❤️ Favorite Services</h3>
+                    <h3>Favorite Services</h3>
                     <div className="carousel-indicators">
                         {favorites.services.map((_, idx) => (
                             <span 
@@ -179,6 +184,7 @@ function Dashboard({ user, setUser }) {
             </div>
         )}
 
+        {/* --- PROVIDER VIEW --- */}
         {user.user_type === 'provider' && dashboardData && (
           <>
             <div className="pulse-grid">
@@ -219,6 +225,86 @@ function Dashboard({ user, setUser }) {
               </div>
             </div>
 
+            {/* NEW: Peak Hours & Service Popularity (Increased Height) */}
+            <div className="insights-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
+              
+              {/* 1. Peak Hours Analysis */}
+              <div className="section-block" style={{ marginTop: 0 }}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <BarChart2 size={18} color="#f59e0b" /> Peak Hours
+                </h3>
+                <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  {dashboardData.peak_hours?.length > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '180px' }}> {/* Increased Height */}
+                      {dashboardData.peak_hours.map((item, idx) => {
+                        const max = Math.max(...dashboardData.peak_hours.map(i => i.count));
+                        const height = (item.count / max) * 160; // Scaled to new height
+                        return (
+                          <div key={idx} style={{ textAlign: 'center', flex: 1 }}>
+                            <div 
+                              style={{ 
+                                height: `${height}px`, 
+                                background: idx === 0 ? '#3b82f6' : '#bfdbfe', 
+                                width: '24px', 
+                                margin: '0 auto', 
+                                borderRadius: '4px 4px 0 0',
+                                position: 'relative'
+                              }}
+                              title={`${item.count} bookings`}
+                            >
+                              {idx === 0 && <span style={{ position: 'absolute', top: '-25px', left: '-2px', fontSize: '0.75rem', fontWeight: 'bold', color: '#3b82f6' }}>{item.count}</span>}
+                            </div>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748b', marginTop: '8px', display: 'block' }}>
+                              {item.hour}:00
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem', fontStyle: 'italic', padding: '2rem' }}>No data available yet</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Service Popularity Ranking */}
+              <div className="section-block" style={{ marginTop: 0 }}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <TrendingUp size={18} color="#10b981" /> Top Services
+                </h3>
+                <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', minHeight: '212px' }}> {/* Matches Height */}
+                  {dashboardData.top_services?.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {dashboardData.top_services.map((svc, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#cbd5e1', width: '20px' }}>#{idx + 1}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#1e293b' }}>{svc.name}</span>
+                              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{svc.booking_count} bookings</span>
+                            </div>
+                            <div style={{ height: '8px', width: '100%', background: '#f1f5f9', borderRadius: '4px' }}>
+                              <div 
+                                style={{ 
+                                  height: '100%', 
+                                  background: idx === 0 ? '#10b981' : '#34d399', 
+                                  width: `${(svc.booking_count / dashboardData.top_services[0].booking_count) * 100}%`,
+                                  borderRadius: '4px'
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem', fontStyle: 'italic', padding: '2rem' }}>No completed bookings yet</p>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
             <div className="section-block">
               <h3>📅 Today's Schedule</h3>
               <div className="timeline-list">
@@ -226,7 +312,7 @@ function Dashboard({ user, setUser }) {
                   dashboardData.today_schedule.map(apt => (
                     <div 
                         key={apt.id} 
-                        id={`target-${apt.id}`} // ✅ ADDED ID FOR SCROLLING
+                        id={`target-${apt.id}`}
                         className="timeline-item"
                     >
                       <div className="time-col">
@@ -250,12 +336,13 @@ function Dashboard({ user, setUser }) {
           </>
         )}
 
+        {/* --- CLIENT VIEW (Cont.) --- */}
         {user.user_type === 'client' && dashboardData && (
           <>
             {dashboardData.next_appointment ? (
               <div 
                 className="up-next-card"
-                id={`target-${dashboardData.next_appointment.id}`} // ✅ ADDED ID FOR SCROLLING
+                id={`target-${dashboardData.next_appointment.id}`}
               >
                 <div className="next-header">
                   <Clock size={16} /> Up Next
@@ -283,12 +370,12 @@ function Dashboard({ user, setUser }) {
 
             {dashboardData.rebook_suggestions?.length > 0 && (
               <div className="section-block">
-                <h3>🔄 Book Again</h3>
+                <h3>Book Again</h3>
                 <div className="rebook-grid">
                   {dashboardData.rebook_suggestions.map(s => (
                     <div 
                         key={s.id} 
-                        id={`target-${s.id}`} // ✅ ADDED ID FOR SCROLLING
+                        id={`target-${s.id}`}
                         className="rebook-card" 
                         onClick={() => navigate('/dashboard', { state: { tab: 'services', search: s.name } })}
                     >
@@ -315,7 +402,8 @@ function Dashboard({ user, setUser }) {
               <div className="icon-box blue"><Briefcase size={20} /></div>
               <span>{user.user_type === 'client' ? 'Find Services' : 'My Services'}</span>
             </button>
-            <button onClick={() => setActiveTab('appointments')}>
+            {/* ✅ UPDATED: Always opens in list view */}
+            <button onClick={handleAppointmentsTabClick}>
               <div className="icon-box purple"><List size={20} /></div>
               <span>{user.user_type === 'client' ? 'My Schedule' : 'Manage List'}</span>
             </button>
@@ -335,7 +423,7 @@ function Dashboard({ user, setUser }) {
         {user.user_type === 'client' && favorites.providers.length > 0 && (
             <div className="sidebar-card">
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
-                  <h4><Heart size={18} color="#ef4444" fill="#ef4444" /> Favorites</h4>
+                  <h4>Favorite Providers</h4>
                   {favorites.providers.length > 2 && (
                     <div className="carousel-indicators mini">
                       {favorites.providers.map((_, idx) => (
@@ -418,7 +506,8 @@ function Dashboard({ user, setUser }) {
               <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
             )}
             <button className={`tab-btn ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Services</button>
-            <button className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}>{user.user_type === 'client' ? 'Schedule' : 'Appointments'}</button>
+            {/* ✅ UPDATED: Always opens in list view */}
+            <button className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} onClick={handleAppointmentsTabClick}>{user.user_type === 'client' ? 'Schedule' : 'Appointments'}</button>
             <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>Settings</button>
           </div>
         </div>
