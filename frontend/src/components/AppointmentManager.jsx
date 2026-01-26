@@ -271,7 +271,20 @@ function AppointmentManager({ user }) {
   });
   const [loading, setLoading] = useState(true);
   
-  const [viewMode, setViewMode] = useState('list'); 
+  const [viewMode, setViewMode] = useState(() => {
+
+  if (location.state?.viewMode) {
+    return location.state.viewMode;
+  }
+
+  return 'list';
+}); 
+
+useEffect(() => {
+  if (location.state?.viewMode) {
+    setViewMode(location.state.viewMode);
+  }
+}, [location.state]);
 
   const [activeTab, setActiveTab] = useState(() => {
     if (location.state?.subTab) return location.state.subTab;

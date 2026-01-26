@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import BookingModal from './BookingModal';
-// ✅ ADDED: MessageCircle icon & ChatButton CSS for styling
-import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle } from 'lucide-react';
+// ✅ ADDED: Heart icon
+import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle, Heart } from 'lucide-react';
 import './ProviderProfile.css';
 import './ChatButton.css'; // Ensure we get the consistent button style
 
@@ -17,7 +17,8 @@ const ProviderProfile = ({ user }) => {
     const [selectedService, setSelectedService] = useState(null);
     const [showBookingModal, setShowBookingModal] = useState(false);
 
-    // ❌ REMOVED: Local chatRoom state (handled globally now)
+    // ✅ ADDED: Favorite State
+    const [isFavorite, setIsFavorite] = useState(false);
 
     useEffect(() => {
         const fetchProviderData = async () => {
@@ -32,6 +33,30 @@ const ProviderProfile = ({ user }) => {
         };
         fetchProviderData();
     }, [id]);
+
+    // ✅ ADDED: Check if provider is favorited (Only for Clients)
+    useEffect(() => {
+        if (user && user.user_type === 'client') {
+            api.get('/favorites')
+                .then(res => {
+                    const providers = res.data.providers || [];
+                    const found = providers.some(p => Number(p.item_id) === Number(id));
+                    setIsFavorite(found);
+                })
+                .catch(err => console.error("Failed to fetch favorites:", err));
+        }
+    }, [id, user]);
+
+    // ✅ ADDED: Toggle Favorite Handler
+    const handleToggleFavorite = async () => {
+        try {
+            await api.post('/favorites/toggle', { itemId: id, type: 'provider' });
+            setIsFavorite(prev => !prev);
+        } catch (err) {
+            console.error("Failed to toggle favorite", err);
+            alert("Could not update favorites.");
+        }
+    };
 
     // ✅ UPDATED: Open Chat via Global Widget Event
     const openProfileChat = async () => {
@@ -89,8 +114,33 @@ const ProviderProfile = ({ user }) => {
                         <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
                     </div>
                     
-                    {/* ✅ UPDATED: Chat Button with Text ("Open Chat") */}
+                    {/* ✅ UPDATED: Added Favorite Button next to Chat Button */}
                     <div className="header-actions">
+                        {user && user.user_type === 'client' && (
+                            <button 
+                                onClick={handleToggleFavorite}
+                                style={{
+                                    background: 'white',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    cursor: 'pointer',
+                                    color: isFavorite ? '#ef4444' : '#475569',
+                                    fontWeight: '600',
+                                    fontSize: '14px',
+                                    marginRight: '10px',
+                                    transition: 'all 0.2s'
+                                }}
+                                title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                            >
+                                <Heart size={20} fill={isFavorite ? "currentColor" : "none"} />
+                                <span>{isFavorite ? 'Saved' : 'Save'}</span>
+                            </button>
+                        )}
+
                         <button className="chat-btn" onClick={openProfileChat}>
                             <MessageCircle size={20} />
                             <span>Open Chat</span>

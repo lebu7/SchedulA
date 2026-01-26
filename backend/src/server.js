@@ -15,6 +15,7 @@ import appointmentRoutes from "./routes/appointments.js";
 import notificationRoutes from "./routes/notifications.js";
 import analyticsRoutes from "./routes/analytics.js";
 import chatRoutes from "./routes/chat.js"; // ✅ Added Chat Routes
+import favoritesRoutes from "./routes/favorites.js"; // ✅ Added Favorites Routes
 
 // ✅ Import SMS Scheduled Reminders
 import { sendScheduledReminders } from "./services/smsService.js";
@@ -39,6 +40,7 @@ app.use("/api/appointments", appointmentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/insights", analyticsRoutes);
 app.use("/api/chat", chatRoutes); // ✅ Mounted Chat Routes
+app.use("/api/favorites", favoritesRoutes); // ✅ Mounted Favorites Routes
 
 // Health check
 app.get("/api/health", (req, res) => {

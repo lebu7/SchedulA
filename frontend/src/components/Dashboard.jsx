@@ -1,3 +1,4 @@
+/* frontend/src/components/Dashboard.jsx */
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom'; 
 import api from '../services/auth';
@@ -6,33 +7,91 @@ import ServiceManager from './ServiceManager';
 import AppointmentManager from './AppointmentManager';
 import Settings from './Settings';
 import ProviderAnalytics from './ProviderAnalytics'; 
+import BookingModal from './BookingModal'; 
 import { 
   Calendar, Clock, User, DollarSign, Plus, Bell, RefreshCw, 
-  ChevronRight, Briefcase, Zap, Star, BarChart2
+  ChevronRight, Briefcase, Zap, Star, Heart, MapPin, List
 } from 'lucide-react';
 import './Dashboard.css';
 
 function Dashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [dashboardData, setDashboardData] = useState(null);
+  
+  // ✅ Favorites State
+  const [favorites, setFavorites] = useState({ services: [], providers: [] });
+  const [currentFavIndex, setCurrentFavIndex] = useState(0);
+  const [currentProvIndex, setCurrentProvIndex] = useState(0); 
+
+  // ✅ Booking State
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [selectedService, setSelectedService] = useState(null);
+
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Handle Tab Navigation via State
   useEffect(() => {
     if (location.state?.tab) {
       setActiveTab(location.state.tab);
     }
   }, [location.state]);
 
-  // Fetch Dashboard Data (Pulse/Upcoming)
   useEffect(() => {
     if (activeTab === 'overview') {
       api.get('/insights/summary')
         .then(res => setDashboardData(res.data))
         .catch(err => console.error("Dashboard Load Error:", err));
+
+      if (user.user_type === 'client') {
+        api.get('/favorites')
+          .then(res => setFavorites(res.data))
+          .catch(err => console.error("Favorites Load Error:", err));
+      }
     }
   }, [activeTab, user]);
+
+  // Carousel Logic for Services
+  useEffect(() => {
+    if (favorites.services.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentFavIndex((prev) => (prev + 1) % favorites.services.length);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [favorites.services]);
+
+  // Carousel Logic for Providers (if > 2)
+  useEffect(() => {
+    if (favorites.providers.length > 2) {
+      const interval = setInterval(() => {
+        setCurrentProvIndex((prev) => (prev + 1) % favorites.providers.length);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [favorites.providers]);
+
+  // Helper for Category Colors
+  const getCategoryColor = (category) => {
+    const cat = category?.toLowerCase() || '';
+    if (cat.includes('salon')) return 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)';
+    if (cat.includes('spa')) return 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)';
+    if (cat.includes('barber')) return 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+    return 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+  };
+
+  const handleBookService = (service) => {
+    const serviceObj = {
+        id: service.item_id, 
+        name: service.name,
+        price: service.price,
+        duration: service.duration,
+        provider_id: service.provider_id,
+        provider_name: service.provider_name,
+        business_name: service.business_name
+    };
+    setSelectedService(serviceObj);
+    setShowBookingModal(true);
+  };
 
   const getTimeBasedGreeting = () => {
     const hour = new Date().getHours();
@@ -41,15 +100,9 @@ function Dashboard({ user, setUser }) {
     return "Good Evening";
   };
 
-  /* -------------------------------------------
-     OVERVIEW TAB CONTENT
-  ------------------------------------------- */
   const renderOverview = () => (
     <div className="dashboard-overview">
-      {/* LEFT COLUMN: Main Content */}
       <div className="main-feed">
-        
-        {/* 1. Welcome Header */}
         <div className="welcome-section">
           <div className="welcome-text">
             <h1>{getTimeBasedGreeting()}, {user.name.split(' ')[0]}!</h1>
@@ -61,17 +114,57 @@ function Dashboard({ user, setUser }) {
           </div>
           <button 
             className="btn-primary-icon" 
-            onClick={() => setActiveTab(user.user_type === 'client' ? 'services' : 'appointments')}
+            onClick={() => {
+              // We set the tab, but we also pass the view preference to the component
+              setActiveTab('appointments');
+              navigate('/dashboard', { state: { tab: 'appointments', viewMode: 'calendar' } });
+            }}
           >
-            {user.user_type === 'client' ? <Plus size={18} /> : <Calendar size={18} />}
-            <span>{user.user_type === 'client' ? "Book New" : "View Calendar"}</span>
+            <Calendar size={18} />
+            <span>View Calendar</span>
           </button>
         </div>
 
-        {/* 2. PROVIDER: Business at a Glance */}
+        {user.user_type === 'client' && favorites.services.length > 0 && (
+            <div className="section-block fade-in">
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                    <h3>❤️ Favorite Services</h3>
+                    <div className="carousel-indicators">
+                        {favorites.services.map((_, idx) => (
+                            <span 
+                                key={idx} 
+                                className={`indicator-dot ${idx === currentFavIndex ? 'active' : ''}`}
+                                onClick={() => setCurrentFavIndex(idx)}
+                            ></span>
+                        ))}
+                    </div>
+                </div>
+                
+                <div 
+                    className="favorite-service-card" 
+                    style={{ background: getCategoryColor(favorites.services[currentFavIndex].category) }}
+                >
+                    {(() => {
+                        const s = favorites.services[currentFavIndex];
+                        return (
+                            <div className="fav-service-content">
+                                <div className="fav-icon-box"><Star size={24} color="white" fill="white" /></div>
+                                <div className="fav-info">
+                                    <h4>{s.name}</h4>
+                                    <p>{s.business_name || s.provider_name} • KES {s.price}</p>
+                                </div>
+                                <button className="btn-book-fav" onClick={() => handleBookService(s)}>
+                                    Book Now
+                                </button>
+                            </div>
+                        );
+                    })()}
+                </div>
+            </div>
+        )}
+
         {user.user_type === 'provider' && dashboardData && (
           <>
-            {/* Pulse Row */}
             <div className="pulse-grid">
               <div className="stat-card blue">
                 <div className="stat-icon"><Calendar size={24} /></div>
@@ -110,7 +203,6 @@ function Dashboard({ user, setUser }) {
               </div>
             </div>
 
-            {/* Visual Schedule */}
             <div className="section-block">
               <h3>📅 Today's Schedule</h3>
               <div className="timeline-list">
@@ -138,10 +230,8 @@ function Dashboard({ user, setUser }) {
           </>
         )}
 
-        {/* 3. CLIENT: Discovery & Status */}
         {user.user_type === 'client' && dashboardData && (
           <>
-            {/* Up Next Card */}
             {dashboardData.next_appointment ? (
               <div className="up-next-card">
                 <div className="next-header">
@@ -168,7 +258,6 @@ function Dashboard({ user, setUser }) {
               </div>
             )}
 
-            {/* Rebook Suggestions */}
             {dashboardData.rebook_suggestions?.length > 0 && (
               <div className="section-block">
                 <h3>🔄 Book Again</h3>
@@ -188,13 +277,9 @@ function Dashboard({ user, setUser }) {
             )}
           </>
         )}
-
       </div>
 
-      {/* RIGHT COLUMN: Sidebar */}
       <div className="sidebar-col">
-        
-        {/* Quick Actions */}
         <div className="sidebar-card">
           <h4><Zap size={18} color="#f59e0b" /> Quick Actions</h4>
           <div className="quick-actions-grid">
@@ -203,8 +288,9 @@ function Dashboard({ user, setUser }) {
               <span>{user.user_type === 'client' ? 'Find Services' : 'My Services'}</span>
             </button>
             <button onClick={() => setActiveTab('appointments')}>
-              <div className="icon-box purple"><Calendar size={20} /></div>
-              <span>{user.user_type === 'client' ? 'My Schedule' : 'Calendar'}</span>
+              {/* ✅ CHANGED: Quick action icon to List for consistency */}
+              <div className="icon-box purple"><List size={20} /></div>
+              <span>{user.user_type === 'client' ? 'My Schedule' : 'Manage List'}</span>
             </button>
             {user.user_type === 'provider' && (
               <button onClick={() => setActiveTab('analytics')}>
@@ -219,7 +305,37 @@ function Dashboard({ user, setUser }) {
           </div>
         </div>
 
-        {/* System Updates / Notifications */}
+        {user.user_type === 'client' && favorites.providers.length > 0 && (
+            <div className="sidebar-card">
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem'}}>
+                  <h4><Heart size={18} color="#ef4444" fill="#ef4444" /> Favorites</h4>
+                  {favorites.providers.length > 2 && (
+                    <div className="carousel-indicators mini">
+                      {favorites.providers.map((_, idx) => (
+                        <span 
+                          key={idx} 
+                          className={`indicator-dot ${idx === currentProvIndex ? 'active' : ''}`}
+                          onClick={() => setCurrentProvIndex(idx)}
+                        ></span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="fav-providers-carousel">
+                    {(favorites.providers.length > 2 ? [favorites.providers[currentProvIndex]] : favorites.providers).map(p => (
+                        <div key={p.favorite_id} className="fav-provider-item" onClick={() => navigate(`/provider/${p.item_id}`)}>
+                            <div className="fav-prov-avatar"><User size={20} /></div>
+                            <div className="fav-prov-info">
+                                <strong>{p.business_name || p.name}</strong>
+                                <small><MapPin size={10} /> {p.suburb}</small>
+                            </div>
+                            <ChevronRight size={16} color="#cbd5e1" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
         <div className="sidebar-card">
           <h4><Bell size={18} color="#64748b" /> Updates</h4>
           <div className="system-updates-list">
@@ -227,20 +343,31 @@ function Dashboard({ user, setUser }) {
               <div className="dot"></div>
               <div>
                 <strong>Platform Update</strong>
-                <p style={{margin:0, fontSize:'0.8rem', color:'#94a3b8'}}>Improved calendar view coming soon.</p>
+                <p style={{margin:0, fontSize:'0.75rem', color:'#94a3b8'}}>Improved calendar view coming soon.</p>
               </div>
             </div>
             <div className="update-item">
               <div className="dot" style={{background:'#10b981'}}></div>
               <div>
                 <strong>Tips</strong>
-                <p style={{margin:0, fontSize:'0.8rem', color:'#94a3b8'}}>Complete your profile to attract more clients.</p>
+                <p style={{margin:0, fontSize:'0.75rem', color:'#94a3b8'}}>Complete your profile to attract more clients.</p>
               </div>
             </div>
           </div>
         </div>
-
       </div>
+
+      {showBookingModal && selectedService && (
+        <BookingModal
+            service={selectedService}
+            user={user}
+            onClose={() => setShowBookingModal(false)}
+            onBookingSuccess={() => {
+                setShowBookingModal(false);
+                alert("Booking Successful!");
+            }}
+        />
+      )}
     </div>
   );
 
@@ -259,43 +386,15 @@ function Dashboard({ user, setUser }) {
       <div className="dashboard">
         <div className="nav-container">
           <div className="dashboard-tabs">
-            <button 
-              className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('overview')}
-            >
-              Overview
-            </button>
-            
+            <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>Overview</button>
             {user.user_type === 'provider' && (
-              <button 
-                className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} 
-                onClick={() => setActiveTab('analytics')}
-              >
-                Analytics
-              </button>
+              <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
             )}
-
-            <button 
-              className={`tab-btn ${activeTab === 'services' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('services')}
-            >
-              Services
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('appointments')}
-            >
-              {user.user_type === 'client' ? 'Schedule' : 'Appointments'}
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} 
-              onClick={() => setActiveTab('settings')}
-            >
-              Settings
-            </button>
+            <button className={`tab-btn ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Services</button>
+            <button className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}>{user.user_type === 'client' ? 'Schedule' : 'Appointments'}</button>
+            <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>Settings</button>
           </div>
         </div>
-        
         <div className="dashboard-content">{renderContent()}</div>
       </div>
     </div>

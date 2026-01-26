@@ -170,6 +170,21 @@ function initializeDatabase() {
   );
 
   /* ---------------------------------------------
+     ❤️ FAVORITES TABLE (🆕 Added for Favorites Feature)
+  --------------------------------------------- */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS favorites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      item_id INTEGER NOT NULL,
+      type TEXT CHECK(type IN ('service', 'provider')) NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, item_id, type)
+    )
+  `);
+
+  /* ---------------------------------------------
      💰 TRANSACTIONS TABLE
   --------------------------------------------- */
   db.run(

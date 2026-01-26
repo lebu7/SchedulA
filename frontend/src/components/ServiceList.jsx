@@ -7,7 +7,8 @@ import ChatButton from './ChatButton';
 import { useSocket } from "../contexts/SocketContext";
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
-  Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink 
+  Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink,
+  Heart // ✅ ADDED Heart Icon
 } from "lucide-react"; 
 import "./ServiceList.css";
 
@@ -70,15 +71,52 @@ function ServiceList({ user }) {
   // 🆕 Location Modal State
   const [mapService, setMapService] = useState(null);
 
+  // ❤️ Favorites State
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
+
   const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
   useEffect(() => {
     fetchAllServices();
+    if (user.user_type === 'client') {
+        fetchFavorites();
+    }
   }, [user.user_type]); 
 
   useEffect(() => {
     filterServices();
   }, [searchTerm, selectedSuburb, selectedCategory, sortOption, itemsToShow, allServices, isBusinessClosed]);
+
+  const fetchFavorites = async () => {
+    try {
+        const res = await api.get('/favorites');
+        // Extract service IDs from the favorites list
+        const ids = new Set(res.data.services.map(f => f.item_id));
+        setFavoriteIds(ids);
+    } catch (error) {
+        console.error("Error fetching favorites:", error);
+    }
+  };
+
+  const toggleFavorite = async (e, serviceId) => {
+    e.stopPropagation(); // Prevent opening booking modal
+    try {
+        await api.post('/favorites/toggle', { itemId: serviceId, type: 'service' });
+        
+        setFavoriteIds(prev => {
+            const next = new Set(prev);
+            if (next.has(serviceId)) {
+                next.delete(serviceId);
+            } else {
+                next.add(serviceId);
+            }
+            return next;
+        });
+    } catch (error) {
+        console.error("Failed to toggle favorite:", error);
+        alert("Could not update favorites. Please try again.");
+    }
+  };
 
   const fetchAllServices = async () => {
     try {
@@ -465,6 +503,7 @@ function ServiceList({ user }) {
                         const addons = subServices[service.id] || [];
                         const price = parseFloat(service.price).toFixed(0);
                         const isDimmed = service.is_closed || isBusinessClosed;
+                        const isFavorite = favoriteIds.has(service.id);
 
                         return (
                           <div
@@ -517,18 +556,34 @@ function ServiceList({ user }) {
                                           <Clock size={12} /> {service.duration}m
                                       </span>
                                   </div>
-                                  {/* ✅ ADDED: Chat Button in Service Card */}
-                                  <ChatButton 
-                                    onClick={(e) => {
-                                      openServiceChat(e, service);
-                                      resetRoomUnread(service.id); // reset unread when chat opens
-                                    }}
-                                    size="small"
-                                    contextType="service"
-                                    contextId={service.id}
-                                    unreadCount={roomUnreadCounts[service.id] || 0} // 🆕 per-room unread
-                                    disableGlobalCounter={true}
-                                  />
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                      {/* ✅ Favorite Icon */}
+                                      <button 
+                                        className="btn-icon-favorite"
+                                        onClick={(e) => toggleFavorite(e, service.id)}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                        title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                                      >
+                                        <Heart 
+                                            size={20} 
+                                            fill={isFavorite ? "#ef4444" : "none"} 
+                                            color={isFavorite ? "#ef4444" : "#94a3b8"} 
+                                        />
+                                      </button>
+
+                                      {/* ✅ Chat Button */}
+                                      <ChatButton 
+                                        onClick={(e) => {
+                                          openServiceChat(e, service);
+                                          resetRoomUnread(service.id);
+                                        }}
+                                        size="small"
+                                        contextType="service"
+                                        contextId={service.id}
+                                        unreadCount={roomUnreadCounts[service.id] || 0}
+                                        disableGlobalCounter={true}
+                                      />
+                                  </div>
                               </div>
 
                               <p className="service-description">
