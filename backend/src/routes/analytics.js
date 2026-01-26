@@ -15,7 +15,7 @@ router.get("/summary", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   const userType = req.user.user_type;
 
-  // ✅ 1. CLIENT LOGIC (Unchanged)
+  // ✅ 1. CLIENT LOGIC
   if (userType === "client") {
     const nextApptQuery = `
       SELECT a.id, a.appointment_date, s.name as service_name, u.name as provider_name, u.business_name
@@ -52,7 +52,7 @@ router.get("/summary", authenticateToken, (req, res) => {
     return;
   }
 
-  // ✅ 2. PROVIDER LOGIC (Expanded)
+  // ✅ 2. PROVIDER LOGIC
   if (userType === "provider") {
     // Query A: HISTORICAL STATS
     const overallStatsQuery = `
@@ -105,9 +105,10 @@ router.get("/summary", authenticateToken, (req, res) => {
         ORDER BY a.appointment_date ASC
     `;
 
-    // 🆕 Query F: PEAK HOURS (Aggregated by hour of day)
+    // 🆕 Query F: PEAK HOURS (Corrected to use Local Time)
+    // Using 'localtime' modifier ensures we group by the user's clock time, not UTC
     const peakHoursQuery = `
-        SELECT strftime('%H', appointment_date) as hour, COUNT(*) as count
+        SELECT strftime('%H', appointment_date, 'localtime') as hour, COUNT(*) as count
         FROM appointments
         WHERE provider_id = ? AND status != 'cancelled'
         GROUP BY hour
@@ -115,7 +116,7 @@ router.get("/summary", authenticateToken, (req, res) => {
         LIMIT 5
     `;
 
-    // 🆕 Query G: SERVICE POPULARITY (Top 5 services)
+    // 🆕 Query G: TOP SERVICES
     const topServicesQuery = `
         SELECT s.name, COUNT(a.id) as booking_count, SUM(a.total_price) as revenue
         FROM appointments a
@@ -139,7 +140,6 @@ router.get("/summary", authenticateToken, (req, res) => {
               if (err5)
                 return res.status(500).json({ error: "Database error" });
 
-              // 🆕 Execute New Queries
               db.all(peakHoursQuery, [userId], (err6, peakHours) => {
                 if (err6)
                   return res.status(500).json({ error: "Database error" });
@@ -171,7 +171,7 @@ router.get("/summary", authenticateToken, (req, res) => {
                     next_client: nextClient || null,
                     today_schedule: schedule || [],
 
-                    // 🆕 New Data
+                    // New Analysis Data
                     peak_hours: peakHours || [],
                     top_services: topServices || [],
                   });
