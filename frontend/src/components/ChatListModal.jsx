@@ -1,7 +1,7 @@
 /* frontend/src/components/ChatListModal.jsx */
 import React, { useState, useEffect } from 'react';
-import { X, Check, MessageCircle } from 'lucide-react';
-import { useSocket } from '../contexts/SocketContext'; // ✅ Added useSocket
+import { X, Check, MessageCircle, CheckCircle } from 'lucide-react'; // ✅ Added CheckCircle
+import { useSocket } from '../contexts/SocketContext';
 import api from '../services/auth';
 import ChatModal from './ChatModal';
 import './ChatListModal.css';
@@ -11,7 +11,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [contextInfo, setContextInfo] = useState(null);
   const userId = Number(localStorage.getItem('userId'));
-  const { onlineUsers } = useSocket(); // ✅ Consume real-time online users
+  const { onlineUsers } = useSocket();
 
   // Initial fetch + Real-time polling
   useEffect(() => {
@@ -87,11 +87,14 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
         const lastMsg = room.last_message || {};
         const isUnread = room.unread_count > 0;
         
+        // ✅ Check if the current user sent the last message
+        const isMe = lastMsg.sender_id === userId;
+
         const time = lastMsg.created_at 
           ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' }) 
           : '';
         
-        const sender = lastMsg.sender_id === userId 
+        const sender = isMe
           ? 'You' 
           : (room.client_id === userId ? room.provider_name || room.business_name : room.client_name);
 
@@ -99,7 +102,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
           ? room.provider_name || room.business_name
           : room.client_name;
 
-        // ✅ Check if the other user is online
         const otherUserId = room.client_id === userId ? room.provider_id : room.client_id;
         const isOnline = onlineUsers.has(otherUserId);
 
@@ -111,7 +113,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
           >
             <div className="preview-info">
               <div className="preview-header">
-                {/* ✅ Name + Online Dot */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
                   <strong className="participant-name">{recipientName}</strong>
                   {isOnline && <span className="online-dot" title="Online"></span>}
@@ -124,7 +125,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
                   {lastMsg.message ? (
                     <>
                       <span className="sender-prefix">{sender}: </span>
-                      {/* ✅ Removed JS substring so CSS handles one-line truncation */}
                       {lastMsg.message}
                     </>
                   ) : (
@@ -132,13 +132,19 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
                   )}
                 </small>
                 
+                {/* ✅ UPDATED: Dynamic Read Receipt Logic */}
                 {isUnread ? (
                    <span className="chat-list-badge">{room.unread_count}</span>
-                ) : (
+                ) : isMe ? (
+                   // Only show read status if *I* sent the last message
                    <span className="read-status-icon">
-                     <Check size={14} />
+                     {lastMsg.is_read ? (
+                        <CheckCircle size={14} color="#2563eb" /> // Blue Circle Check (Read)
+                     ) : (
+                        <Check size={14} color="#94a3b8" /> // Gray Check (Sent)
+                     )}
                    </span>
-                )}
+                ) : null /* If I received it and read it, show nothing */}
               </div>
             </div>
           </div>

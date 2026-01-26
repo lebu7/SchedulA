@@ -45,7 +45,7 @@ router.post("/rooms", authenticateToken, (req, res) => {
   );
 });
 
-// ✅ UPDATED: Filter out blank chats (no messages or all messages expired)
+// ✅ UPDATED: Now fetches `last_msg_read` so read receipts work in the list
 router.get("/rooms", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   db.all(
@@ -56,7 +56,8 @@ router.get("/rooms", authenticateToken, (req, res) => {
             (SELECT COUNT(*) FROM chat_messages WHERE room_id = cr.id AND sender_id != ? AND is_read = 0 AND expires_at > datetime('now')) as unread_count,
             (SELECT message FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_content,
             (SELECT sender_id FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_sender,
-            (SELECT created_at FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_time
+            (SELECT created_at FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_time,
+            (SELECT is_read FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_read
      FROM chat_rooms cr
      JOIN users u1 ON cr.client_id = u1.id
      JOIN users u2 ON cr.provider_id = u2.id
@@ -74,6 +75,7 @@ router.get("/rooms", authenticateToken, (req, res) => {
               message: room.last_msg_content,
               sender_id: room.last_msg_sender,
               created_at: room.last_msg_time,
+              is_read: room.last_msg_read, // ✅ Passed to frontend
             }
           : null,
       }));
