@@ -1,0 +1,267 @@
+/* frontend/src/components/ReviewComponents.css */
+
+/* Modal General */
+.review-modal-content {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.review-list-modal-content {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Star Rating Input */
+.star-rating-input {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 20px 0 10px;
+  cursor: pointer;
+}
+
+.star {
+  fill: none;
+  stroke: #cbd5e1;
+  transition: transform 0.1s;
+}
+
+.star.filled {
+  fill: #f59e0b;
+  stroke: #f59e0b;
+}
+
+.star:hover {
+  transform: scale(1.1);
+}
+
+.rating-label {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.review-service-info {
+  text-align: center;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.review-service-info strong {
+  display: block;
+  color: #1e293b;
+}
+
+.review-service-info span {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.review-textarea {
+  width: 100%;
+  height: 100px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  resize: none;
+}
+
+.review-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Reviews List */
+.reviews-scroll-container {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 5px;
+}
+
+.review-item {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 15px 0;
+}
+
+.review-item:last-child {
+  border-bottom: none;
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.reviewer-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar-placeholder {
+  width: 24px;
+  height: 24px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+
+/* ✅ UPDATED: Styled Client Name to Blue */
+.client-name {
+  color: #2563eb; /* Blue color */
+  font-weight: 600;
+}
+
+/* Styled Review Date */
+.review-date {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+.review-stars {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.review-stars .filled {
+  fill: #f59e0b;
+  stroke: #f59e0b;
+}
+
+.review-stars .empty {
+  fill: #e2e8f0;
+  stroke: #e2e8f0;
+}
+
+.review-comment {
+  font-size: 0.9rem;
+  color: #334155;
+  line-height: 1.5;
+  margin: 0;
+  font-style: italic;
+}
+
+/* Carousel */
+.review-carousel {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  position: relative;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.carousel-content {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.carousel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.review-service-tag {
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.review-body {
+  flex: 1;
+  position: relative;
+  padding-left: 24px;
+}
+
+.quote-icon {
+  position: absolute;
+  left: 0;
+  top: -5px;
+  color: #cbd5e1;
+  opacity: 0.5;
+}
+
+.review-text {
+  font-size: 0.95rem;
+  color: #334155;
+  line-height: 1.5;
+  margin: 0 0 15px 0;
+}
+
+.italic-text {
+  font-style: italic;
+  color: #94a3b8;
+}
+
+.review-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 10px;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.carousel-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.carousel-controls button {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.carousel-controls button:hover {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+.pagination {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}

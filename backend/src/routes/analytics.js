@@ -7,9 +7,7 @@ const router = express.Router();
 
 /* --------------------------------------------------------------------------
    📊 GET /insights/summary
-   Returns combined metrics for:
-   1. Dashboard Overview (Today's stats, Next Client, Peak Hours, Top Services)
-   2. Analytics Page (Historical totals, Earnings, Retention)
+   Returns metrics for Dashboard & Analytics
 -------------------------------------------------------------------------- */
 router.get("/summary", authenticateToken, (req, res) => {
   const userId = req.user.userId;
@@ -29,12 +27,12 @@ router.get("/summary", authenticateToken, (req, res) => {
       LIMIT 1
     `;
 
-    // 🔄 UPDATED: Shows latest 6 unique services based on last completion date
     const rebookQuery = `
       SELECT s.id, s.name, s.price, 
             u.business_name as provider_name, 
             u.name as provider_real_name,
-            MAX(a.appointment_date) as last_booked_date
+            MAX(a.appointment_date) as last_booked_date,
+            s.provider_id, u.business_name
       FROM appointments a
       JOIN services s ON a.service_id = s.id
       JOIN users u ON a.provider_id = u.id
@@ -113,8 +111,7 @@ router.get("/summary", authenticateToken, (req, res) => {
             ORDER BY a.appointment_date ASC
         `;
 
-    // 🆕 Query F: PEAK HOURS (Corrected to use Local Time)
-    // Using 'localtime' modifier ensures we group by the user's clock time, not UTC
+    // Query F: PEAK HOURS
     const peakHoursQuery = `
         SELECT strftime('%H', appointment_date, 'localtime') as hour, COUNT(*) as count
         FROM appointments
@@ -124,7 +121,7 @@ router.get("/summary", authenticateToken, (req, res) => {
         LIMIT 5
     `;
 
-    // 🆕 Query G: TOP SERVICES
+    // Query G: TOP SERVICES
     const topServicesQuery = `
         SELECT s.name, COUNT(a.id) as booking_count, SUM(a.total_price) as revenue
         FROM appointments a
@@ -135,53 +132,72 @@ router.get("/summary", authenticateToken, (req, res) => {
         LIMIT 5
     `;
 
+    // ✅ Query H: RATINGS (NEW)
+    const ratingQuery = `
+        SELECT AVG(rating) as avg_rating, COUNT(*) as review_count
+        FROM reviews
+        WHERE provider_id = ?
+    `;
+
     // Execution Chain
     db.get(overallStatsQuery, [userId], (err, overall) => {
-      if (err) return res.status(500).json({ error: "Database error" });
+      if (err) return res.status(500).json({ error: "Database error A" });
       db.get(servicesQuery, [userId], (err2, services) => {
-        if (err2) return res.status(500).json({ error: "Database error" });
+        if (err2) return res.status(500).json({ error: "Database error B" });
         db.get(todayStatsQuery, [userId], (err3, today) => {
-          if (err3) return res.status(500).json({ error: "Database error" });
+          if (err3) return res.status(500).json({ error: "Database error C" });
           db.get(nextClientQuery, [userId], (err4, nextClient) => {
-            if (err4) return res.status(500).json({ error: "Database error" });
+            if (err4)
+              return res.status(500).json({ error: "Database error D" });
             db.all(todayScheduleQuery, [userId], (err5, schedule) => {
               if (err5)
-                return res.status(500).json({ error: "Database error" });
-
+                return res.status(500).json({ error: "Database error E" });
               db.all(peakHoursQuery, [userId], (err6, peakHours) => {
                 if (err6)
-                  return res.status(500).json({ error: "Database error" });
+                  return res.status(500).json({ error: "Database error F" });
                 db.all(topServicesQuery, [userId], (err7, topServices) => {
                   if (err7)
-                    return res.status(500).json({ error: "Database error" });
+                    return res.status(500).json({ error: "Database error G" });
 
-                  res.json({
-                    // Analytics Page Data
-                    total_appointments: overall.total_appointments || 0,
-                    completed: overall.completed || 0,
-                    cancelled: overall.cancelled || 0,
-                    no_shows: overall.no_shows || 0,
-                    total_earnings: overall.total_earnings || 0,
-                    total_refunds: overall.total_refunds || 0,
-                    net_earnings:
-                      (overall.total_earnings || 0) -
-                      (overall.total_refunds || 0),
-                    unique_clients: overall.unique_clients || 0,
-                    total_services: services.total_services || 0,
-                    total_staff: services.total_staff || 0,
+                  // ✅ Fetch Ratings
+                  db.get(ratingQuery, [userId], (err8, ratings) => {
+                    if (err8)
+                      return res
+                        .status(500)
+                        .json({ error: "Database error H" });
 
-                    // Dashboard Overview Data
-                    today_metrics: {
-                      count: today ? today.today_count : 0,
-                      pending: today ? today.today_pending : 0,
-                      today_revenue: today ? today.today_revenue : 0,
-                    },
-                    next_client: nextClient || null,
-                    today_schedule: schedule || [],
+                    res.json({
+                      // Analytics Page Data
+                      total_appointments: overall.total_appointments || 0,
+                      completed: overall.completed || 0,
+                      cancelled: overall.cancelled || 0,
+                      no_shows: overall.no_shows || 0,
+                      total_earnings: overall.total_earnings || 0,
+                      total_refunds: overall.total_refunds || 0,
+                      net_earnings:
+                        (overall.total_earnings || 0) -
+                        (overall.total_refunds || 0),
+                      unique_clients: overall.unique_clients || 0,
+                      total_services: services.total_services || 0,
+                      total_staff: services.total_staff || 0,
 
-                    // New Analysis Data
-                    peak_hours: peakHours || [],
-                    top_services: topServices || [],
+                      // Dashboard Overview Data
+                      today_metrics: {
+                        count: today ? today.today_count : 0,
+                        pending: today ? today.today_pending : 0,
+                        today_revenue: today ? today.today_revenue : 0,
+                      },
+                      next_client: nextClient || null,
+                      today_schedule: schedule || [],
+
+                      // New Analysis Data
+                      peak_hours: peakHours || [],
+                      top_services: topServices || [],
+
+                      // ✅ Ratings Data
+                      avg_rating: ratings ? ratings.avg_rating : 0,
+                      review_count: ratings ? ratings.review_count : 0,
+                    });
                   });
                 });
               });

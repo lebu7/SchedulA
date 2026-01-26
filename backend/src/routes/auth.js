@@ -12,29 +12,37 @@ const router = express.Router();
 
 /* ---------------------------------------------
    ✅ Public Provider Profile (For Clients)
+   UPDATED: Includes Average Ratings & Reviews
 --------------------------------------------- */
 router.get("/public-profile/:id", authenticateToken, (req, res) => {
   const providerId = req.params.id;
 
+  // 1. Fetch Provider Details (with Review Aggregation)
   db.get(
     `SELECT id, name, business_name, phone, business_address, suburb, 
             google_maps_link, opening_time, closing_time, 
-            is_open_sat, is_open_sun, created_at 
+            is_open_sat, is_open_sun, created_at,
+            (SELECT AVG(rating) FROM reviews WHERE provider_id = ?) as avg_rating,
+            (SELECT COUNT(*) FROM reviews WHERE provider_id = ?) as review_count
      FROM users WHERE id = ? AND user_type = 'provider'`,
-    [providerId],
+    [providerId, providerId, providerId],
     (err, provider) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (!provider)
         return res.status(404).json({ error: "Provider not found" });
 
+      // 2. Fetch Services (with Ratings)
       db.all(
-        `SELECT id, name, description, category, duration, price, is_closed 
+        `SELECT id, name, description, category, duration, price, is_closed,
+                (SELECT AVG(rating) FROM reviews r WHERE r.service_id = services.id) as avg_rating,
+                (SELECT COUNT(*) FROM reviews r WHERE r.service_id = services.id) as review_count
          FROM services WHERE provider_id = ? AND is_closed = 0`,
         [providerId],
         (servErr, services) => {
           if (servErr)
             return res.status(500).json({ error: "Error fetching services" });
 
+          // 3. Fetch Staff Count
           db.get(
             `SELECT COALESCE(SUM(capacity), 0) as total_staff 
              FROM services 

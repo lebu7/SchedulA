@@ -3,21 +3,20 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import BookingModal from './BookingModal';
-// ✅ ADDED: Heart icon
-import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle, Heart } from 'lucide-react';
+import ReviewCarousel from './ReviewCarousel'; 
+import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle, Heart, Star } from 'lucide-react';
 import './ProviderProfile.css';
-import './ChatButton.css'; // Ensure we get the consistent button style
+import './ChatButton.css';
 
 const ProviderProfile = ({ user }) => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [data, setData] = useState(null);
+    const [reviews, setReviews] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedService, setSelectedService] = useState(null);
     const [showBookingModal, setShowBookingModal] = useState(false);
-
-    // ✅ ADDED: Favorite State
     const [isFavorite, setIsFavorite] = useState(false);
 
     useEffect(() => {
@@ -25,6 +24,9 @@ const ProviderProfile = ({ user }) => {
             try {
                 const res = await api.get(`/auth/public-profile/${id}`);
                 setData(res.data);
+                
+                const reviewsRes = await api.get(`/reviews/provider/${id}`);
+                setReviews(reviewsRes.data.reviews || []);
             } catch (err) {
                 setError("Could not load provider profile.");
             } finally {
@@ -34,7 +36,6 @@ const ProviderProfile = ({ user }) => {
         fetchProviderData();
     }, [id]);
 
-    // ✅ ADDED: Check if provider is favorited (Only for Clients)
     useEffect(() => {
         if (user && user.user_type === 'client') {
             api.get('/favorites')
@@ -47,7 +48,6 @@ const ProviderProfile = ({ user }) => {
         }
     }, [id, user]);
 
-    // ✅ ADDED: Toggle Favorite Handler
     const handleToggleFavorite = async () => {
         try {
             await api.post('/favorites/toggle', { itemId: id, type: 'provider' });
@@ -58,23 +58,18 @@ const ProviderProfile = ({ user }) => {
         }
     };
 
-    // ✅ UPDATED: Open Chat via Global Widget Event
     const openProfileChat = async () => {
         if (!data?.provider) return;
-
         try {
-            // 1. Get/Create Room
             const res = await api.post('/chat/rooms', {
                 recipientId: data.provider.id,
                 contextType: 'profile',
                 contextId: null
             });
-
-            // 2. Dispatch Event to open Global Widget
             window.dispatchEvent(new CustomEvent('openChatRoom', {
                 detail: {
                     room: res.data.room,
-                    context: { name: "General Inquiry" } // Generic context context
+                    context: { name: "General Inquiry" }
                 }
             }));
         } catch (err) {
@@ -97,6 +92,7 @@ const ProviderProfile = ({ user }) => {
     if (error) return <div className="error-view">{error}</div>;
 
     const { provider, services, staff_count } = data;
+    const rating = provider.avg_rating ? Number(provider.avg_rating).toFixed(1) : "New";
 
     return (
         <div className="provider-profile-page">
@@ -111,29 +107,23 @@ const ProviderProfile = ({ user }) => {
                 <div className="header-top">
                     <div className="header-titles">
                         <h1>{provider.business_name || provider.name}</h1>
-                        <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
+                        <div className="header-meta-row">
+                            <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
+                            
+                            {/* ✅ STYLED RATING PILL */}
+                            <div className="provider-rating-pill">
+                                <Star size={16} fill={provider.avg_rating ? "#f59e0b" : "none"} color="#f59e0b" />
+                                <strong>{rating}</strong>
+                                <span className="review-count">({provider.review_count || 0} reviews)</span>
+                            </div>
+                        </div>
                     </div>
                     
-                    {/* ✅ UPDATED: Added Favorite Button next to Chat Button */}
                     <div className="header-actions">
                         {user && user.user_type === 'client' && (
                             <button 
                                 onClick={handleToggleFavorite}
-                                style={{
-                                    background: 'white',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: '8px',
-                                    padding: '8px 16px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    cursor: 'pointer',
-                                    color: isFavorite ? '#ef4444' : '#475569',
-                                    fontWeight: '600',
-                                    fontSize: '14px',
-                                    marginRight: '10px',
-                                    transition: 'all 0.2s'
-                                }}
+                                className={`favorite-btn ${isFavorite ? 'active' : ''}`}
                                 title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
                             >
                                 <Heart size={20} fill={isFavorite ? "currentColor" : "none"} />
@@ -156,14 +146,22 @@ const ProviderProfile = ({ user }) => {
             </header>
 
             <div className="profile-grid">
-                {/* Left Side: Services */}
                 <section className="services-section">
                     <h2>Our Services</h2>
                     <div className="profile-services-list">
                         {services.map(service => (
                             <div key={service.id} className="mini-service-card">
                                 <div className="service-info">
-                                    <h3>{service.name}</h3>
+                                    <div className="mini-service-header">
+                                        <h3>{service.name}</h3>
+                                        {/* ✅ STYLED SERVICE RATING */}
+                                        {service.avg_rating && (
+                                            <div className="service-rating-mini">
+                                                <Star size={12} fill="#f59e0b" color="#f59e0b"/>
+                                                <span>{Number(service.avg_rating).toFixed(1)}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                     <p className="profile-service-desc">{service.description}</p>
                                     <div className="mini-meta">
                                         <span><Clock size={14} /> {service.duration}m</span>
@@ -176,7 +174,6 @@ const ProviderProfile = ({ user }) => {
                     </div>
                 </section>
 
-                {/* Right Side: Business Details */}
                 <aside className="business-sidebar">
                     <div className="sidebar-card">
                         <h3>Contact & Location</h3>
@@ -201,7 +198,6 @@ const ProviderProfile = ({ user }) => {
                             <span>Monday - Friday</span>
                             <strong>{provider.opening_time} - {provider.closing_time}</strong>
                         </div>
-                        
                         <div className="hours-row">
                             <span>Saturday</span>
                             {provider.is_open_sat ? (
@@ -210,7 +206,6 @@ const ProviderProfile = ({ user }) => {
                                 <strong className="closed-text">Closed</strong>
                             )}
                         </div>
-
                         <div className="hours-row">
                             <span>Sunday</span>
                             {provider.is_open_sun ? (
@@ -219,6 +214,11 @@ const ProviderProfile = ({ user }) => {
                                 <strong className="closed-text">Closed</strong>
                             )}
                         </div>
+                    </div>
+
+                    <div className="sidebar-card">
+                        <h3>Recent Reviews</h3>
+                        <ReviewCarousel reviews={reviews} />
                     </div>
                 </aside>
             </div>
@@ -234,7 +234,6 @@ const ProviderProfile = ({ user }) => {
                     }}
                 />
             )}
-
         </div>
     );
 };

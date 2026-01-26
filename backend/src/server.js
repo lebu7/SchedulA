@@ -16,6 +16,7 @@ import notificationRoutes from "./routes/notifications.js";
 import analyticsRoutes from "./routes/analytics.js";
 import chatRoutes from "./routes/chat.js";
 import favoritesRoutes from "./routes/favorites.js";
+import reviewsRoutes from "./routes/reviews.js"; // ✅ NEW IMPORT
 
 // Services
 import { sendScheduledReminders } from "./services/smsService.js";
@@ -42,6 +43,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/insights", analyticsRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/favorites", favoritesRoutes);
+app.use("/api/reviews", reviewsRoutes); // ✅ NEW ROUTE
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -60,9 +62,7 @@ initializeSocket(httpServer);
 ===================================================== */
 
 // 1. Auto-cleanup Inactive Chat Rooms (Every 10 mins)
-// 🔴 CHANGED: Deletes entire ROOM if inactive for 12+ hours
 cron.schedule("*/10 * * * *", () => {
-  // Enable Foreign Keys to ensure messages are deleted when room is deleted
   db.run("PRAGMA foreign_keys = ON;", (err) => {
     if (err) return console.error("❌ DB Pragma Error:", err);
 
@@ -106,10 +106,7 @@ cron.schedule("*/10 * * * *", async () => {
 });
 
 // 4. Chat Expiry Warning (Every 10 mins)
-// 🔴 CHANGED: Warns if chat room has been inactive for ~11 hours
 cron.schedule("*/10 * * * *", () => {
-  // We look for chats inactive between 11h and 11h 10m ago.
-  // This catches them exactly 1 hour before the 12h deletion.
   const startWindow = "datetime('now', '-11 hours', '-10 minutes')";
   const endWindow = "datetime('now', '-11 hours')";
 
@@ -122,7 +119,6 @@ cron.schedule("*/10 * * * *", () => {
       if (err || !rows) return;
 
       rows.forEach((row) => {
-        // Notify BOTH participants that the chat is about to close
         [row.client_id, row.provider_id].forEach((userId) => {
           createNotification(
             userId,

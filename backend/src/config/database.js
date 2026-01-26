@@ -138,6 +138,27 @@ function initializeDatabase() {
   `);
 
   /* ---------------------------------------------
+     ⭐ REVIEWS TABLE
+  --------------------------------------------- */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      appointment_id INTEGER NOT NULL,
+      client_id INTEGER NOT NULL,
+      provider_id INTEGER NOT NULL,
+      service_id INTEGER NOT NULL,
+      rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+      comment TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+      FOREIGN KEY (client_id) REFERENCES users(id),
+      FOREIGN KEY (provider_id) REFERENCES users(id),
+      FOREIGN KEY (service_id) REFERENCES services(id),
+      UNIQUE(appointment_id)
+    )
+  `);
+
+  /* ---------------------------------------------
      📱 IN-APP CHAT TABLES
   --------------------------------------------- */
 

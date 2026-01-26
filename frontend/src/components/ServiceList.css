@@ -1,3 +1,5 @@
+/* frontend/src/components/ServiceList.css */
+
 /* === GENERAL LAYOUT === */
 .service-list {
   padding: 20px 0 60px;
@@ -214,10 +216,17 @@
   display: block;
 }
 
-/* Header Price (Right Side) */
-.header-price {
+/* Header Right Column (Price & Rating) */
+.header-right-col {
   flex-shrink: 0;
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* Header Price */
+.header-price {
   background: rgba(255, 255, 255, 0.2);
   padding: 6px 10px;
   border-radius: 8px;
@@ -234,6 +243,26 @@
   text-transform: uppercase;
   font-weight: 400;
   opacity: 0.9;
+}
+
+/* Rating Badge (New) */
+.rating-badge {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-top: 4px;
+  cursor: pointer;
+  color: white;
+  transition: background 0.2s;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.rating-badge:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 /* Gradients */
@@ -319,6 +348,26 @@
   background: #eff6ff;
   color: #3b82f6;
   border: 1px solid #dbeafe;
+}
+
+/* Favorite Button (New) */
+.btn-icon-favorite {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon-favorite:hover {
+  transform: scale(1.1);
+}
+
+.btn-icon-favorite:active {
+  transform: scale(0.95);
 }
 
 .service-description {
@@ -583,14 +632,3 @@
   transform: translateY(-1px);
   border-color: white;
 }
-
-.service-name {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-

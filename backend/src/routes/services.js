@@ -31,16 +31,16 @@ db.run(
     if (err && !err.message.includes("duplicate column")) {
       console.error("Error adding closed_by_business column:", err);
     }
-  }
+  },
 );
 
 /* ---------------------------------------------
-   ✅ GET all services (includes location & maps link)
+   ✅ GET all services (includes location, maps link, & RATINGS)
 --------------------------------------------- */
 router.get("/", (req, res) => {
   const { search, category, provider, location } = req.query;
 
-  // ✅ Added u.suburb to the query
+  // ✅ UPDATED: Added subqueries for avg_rating and review_count
   let query = `
     SELECT 
       s.*, 
@@ -50,7 +50,9 @@ router.get("/", (req, res) => {
       u.suburb,
       u.google_maps_link,
       u.opening_time AS provider_opening_time, 
-      u.closing_time AS provider_closing_time
+      u.closing_time AS provider_closing_time,
+      (SELECT AVG(rating) FROM reviews r WHERE r.service_id = s.id) as avg_rating,
+      (SELECT COUNT(*) FROM reviews r WHERE r.service_id = s.id) as review_count
     FROM services s 
     JOIN users u ON s.provider_id = u.id 
     WHERE 1=1
@@ -73,7 +75,7 @@ router.get("/", (req, res) => {
     params.push(`%${provider}%`);
   }
 
-  // Filter by address text if provided via query (optional fallback)
+  // Filter by address text if provided via query
   if (location) {
     query += ` AND (u.business_address LIKE ? OR u.suburb LIKE ?)`;
     params.push(`%${location}%`, `%${location}%`);
@@ -114,7 +116,7 @@ router.get("/", (req, res) => {
         }));
 
         res.json({ services: combined });
-      }
+      },
     );
   });
 });
@@ -170,7 +172,7 @@ router.post(
           provider_id,
           "system",
           "Service Created",
-          `You have successfully added '${name}' to your services.`
+          `You have successfully added '${name}' to your services.`,
         );
 
         db.get(
@@ -196,11 +198,11 @@ router.post(
               message: "Service created successfully",
               service: { ...service, id: newServiceId },
             });
-          }
+          },
         );
-      }
+      },
     );
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -254,14 +256,14 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
         provider_id,
         "system",
         "Service Updated",
-        `You updated details for service ID #${serviceId}.`
+        `You updated details for service ID #${serviceId}.`,
       );
 
       // Return updated object
       db.get("SELECT * FROM services WHERE id = ?", [serviceId], (e, row) => {
         res.json({ message: "Service updated successfully", service: row });
       });
-    }
+    },
   );
 });
 
@@ -306,7 +308,7 @@ router.patch(
           providerId,
           "system",
           "Service Status Changed",
-          `Service ID #${serviceId} is now ${statusText}.`
+          `Service ID #${serviceId} is now ${statusText}.`,
         );
 
         res.json({
@@ -316,9 +318,9 @@ router.patch(
           service_id: serviceId,
           is_closed: closedValue,
         });
-      }
+      },
     );
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -367,7 +369,7 @@ router.patch(
         req.user.userId,
         "system",
         "Business Status Updated",
-        `You have ${statusText} your business. Services updated accordingly.`
+        `You have ${statusText} your business. Services updated accordingly.`,
       );
 
       res.json({
@@ -378,7 +380,7 @@ router.patch(
         affected: this.changes,
       });
     });
-  }
+  },
 );
 
 /* ---------------------------------------------
@@ -406,13 +408,13 @@ router.delete(
           provider_id,
           "system",
           "Service Deleted",
-          `Service ID #${serviceId} has been removed.`
+          `Service ID #${serviceId} has been removed.`,
         );
 
         res.json({ message: "Service deleted successfully" });
-      }
+      },
     );
-  }
+  },
 );
 
 /* =====================================================
@@ -457,7 +459,7 @@ router.post(
               providerId,
               "system",
               "Sub-service Added",
-              `Added '${name}' to Service ID #${serviceId}.`
+              `Added '${name}' to Service ID #${serviceId}.`,
             );
 
             res.status(201).json({
@@ -469,11 +471,11 @@ router.post(
                 price,
               },
             });
-          }
+          },
         );
-      }
+      },
     );
-  }
+  },
 );
 
 router.get("/:id/sub-services", (req, res) => {
@@ -485,7 +487,7 @@ router.get("/:id/sub-services", (req, res) => {
       if (err)
         return res.status(500).json({ error: "Failed to fetch sub-services" });
       res.json({ sub_services: subs });
-    }
+    },
   );
 });
 
@@ -513,13 +515,13 @@ router.delete(
           providerId,
           "system",
           "Sub-service Deleted",
-          `Sub-service ID #${subId} removed.`
+          `Sub-service ID #${subId} removed.`,
         );
 
         res.json({ message: "Sub-service deleted successfully" });
-      }
+      },
     );
-  }
+  },
 );
 
 router.put(
@@ -556,16 +558,16 @@ router.put(
           providerId,
           "system",
           "Sub-service Updated",
-          `Updated sub-service: ${name}.`
+          `Updated sub-service: ${name}.`,
         );
 
         res.json({
           message: "Sub-service updated successfully",
           sub_service: { id: subId, name, description, price: price },
         });
-      }
+      },
     );
-  }
+  },
 );
 
 export default router;

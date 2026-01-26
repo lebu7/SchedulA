@@ -3,12 +3,13 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"; 
 import api from "../services/auth";
 import BookingModal from "./BookingModal";
+import ReviewListModal from "./ReviewListModal"; 
 import ChatButton from './ChatButton';
 import { useSocket } from "../contexts/SocketContext";
 import { 
   Search, Filter, ArrowUpDown, List, Clock, Zap, 
   Plus, Power, Edit, Trash2, Store, Lock, Unlock, MapPin, X, ExternalLink,
-  Heart // ✅ ADDED Heart Icon
+  Heart, Star 
 } from "lucide-react"; 
 import "./ServiceList.css";
 
@@ -71,6 +72,9 @@ function ServiceList({ user }) {
   // 🆕 Location Modal State
   const [mapService, setMapService] = useState(null);
 
+  // ✅ Reviews Modal State
+  const [viewReviewsService, setViewReviewsService] = useState(null);
+
   // ❤️ Favorites State
   const [favoriteIds, setFavoriteIds] = useState(new Set());
 
@@ -90,7 +94,6 @@ function ServiceList({ user }) {
   const fetchFavorites = async () => {
     try {
         const res = await api.get('/favorites');
-        // Extract service IDs from the favorites list
         const ids = new Set(res.data.services.map(f => f.item_id));
         setFavoriteIds(ids);
     } catch (error) {
@@ -99,7 +102,7 @@ function ServiceList({ user }) {
   };
 
   const toggleFavorite = async (e, serviceId) => {
-    e.stopPropagation(); // Prevent opening booking modal
+    e.stopPropagation(); 
     try {
         await api.post('/favorites/toggle', { itemId: serviceId, type: 'service' });
         
@@ -264,8 +267,13 @@ function ServiceList({ user }) {
   };
 
   const handleLocationClick = (e, service) => {
-    e.stopPropagation(); // Prevent opening booking modal
+    e.stopPropagation(); 
     setMapService(service);
+  };
+  
+  const handleRatingClick = (e, service) => {
+      e.stopPropagation();
+      setViewReviewsService(service);
   };
 
   const getCategoryClass = (category) => {
@@ -277,9 +285,8 @@ function ServiceList({ user }) {
     return "default-category";
   };
 
-  // ✅ UPDATED: Open Service-Context Chat via Global Event
   const openServiceChat = async (e, service) => {
-    e.stopPropagation(); // Prevent card click
+    e.stopPropagation(); 
     try {
       const res = await api.post('/chat/rooms', {
         recipientId: service.provider_id,
@@ -289,7 +296,6 @@ function ServiceList({ user }) {
       
       const contextData = { name: service.name, price: service.price };
       
-      // Dispatch Event to Widget
       window.dispatchEvent(new CustomEvent('openChatRoom', {
         detail: {
           room: res.data.room,
@@ -371,6 +377,14 @@ function ServiceList({ user }) {
                                         <Store size={14} style={{marginBottom:'4px'}}/>
                                         <span>Cap: {service.capacity || 1}</span>
                                     </div>
+                                </div>
+                                
+                                <div style={{marginTop: '10px', fontSize: '0.9rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                                    <Star size={14} fill={service.avg_rating > 0 ? "#f59e0b" : "none"} color="#f59e0b"/>
+                                    <span>
+                                        {service.avg_rating ? Number(service.avg_rating).toFixed(1) : "New"} 
+                                        <span style={{opacity: 0.7}}> ({service.review_count || 0} reviews)</span>
+                                    </span>
                                 </div>
 
                                 <button className="btn-view-addons" onClick={() => handleViewAddons(service)}>
@@ -504,6 +518,7 @@ function ServiceList({ user }) {
                         const price = parseFloat(service.price).toFixed(0);
                         const isDimmed = service.is_closed || isBusinessClosed;
                         const isFavorite = favoriteIds.has(service.id);
+                        const rating = service.avg_rating ? Number(service.avg_rating).toFixed(1) : null;
 
                         return (
                           <div
@@ -525,15 +540,31 @@ function ServiceList({ user }) {
                                    {service.business_name || service.provider_name}
                                 </p>
                               </div>
-                              <div className="header-price">
-                                <small>From</small>
-                                KES {price}
+                              <div className="header-right-col" style={{textAlign: 'right'}}>
+                                  <div className="header-price">
+                                    <small>From</small>
+                                    KES {price}
+                                  </div>
+                                  
+                                  {/* ✅ RATINGS BADGE: YELLOW STAR */}
+                                  <div 
+                                    className="rating-badge"
+                                    onClick={(e) => handleRatingClick(e, service)}
+                                    title="View Reviews"
+                                  >
+                                    <Star 
+                                        size={14} 
+                                        fill={rating ? "#f59e0b" : "none"} 
+                                        color={rating ? "#f59e0b" : "white"} 
+                                        style={{marginRight: 4}}
+                                    />
+                                    {rating || "New"}
+                                  </div>
                               </div>
                             </div>
 
                             <div className="service-main" onClick={() => !isDimmed && handleBookClick(service)}>
                               
-                              {/* 🆕 Clickable Address Row */}
                               {(service.suburb || service.business_address) && (
                                 <div 
                                     className="meta-row location-row clickable" 
@@ -557,7 +588,6 @@ function ServiceList({ user }) {
                                       </span>
                                   </div>
                                   <div style={{ display: 'flex', gap: '8px' }}>
-                                      {/* ✅ Favorite Icon */}
                                       <button 
                                         className="btn-icon-favorite"
                                         onClick={(e) => toggleFavorite(e, service.id)}
@@ -571,7 +601,6 @@ function ServiceList({ user }) {
                                         />
                                       </button>
 
-                                      {/* ✅ Chat Button */}
                                       <ChatButton 
                                         onClick={(e) => {
                                           openServiceChat(e, service);
@@ -638,13 +667,20 @@ function ServiceList({ user }) {
           />
         )}
         
+        {viewReviewsService && (
+            <ReviewListModal
+                serviceId={viewReviewsService.id}
+                serviceName={viewReviewsService.name}
+                onClose={() => setViewReviewsService(null)}
+            />
+        )}
+        
         {bookingSuccess && (
           <div className="success-message">
             ✅ Appointment booked successfully! Check your appointments page.
           </div>
         )}
 
-        {/* 🆕 Map Popup Modal */}
         {mapService && (
             <div className="map-modal-overlay" onClick={() => setMapService(null)}>
                 <div className="map-modal-content" onClick={e => e.stopPropagation()}>
