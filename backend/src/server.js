@@ -16,7 +16,7 @@ import notificationRoutes from "./routes/notifications.js";
 import analyticsRoutes from "./routes/analytics.js";
 import chatRoutes from "./routes/chat.js";
 import favoritesRoutes from "./routes/favorites.js";
-import reviewsRoutes from "./routes/reviews.js"; // ✅ NEW IMPORT
+import reviewsRoutes from "./routes/reviews.js";
 
 // Services
 import { sendScheduledReminders } from "./services/smsService.js";
@@ -43,7 +43,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/insights", analyticsRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/favorites", favoritesRoutes);
-app.use("/api/reviews", reviewsRoutes); // ✅ NEW ROUTE
+app.use("/api/reviews", reviewsRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -171,6 +171,52 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
+// 7. ✅ Review Prompts for Completed Appointments (Every 30 mins)
+cron.schedule("*/30 * * * *", () => {
+  console.log("⭐ CRON: Checking for review prompts...");
+
+  // Find appointments completed in the last hour that haven't been reviewed
+  // and where the client hasn't already been notified today for this specific appointment
+  const query = `
+    SELECT a.id, a.client_id, s.name as service_name, u.notification_preferences
+    FROM appointments a
+    JOIN services s ON a.service_id = s.id
+    JOIN users u ON a.client_id = u.id
+    LEFT JOIN reviews r ON a.id = r.appointment_id
+    WHERE a.status = 'completed'
+    AND r.id IS NULL
+    AND a.appointment_date >= datetime('now', '-1 hour')
+  `;
+
+  db.all(query, [], (err, rows) => {
+    if (err || !rows) return;
+
+    rows.forEach((row) => {
+      let prefs = {};
+      try {
+        prefs =
+          typeof row.notification_preferences === "string"
+            ? JSON.parse(row.notification_preferences)
+            : row.notification_preferences || {};
+      } catch (e) {
+        prefs = {};
+      }
+
+      // Check if user has disabled review prompts (default to true if setting missing)
+      const inApp = prefs.in_app || {};
+      if (inApp.review_prompts !== false) {
+        createNotification(
+          row.client_id,
+          "system",
+          "How was your appointment? ⭐",
+          `We hope you enjoyed your ${row.service_name}! Leave a review to help others.`,
+          row.id,
+        );
+      }
+    });
+  });
+});
+
 // ---------------------------------------------------------
 
 console.log("🚀 Initializing background tasks...");
@@ -182,7 +228,7 @@ httpServer.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
   console.log(
-    `⏰ Scheduler active: Reminders (10m), Chat Cleanup (10m), Morning Brief (Daily)`,
+    `⏰ Scheduler active: Reminders (10m), Chat Cleanup (10m), Morning Brief (Daily), Review Prompts (30m)`,
   );
   console.log(`💬 Socket.IO ready`);
 });

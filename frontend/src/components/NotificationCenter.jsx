@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom'; 
 import api from '../services/auth';
-import { Bell, CheckCheck, CheckCircle, X } from 'lucide-react'; 
+import { Bell, CheckCheck, CheckCircle, X, Star } from 'lucide-react'; // Added Star
 import './Header.css'; 
 
 function NotificationCenter() {
@@ -46,7 +46,6 @@ function NotificationCenter() {
     }
   }, [isOpen]);
 
-  // Click Outside Listener
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -78,7 +77,6 @@ function NotificationCenter() {
     } catch (err) { console.error(err); }
   };
 
-  // ✅ UPDATED: Accepts event to stop propagation
   const markAllRead = async (e) => {
     if (e) {
         e.stopPropagation();
@@ -99,7 +97,12 @@ function NotificationCenter() {
     const title = notif.title ? notif.title.toLowerCase() : '';
     const type = notif.type;
 
-    if (['booking', 'new_request', 'reschedule'].includes(type)) {
+    // ✅ CHECK FOR REVIEW PROMPT
+    if (title.includes('appointment') && title.includes('?')) {
+        // Directs to History tab where completed appointments reside
+        navState = { tab: 'appointments', subTab: 'history', targetId: notif.reference_id };
+    }
+    else if (['booking', 'new_request', 'reschedule'].includes(type)) {
         navState = { tab: 'appointments', subTab: 'pending', targetId: notif.reference_id };
     } 
     else if (['cancellation', 'refund'].includes(type)) {
@@ -153,7 +156,6 @@ function NotificationCenter() {
             <h4>Notifications</h4>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 {unreadCount > 0 && (
-                // ✅ UPDATED: Changed onClick to onMouseDown
                 <span 
                     className="mark-read-text" 
                     onMouseDown={markAllRead} 
@@ -162,7 +164,6 @@ function NotificationCenter() {
                     <CheckCheck size={14} /> Mark all
                 </span>
                 )}
-                {/* ✅ UPDATED: Close button onMouseDown */}
                 <span 
                     onMouseDown={(e) => { e.stopPropagation(); setIsOpen(false); }} 
                     className="close-notif" 
@@ -181,11 +182,12 @@ function NotificationCenter() {
                 <div 
                   key={notif.id} 
                   className={`notif-item ${notif.is_read ? 'read' : 'unread'}`}
-                  // onClick is fine here as it triggers navigation
                   onClick={() => handleNotificationClick(notif)}
                 >
                   <div className={`notif-icon ${notif.type === 'system' ? 'green' : 'blue'}`}>
-                    {(notif.type === 'system' || notif.title?.includes('Welcome')) 
+                    {notif.title?.includes('?') ? (
+                        <Star size={18} color="#f59e0b" fill="#f59e0b" />
+                    ) : (notif.type === 'system' || notif.title?.includes('Welcome')) 
                       ? <CheckCircle size={18} /> 
                       : <Bell size={18} />}
                   </div>
@@ -200,7 +202,6 @@ function NotificationCenter() {
             )}
           </div>
           
-          {/* ✅ UPDATED: Footer onMouseDown */}
           <div 
             className="notif-footer" 
             onMouseDown={(e) => {

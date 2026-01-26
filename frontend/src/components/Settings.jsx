@@ -65,7 +65,8 @@ const Settings = ({ user, setUser }) => {
   });
 
   const [inAppPrefs, setInAppPrefs] = useState({
-    booking_alerts: true, system_updates: true, payment_alerts: true, reminders: true
+    booking_alerts: true, system_updates: true, payment_alerts: true, reminders: true,
+    review_prompts: true // ✅ ADDED: Default to true
   });
   
   const [hours, setHours] = useState({ 
@@ -411,6 +412,8 @@ const Settings = ({ user, setUser }) => {
                   <Toggle label="System Updates" desc="Important platform announcements." checked={inAppPrefs.system_updates} onChange={() => handleInAppToggle('system_updates')} />
                   <Toggle label="Payment Alerts" desc="Confirmations of deposits." checked={inAppPrefs.payment_alerts} onChange={() => handleInAppToggle('payment_alerts')} />
                   <Toggle label="Reminders" desc="In-app appointment reminders." checked={inAppPrefs.reminders} onChange={() => handleInAppToggle('reminders')} />
+                  {/* ✅ ADDED: Review Prompt Toggle */}
+                  <Toggle label="Review Prompts" desc="Reminders to rate completed services." checked={inAppPrefs.review_prompts !== false} onChange={() => handleInAppToggle('review_prompts')} />
               </div>
           )}
         </div>
