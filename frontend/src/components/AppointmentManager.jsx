@@ -696,7 +696,7 @@ useEffect(() => {
                         >
                             {apt.client_name}
                         </span> 
-                        {' '}({apt.client_phone})
+                        
                     </p>
                     {/* ✅ Integrated Chat Button */}
                     <ChatButton 
