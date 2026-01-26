@@ -4,9 +4,9 @@ import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 import cron from "node-cron";
-import { createServer } from "http"; // ✅ Added for Socket.IO
+import { createServer } from "http";
 import { db } from "./config/database.js";
-import { initializeSocket } from "./services/socketService.js"; // ✅ Added for Socket.IO
+import { initializeSocket } from "./services/socketService.js";
 
 // Import routes
 import authRoutes from "./routes/auth.js";
@@ -14,12 +14,11 @@ import serviceRoutes from "./routes/services.js";
 import appointmentRoutes from "./routes/appointments.js";
 import notificationRoutes from "./routes/notifications.js";
 import analyticsRoutes from "./routes/analytics.js";
-import chatRoutes from "./routes/chat.js"; // ✅ Added Chat Routes
-import favoritesRoutes from "./routes/favorites.js"; // ✅ Added Favorites Routes
+import chatRoutes from "./routes/chat.js";
+import favoritesRoutes from "./routes/favorites.js";
 
-// ✅ Import SMS Scheduled Reminders
+// Services
 import { sendScheduledReminders } from "./services/smsService.js";
-// ✅ Import Notification Service for Cron Jobs
 import { createNotification } from "./services/notificationService.js";
 
 dotenv.config();
@@ -41,8 +40,8 @@ app.use("/api/services", serviceRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/insights", analyticsRoutes);
-app.use("/api/chat", chatRoutes); // ✅ Mounted Chat Routes
-app.use("/api/favorites", favoritesRoutes); // ✅ Mounted Favorites Routes
+app.use("/api/chat", chatRoutes);
+app.use("/api/favorites", favoritesRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -56,18 +55,32 @@ app.get("/api/health", (req, res) => {
 // ✅ INITIALIZE SOCKET.IO
 initializeSocket(httpServer);
 
-// ✅ Auto-cleanup expired chat messages (Runs hourly)
-cron.schedule("0 * * * *", () => {
-  db.run(
-    `DELETE FROM chat_messages WHERE expires_at < datetime('now')`,
-    (err) => {
-      if (err) console.error("❌ Cleanup Error:", err);
-      else console.log("🧹 12-hour cleanup: Expired messages deleted");
-    },
-  );
+/* =====================================================
+   ⏰ BACKGROUND SCHEDULER (Cron Jobs)
+===================================================== */
+
+// 1. Auto-cleanup Inactive Chat Rooms (Every 10 mins)
+// 🔴 CHANGED: Deletes entire ROOM if inactive for 12+ hours
+cron.schedule("*/10 * * * *", () => {
+  // Enable Foreign Keys to ensure messages are deleted when room is deleted
+  db.run("PRAGMA foreign_keys = ON;", (err) => {
+    if (err) return console.error("❌ DB Pragma Error:", err);
+
+    db.run(
+      `DELETE FROM chat_rooms WHERE last_message_at < datetime('now', '-12 hours')`,
+      function (err) {
+        if (err) console.error("❌ Cleanup Error:", err);
+        else if (this.changes > 0) {
+          console.log(
+            `🧹 Cleanup: Deleted ${this.changes} inactive chat rooms (and their messages)`,
+          );
+        }
+      },
+    );
+  });
 });
 
-// ✅ Auto-cancel past pending appointments function
+// 2. Auto-cancel past pending appointments (Hourly)
 const autoCancelPastAppointments = async () => {
   try {
     await db.run(`
@@ -82,11 +95,7 @@ const autoCancelPastAppointments = async () => {
   }
 };
 
-/* =====================================================
-   ⏰ BACKGROUND SCHEDULER (Cron Jobs)
-===================================================== */
-
-// 1. SMS Reminders (Every 10 mins)
+// 3. SMS Reminders (Every 10 mins)
 cron.schedule("*/10 * * * *", async () => {
   console.log("🔔 CRON: Checking for SMS reminders...");
   try {
@@ -96,45 +105,39 @@ cron.schedule("*/10 * * * *", async () => {
   }
 });
 
-// 2. Chat Expiry Warning (Every 10 mins)
-// Warns users 1 hour before messages disappear
+// 4. Chat Expiry Warning (Every 10 mins)
+// 🔴 CHANGED: Warns if chat room has been inactive for ~11 hours
 cron.schedule("*/10 * * * *", () => {
-  const startWindow = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // Now + 1h
-  const endWindow = new Date(Date.now() + 70 * 60 * 1000).toISOString(); // Now + 1h 10m
+  // We look for chats inactive between 11h and 11h 10m ago.
+  // This catches them exactly 1 hour before the 12h deletion.
+  const startWindow = "datetime('now', '-11 hours', '-10 minutes')";
+  const endWindow = "datetime('now', '-11 hours')";
 
   db.all(
-    `SELECT DISTINCT m.room_id, m.sender_id, r.client_id, r.provider_id 
-     FROM chat_messages m
-     JOIN chat_rooms r ON m.room_id = r.id
-     WHERE m.expires_at BETWEEN ? AND ?`,
-    [startWindow, endWindow],
+    `SELECT id, client_id, provider_id 
+     FROM chat_rooms 
+     WHERE last_message_at BETWEEN ${startWindow} AND ${endWindow}`,
+    [],
     (err, rows) => {
       if (err || !rows) return;
 
-      const notifiedRooms = new Set();
-
       rows.forEach((row) => {
-        if (notifiedRooms.has(row.room_id)) return;
-
-        // Notify the recipient (the person who didn't send the message)
-        const recipientId =
-          row.sender_id === row.client_id ? row.provider_id : row.client_id;
-
-        createNotification(
-          recipientId,
-          "system",
-          "Chat Expiring Soon",
-          "Messages in your chat will expire and disappear in about 1 hour.",
-          row.room_id,
-        );
-
-        notifiedRooms.add(row.room_id);
+        // Notify BOTH participants that the chat is about to close
+        [row.client_id, row.provider_id].forEach((userId) => {
+          createNotification(
+            userId,
+            "system",
+            "Chat Session Ending",
+            "This chat has been inactive for 11 hours and will be deleted in 1 hour.",
+            row.id,
+          );
+        });
       });
     },
   );
 });
 
-// 3. Morning Brief for Providers (Daily at 7:00 AM)
+// 5. Morning Brief for Providers (Daily at 7:00 AM)
 cron.schedule("0 7 * * *", () => {
   console.log("☀️ CRON: Sending Morning Briefs...");
   db.all(
@@ -162,9 +165,9 @@ cron.schedule("0 7 * * *", () => {
   );
 });
 
-// 4. Cleanup Tasks (Hourly)
+// 6. General Cleanup Tasks (Hourly)
 cron.schedule("0 * * * *", async () => {
-  console.log("🧹 CRON: Running cleanup tasks...");
+  console.log("🧹 CRON: Running hourly maintenance...");
   try {
     await autoCancelPastAppointments();
   } catch (error) {
@@ -183,7 +186,7 @@ httpServer.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
   console.log(
-    `⏰ Scheduler active: Reminders, Chat Expiry, Morning Brief, Cleanup`,
+    `⏰ Scheduler active: Reminders (10m), Chat Cleanup (10m), Morning Brief (Daily)`,
   );
   console.log(`💬 Socket.IO ready`);
 });
