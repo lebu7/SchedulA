@@ -18,24 +18,41 @@ function Dashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [dashboardData, setDashboardData] = useState(null);
   
-  // ✅ Favorites State
+  // Favorites State
   const [favorites, setFavorites] = useState({ services: [], providers: [] });
   const [currentFavIndex, setCurrentFavIndex] = useState(0);
   const [currentProvIndex, setCurrentProvIndex] = useState(0); 
 
-  // ✅ Booking State
+  // Booking State
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
 
   const location = useLocation();
   const navigate = useNavigate();
 
+  // ✅ UPDATED: Handle Tab Navigation & Target Scrolling
   useEffect(() => {
-    if (location.state?.tab) {
-      setActiveTab(location.state.tab);
+    if (!location.state) return;
+
+    const { tab, targetId } = location.state;
+
+    if (tab) {
+      setActiveTab(tab);
+    }
+
+    // Defer scrolling until content renders
+    if (targetId) {
+      setTimeout(() => {
+        const el = document.getElementById(`target-${targetId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Optional: Add a flash effect class here if you want
+        }
+      }, 300);
     }
   }, [location.state]);
 
+  // Fetch Dashboard Data
   useEffect(() => {
     if (activeTab === 'overview') {
       api.get('/insights/summary')
@@ -60,7 +77,7 @@ function Dashboard({ user, setUser }) {
     }
   }, [favorites.services]);
 
-  // Carousel Logic for Providers (if > 2)
+  // Carousel Logic for Providers
   useEffect(() => {
     if (favorites.providers.length > 2) {
       const interval = setInterval(() => {
@@ -115,7 +132,6 @@ function Dashboard({ user, setUser }) {
           <button 
             className="btn-primary-icon" 
             onClick={() => {
-              // We set the tab, but we also pass the view preference to the component
               setActiveTab('appointments');
               navigate('/dashboard', { state: { tab: 'appointments', viewMode: 'calendar' } });
             }}
@@ -208,7 +224,11 @@ function Dashboard({ user, setUser }) {
               <div className="timeline-list">
                 {dashboardData.today_schedule?.length > 0 ? (
                   dashboardData.today_schedule.map(apt => (
-                    <div key={apt.id} className="timeline-item">
+                    <div 
+                        key={apt.id} 
+                        id={`target-${apt.id}`} // ✅ ADDED ID FOR SCROLLING
+                        className="timeline-item"
+                    >
                       <div className="time-col">
                         {new Date(apt.appointment_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </div>
@@ -233,7 +253,10 @@ function Dashboard({ user, setUser }) {
         {user.user_type === 'client' && dashboardData && (
           <>
             {dashboardData.next_appointment ? (
-              <div className="up-next-card">
+              <div 
+                className="up-next-card"
+                id={`target-${dashboardData.next_appointment.id}`} // ✅ ADDED ID FOR SCROLLING
+              >
                 <div className="next-header">
                   <Clock size={16} /> Up Next
                 </div>
@@ -263,7 +286,12 @@ function Dashboard({ user, setUser }) {
                 <h3>🔄 Book Again</h3>
                 <div className="rebook-grid">
                   {dashboardData.rebook_suggestions.map(s => (
-                    <div key={s.id} className="rebook-card" onClick={() => navigate('/dashboard', { state: { tab: 'services', search: s.name } })}>
+                    <div 
+                        key={s.id} 
+                        id={`target-${s.id}`} // ✅ ADDED ID FOR SCROLLING
+                        className="rebook-card" 
+                        onClick={() => navigate('/dashboard', { state: { tab: 'services', search: s.name } })}
+                    >
                       <div className="rebook-icon"><RefreshCw size={20} /></div>
                       <div className="rebook-info">
                         <h4>{s.name}</h4>
@@ -288,7 +316,6 @@ function Dashboard({ user, setUser }) {
               <span>{user.user_type === 'client' ? 'Find Services' : 'My Services'}</span>
             </button>
             <button onClick={() => setActiveTab('appointments')}>
-              {/* ✅ CHANGED: Quick action icon to List for consistency */}
               <div className="icon-box purple"><List size={20} /></div>
               <span>{user.user_type === 'client' ? 'My Schedule' : 'Manage List'}</span>
             </button>

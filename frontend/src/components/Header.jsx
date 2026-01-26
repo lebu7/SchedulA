@@ -17,8 +17,10 @@ function Header({ user, onLogout }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [userStats, setUserStats] = useState({ total_services: 0, total_staff: 0, upcoming_services: 0 });
 
-  const notifRef = useRef(null);
+  const notifRef = useRef(null);      // Ref for the bell icon/wrapper
+  const dropdownRef = useRef(null);   // ✅ New Ref for the portal dropdown
 
+  // Fetch data loop
   useEffect(() => {
     if (!user) return;
     fetchNotifications();
@@ -30,13 +32,23 @@ function Header({ user, onLogout }) {
     return () => clearInterval(interval);
   }, [user]);
 
+  // ✅ FIXED: Click Outside Handler for Portal
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifications(false);
+      // Close ONLY if click is outside Bell Wrapper AND outside Dropdown
+      if (
+        notifRef.current && !notifRef.current.contains(e.target) && 
+        dropdownRef.current && !dropdownRef.current.contains(e.target)
+      ) {
+        setShowNotifications(false);
+      }
     };
-    document.addEventListener("mousedown", handleClickOutside);
+
+    if (showNotifications) {
+        document.addEventListener("mousedown", handleClickOutside);
+    }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [showNotifications]);
 
   const fetchStats = async () => {
     try {
@@ -69,10 +81,17 @@ function Header({ user, onLogout }) {
     } catch (err) { console.error(err); }
   };
 
-  const handleNotificationClick = (notif) => {
-    if (!notif.is_read) markAsRead(notif.id);
+  // ✅ UPDATED: Async handler to ensure markAsRead fires
+  const handleNotificationClick = async (notif) => {
+    // 1. Mark read immediately (Optimistic Update handled in markAsRead)
+    if (!notif.is_read) {
+        await markAsRead(notif.id);
+    }
+    
+    // 2. Close dropdown
     setShowNotifications(false);
 
+    // 3. Determine Navigation
     let navState = { tab: 'overview' };
     const title = notif.title || '';
     const type = notif.type;
@@ -87,7 +106,8 @@ function Header({ user, onLogout }) {
       else navState = { tab: 'settings', subTab: 'notifications' };
     }
 
-    navigate('/dashboard', { state: navState });
+    // 4. Navigate
+    navigate('/dashboard', { replace: true, state: navState });
   };
 
   const getAvatar = () => {
@@ -111,6 +131,21 @@ function Header({ user, onLogout }) {
     } catch { return 'Recently'; }
   };
 
+  // Dynamic position state
+  const [dropdownStyle, setDropdownStyle] = useState({});
+
+  useEffect(() => {
+    if (showNotifications && notifRef.current) {
+        const rect = notifRef.current.getBoundingClientRect();
+        setDropdownStyle({
+            position: 'absolute',
+            top: `${rect.bottom + window.scrollY + 10}px`, // 10px offset
+            right: `${window.innerWidth - rect.right}px`,  // Align right
+            zIndex: 9999
+        });
+    }
+  }, [showNotifications]);
+
   return (
     <>
       <header className="header">
@@ -125,18 +160,39 @@ function Header({ user, onLogout }) {
             <div className="user-menu">
               {/* Notifications Bell */}
               <div className="notification-wrapper" ref={notifRef}>
-                <div className="notification-icon" onClick={() => setShowNotifications(prev => !prev)}>
+                <div 
+                    className="notification-icon" 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowNotifications(prev => !prev);
+                    }}
+                >
                   <Bell size={20} color="#64748b" />
                   {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
                 </div>
 
                 {/* Render Dropdown via Portal */}
                 {showNotifications && createPortal(
-                  <div className="notification-dropdown" style={{ top: '60px', right: '20px', zIndex: 9999 }}>
+                  <div 
+                    className="notification-dropdown" 
+                    style={dropdownStyle}
+                    ref={dropdownRef} // ✅ Attached Ref here
+                    onMouseDown={(e) => e.stopPropagation()} // Stop click-through
+                  >
                     <div className="notif-header">
                       <h4>Notifications</h4>
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        {unreadCount > 0 && <span className="mark-read-text" onClick={markAllRead}><CheckCheck size={14} /> Mark all</span>}
+                        {unreadCount > 0 && (
+                            <span 
+                                className="mark-read-text" 
+                                onClick={(e) => {
+                                    e.stopPropagation(); 
+                                    markAllRead();
+                                }}
+                            >
+                                <CheckCheck size={14} /> Mark all
+                            </span>
+                        )}
                         <span onClick={() => setShowNotifications(false)} className="close-notif"><X size={16}/></span>
                       </div>
                     </div>
@@ -144,7 +200,11 @@ function Header({ user, onLogout }) {
                     <div className="notif-list">
                       {notifications.length === 0 ? <div className="empty-state">No new notifications</div> :
                         notifications.map(notif => (
-                          <div key={notif.id} className={`notif-item ${!notif.is_read ? 'unread' : ''}`} onClick={() => handleNotificationClick(notif)}>
+                          <div 
+                            key={notif.id} 
+                            className={`notif-item ${!notif.is_read ? 'unread' : ''}`} 
+                            onClick={() => handleNotificationClick(notif)}
+                          >
                             {(notif.type === 'system' || notif.title.includes('Welcome')) ? <CheckCircle size={18} className="notif-icon green" /> : <Bell size={18} className="notif-icon blue" />}
                             <div className="notif-text">
                               <p className="notif-title">{notif.title}</p>
@@ -199,7 +259,6 @@ function Header({ user, onLogout }) {
                 <Edit size={14} /> Edit Profile
               </button>
             </div>
-            {/* Profile details and stats */}
             <div className="profile-details-grid">
               <div className="detail-item"><span className="label">Phone</span><div className="value"><Phone size={14} /> {user.phone || 'N/A'}</div></div>
               <div className="detail-item"><span className="label">Gender</span><div className="value"><User size={14} /> {user.gender || 'N/A'}</div></div>
