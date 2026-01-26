@@ -412,8 +412,11 @@ const Settings = ({ user, setUser }) => {
                   <Toggle label="System Updates" desc="Important platform announcements." checked={inAppPrefs.system_updates} onChange={() => handleInAppToggle('system_updates')} />
                   <Toggle label="Payment Alerts" desc="Confirmations of deposits." checked={inAppPrefs.payment_alerts} onChange={() => handleInAppToggle('payment_alerts')} />
                   <Toggle label="Reminders" desc="In-app appointment reminders." checked={inAppPrefs.reminders} onChange={() => handleInAppToggle('reminders')} />
-                  {/* ✅ ADDED: Review Prompt Toggle */}
-                  <Toggle label="Review Prompts" desc="Reminders to rate completed services." checked={inAppPrefs.review_prompts !== false} onChange={() => handleInAppToggle('review_prompts')} />
+                  
+                  {/* ✅ ADDED: Review Prompt Toggle - ONLY FOR CLIENTS */}
+                  {user?.user_type === 'client' && (
+                    <Toggle label="Review Prompts" desc="Reminders to rate completed services." checked={inAppPrefs.review_prompts !== false} onChange={() => handleInAppToggle('review_prompts')} />
+                  )}
               </div>
           )}
         </div>
