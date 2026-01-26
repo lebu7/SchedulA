@@ -29,14 +29,19 @@ router.get("/summary", authenticateToken, (req, res) => {
       LIMIT 1
     `;
 
+    // 🔄 UPDATED: Shows latest 6 unique services based on last completion date
     const rebookQuery = `
-      SELECT DISTINCT s.id, s.name, s.price, u.business_name as provider_name, u.name as provider_real_name
+      SELECT s.id, s.name, s.price, 
+            u.business_name as provider_name, 
+            u.name as provider_real_name,
+            MAX(a.appointment_date) as last_booked_date
       FROM appointments a
       JOIN services s ON a.service_id = s.id
       JOIN users u ON a.provider_id = u.id
       WHERE a.client_id = ? AND a.status = 'completed'
-      ORDER BY a.appointment_date DESC
-      LIMIT 4
+      GROUP BY s.id
+      ORDER BY last_booked_date DESC
+      LIMIT 6
     `;
 
     db.get(nextApptQuery, [userId], (err, nextApt) => {

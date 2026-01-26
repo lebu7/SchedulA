@@ -18,7 +18,6 @@ import './Dashboard.css';
 // ✅ HELPER TO EXTRACT WALK-IN NAME
 const getWalkInClientName = (notes) => {
   if (!notes) return "Walk-In Client";
-  // Matches "Walk-In Client: Name |" OR "Walk-In Client: Name" at end of string
   const match = notes.match(/Walk-In Client: (.*?)(?: \||$)/);
   if (match && match[1]) {
       return match[1].trim();
@@ -55,7 +54,6 @@ function Dashboard({ user, setUser }) {
       setActiveTab(tab);
     }
 
-    // Defer scrolling until content renders
     if (targetId) {
       setTimeout(() => {
         const el = document.getElementById(`target-${targetId}`);
@@ -123,13 +121,19 @@ function Dashboard({ user, setUser }) {
   };
 
   const handleBookService = (service) => {
+    // ✅ Handle both "Favorites" objects (item_id) and "Rebook" objects (id)
+    const serviceId = service.item_id || service.id; 
+    
+    // Ensure we have provider info. Rebook/Fav objects usually have provider_name/business_name flattened.
+    // If it's a raw service object from ServiceList, it might be nested differently, but this covers Dashboard cases.
     const serviceObj = {
-        id: service.item_id, 
+        id: serviceId, 
+        service_id: serviceId, // BookingModal often expects service_id for fetching details
         name: service.name,
         price: service.price,
         duration: service.duration,
         provider_id: service.provider_id,
-        provider_name: service.provider_name,
+        provider_name: service.provider_name || service.provider_real_name,
         business_name: service.business_name
     };
     setSelectedService(serviceObj);
@@ -143,13 +147,11 @@ function Dashboard({ user, setUser }) {
     return "Good Evening";
   };
 
-  // Handler: Ensures Appointments tab opens in 'list' view
   const handleAppointmentsTabClick = () => {
     navigate('.', { state: { tab: 'appointments', viewMode: 'list' }, replace: true });
     setActiveTab('appointments');
   };
 
-  // ✅ Handler for Manual Schedule Navigation
   const handleNextSchedule = () => {
     if (!dashboardData?.today_schedule) return;
     setCurrentScheduleIndex((prev) => {
@@ -444,7 +446,8 @@ function Dashboard({ user, setUser }) {
                         key={s.id} 
                         id={`target-${s.id}`}
                         className="rebook-card" 
-                        onClick={() => navigate('/dashboard', { state: { tab: 'services', search: s.name } })}
+                        // ✅ CHANGED: Calls handleBookService directly
+                        onClick={() => handleBookService(s)}
                     >
                       <div className="rebook-icon"><RefreshCw size={20} /></div>
                       <div className="rebook-info">
