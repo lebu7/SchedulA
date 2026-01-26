@@ -1,4 +1,4 @@
-/* backend/config/database.js */
+/* backend/src/config/database.js */
 import sqlite3 from "sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -26,6 +26,17 @@ export const db = new sqlite3.Database(
       console.error("❌ Error opening database:", err.message);
     } else {
       console.log("✅ Connected to SQLite database successfully");
+
+      // 🟢 PERMANENT FIX: Enable WAL (Write-Ahead Logging) Mode
+      // This prevents "database locked" and "readonly" errors during concurrent writes
+      db.run("PRAGMA journal_mode = WAL;", (pragmaErr) => {
+        if (pragmaErr) {
+          console.error("❌ Failed to set WAL mode:", pragmaErr.message);
+        } else {
+          console.log("🚀 SQLite WAL mode enabled (Better concurrency)");
+        }
+      });
+
       // Ensure the file itself is writable by the current process
       try {
         fs.accessSync(dbPath, fs.constants.W_OK);
@@ -127,7 +138,7 @@ function initializeDatabase() {
   `);
 
   /* ---------------------------------------------
-     📱 IN-APP CHAT TABLES (🆕 Added Step 1.2)
+     📱 IN-APP CHAT TABLES
   --------------------------------------------- */
 
   /* Chat Rooms Table */
@@ -170,7 +181,7 @@ function initializeDatabase() {
   );
 
   /* ---------------------------------------------
-     ❤️ FAVORITES TABLE (🆕 Added for Favorites Feature)
+     ❤️ FAVORITES TABLE
   --------------------------------------------- */
   db.run(`
     CREATE TABLE IF NOT EXISTS favorites (
