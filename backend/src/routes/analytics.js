@@ -97,13 +97,16 @@ router.get("/summary", authenticateToken, (req, res) => {
 
     // Query E: TODAY'S VISUAL SCHEDULE
     const todayScheduleQuery = `
-        SELECT a.id, a.appointment_date, a.status, c.name as client_name, s.name as service_name, s.duration
-        FROM appointments a
-        JOIN users c ON a.client_id = c.id
-        JOIN services s ON a.service_id = s.id
-        WHERE a.provider_id = ? AND date(a.appointment_date) = date('now', 'localtime')
-        ORDER BY a.appointment_date ASC
-    `;
+            SELECT a.id, a.appointment_date, a.status, 
+                  c.name as client_name, s.name as service_name, s.duration,
+                  a.notes, a.payment_reference 
+            FROM appointments a
+            JOIN users c ON a.client_id = c.id
+            JOIN services s ON a.service_id = s.id
+            WHERE a.provider_id = ? 
+            AND date(a.appointment_date) = date('now', 'localtime')
+            ORDER BY a.appointment_date ASC
+        `;
 
     // 🆕 Query F: PEAK HOURS (Corrected to use Local Time)
     // Using 'localtime' modifier ensures we group by the user's clock time, not UTC

@@ -12,6 +12,9 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const [slots, setSlots] = useState([]); 
   const [notes, setNotes] = useState("");
   
+  // ✅ NEW: Walk-In Client Name State
+  const [walkInName, setWalkInName] = useState("");
+
   // UI States
   const [error, setError] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -234,15 +237,25 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   // ---------- 3. WALK-IN SUBMIT LOGIC ----------
   const handleWalkInSubmit = async () => {
     if (!selectedDate || !selectedTime) return;
+    if (!walkInName.trim()) {
+        setError("Please enter a client name for this walk-in.");
+        return;
+    }
+
     setProcessingBooking(true);
     
     try {
       const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
       
+      // ✅ Combine Client Name into Notes for storage
+      // Format: "Walk-In Client: [Name] | [Other Notes]"
+      const combinedNotes = `Walk-In Client: ${walkInName} | ${notes.trim()}`;
+
       const payload = {
         service_id: realServiceId,
         appointment_date: appointmentDateTime.toISOString(),
-        notes: notes.trim() || "Walk-in Booking",
+        notes: combinedNotes, // Save name in notes
+        client_name: walkInName, // Also send as field (in case backend supports it)
         addons: selectedAddons,
         is_walk_in: true, 
         payment_reference: `WALK-IN-${paymentMethod.toUpperCase()}-${Date.now()}`, 
@@ -434,7 +447,21 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
                 {isWalkIn && (
                   <div className="walk-in-payment-section" style={{background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px'}}>
-                    <h4 style={{fontSize: '0.9em', color: '#1e293b', marginBottom: '10px', marginTop: 0}}>💰 Record Payment</h4>
+                    
+                    {/* ✅ NEW: Walk-In Client Name Input */}
+                    <div className="form-group">
+                        <label style={{fontSize: '0.85em', color:'#2563eb', fontWeight:'600'}}>Client Name (Required)</label>
+                        <input 
+                            type="text" 
+                            className="styled-input" 
+                            value={walkInName} 
+                            onChange={(e) => setWalkInName(e.target.value)} 
+                            placeholder="e.g. John Doe"
+                            style={{borderColor: '#93c5fd'}}
+                        />
+                    </div>
+
+                    <h4 style={{fontSize: '0.9em', color: '#1e293b', marginBottom: '10px', marginTop: '10px'}}>💰 Record Payment</h4>
                     <div className="form-group">
                         <label style={{fontSize: '0.85em'}}>Amount Collected (KES)</label>
                         <input 
@@ -462,15 +489,15 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                 )}
 
                 <div className="form-group">
-                  <label>Notes ({isWalkIn ? "Client Name/Ref" : "Optional"})</label>
-                  <textarea rows="2" className="styled-input textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={isWalkIn ? "Enter client name here..." : "Special requests..."} />
+                  <label>Notes ({isWalkIn ? "Additional Details" : "Optional"})</label>
+                  <textarea rows="2" className="styled-input textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Special requests..." />
                 </div>
 
                 {isWalkIn ? (
                     <button 
                         type="button" 
                         className="btn btn-primary btn-block" 
-                        disabled={!selectedTime || processingBooking || !walkInAmount} 
+                        disabled={!selectedTime || processingBooking || !walkInAmount || !walkInName} 
                         onClick={handleWalkInSubmit}
                         style={{backgroundColor: '#16a34a'}} 
                     >
@@ -482,6 +509,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
               </div>
             ) : (
               <div className="step-2">
+                {/* Step 2 Content (Unchanged) */}
                 <div className="two-column-layout">
                   <div className="column left-col">
                     <h4 className="section-title">2. Add-ons</h4>

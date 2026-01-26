@@ -7,7 +7,6 @@ import BookingModal from "./BookingModal";
 import RescheduleModal from "./RescheduleModal";
 import CalendarView from "./CalendarView"; 
 import ChatButton from './ChatButton';
-// ✅ ADDED: Import Client Report Modal
 import ClientReportModal from './ClientReportModal';
 import { useSocket } from "../contexts/SocketContext";
 import { 
@@ -35,27 +34,13 @@ const parseAddons = (apt) => {
 
 const getRiskBadge = (riskScore) => {
   if (riskScore === undefined || riskScore === null) return null;
-  
   const score = Number(riskScore);
-  
   if (score < 0.3) {
-    return (
-      <span className="risk-badge low" title="Low probability of No-Show">
-        <CheckCircle size={14} /> Low Risk
-      </span>
-    );
+    return <span className="risk-badge low" title="Low probability of No-Show"><CheckCircle size={14} /> Low Risk</span>;
   } else if (score < 0.7) {
-    return (
-      <span className="risk-badge medium" title="Moderate probability of No-Show">
-        <Info size={14} /> Medium Risk
-      </span>
-    );
+    return <span className="risk-badge medium" title="Moderate probability of No-Show"><Info size={14} /> Medium Risk</span>;
   } else {
-    return (
-      <span className="risk-badge high" title="High probability of No-Show">
-        <AlertTriangle size={14} /> High Risk ({(score * 100).toFixed(0)}%)
-      </span>
-    );
+    return <span className="risk-badge high" title="High probability of No-Show"><AlertTriangle size={14} /> High Risk ({(score * 100).toFixed(0)}%)</span>;
   }
 };
 
@@ -272,19 +257,13 @@ function AppointmentManager({ user }) {
   const [loading, setLoading] = useState(true);
   
   const [viewMode, setViewMode] = useState(() => {
+    if (location.state?.viewMode) return location.state.viewMode;
+    return 'list';
+  }); 
 
-  if (location.state?.viewMode) {
-    return location.state.viewMode;
-  }
-
-  return 'list';
-}); 
-
-useEffect(() => {
-  if (location.state?.viewMode) {
-    setViewMode(location.state.viewMode);
-  }
-}, [location.state]);
+  useEffect(() => {
+    if (location.state?.viewMode) setViewMode(location.state.viewMode);
+  }, [location.state]);
 
   const [activeTab, setActiveTab] = useState(() => {
     if (location.state?.subTab) return location.state.subTab;
@@ -315,7 +294,6 @@ useEffect(() => {
   const [loadingServices, setLoadingServices] = useState(false);
   const [walkInService, setWalkInService] = useState(null);
 
-  // ✅ Client Report State
   const [reportClientId, setReportClientId] = useState(null);
 
   const { roomUnreadCounts, resetRoomUnread } = useSocket();
@@ -640,7 +618,19 @@ useEffect(() => {
      
      const canDelete = appointmentDate <= sixMonthsAgo;
 
+     // ✅ CHECK IF IT'S A WALK-IN
      const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
+
+     // ✅ HELPER TO EXTRACT WALK-IN NAME FROM NOTES
+     const getWalkInClientName = (notes) => {
+        if (!notes) return "Walk-In Client";
+        // Look for pattern "Walk-In Client: Name |"
+        const match = notes.match(/Walk-In Client: (.*?) \|/);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+        return "Walk-In Client";
+     };
 
      return (
         <div
@@ -670,7 +660,7 @@ useEffect(() => {
             {user.user_type === "client" ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p><strong>With:</strong> {apt.provider_name}</p>
-                    {/* ✅ Integrated Chat Button */}
+                   {/* Client View - Chat button visible for clients */}
                    <ChatButton 
                       onClick={() => {
                         openAppointmentChat(apt);
@@ -686,26 +676,34 @@ useEffect(() => {
             ) : (
                 <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    {/* ✅ CLIENT NAME IS NOW CLICKABLE FOR REPORT */}
                     <p>
                         <strong>Client:</strong>{' '}
-                        <span 
-                            onClick={(e) => { e.stopPropagation(); setReportClientId(apt.client_id); }}
-                            style={{ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
-                            title="View Visit Report"
-                        >
-                            {apt.client_name}
-                        </span> 
-                        
+                        {/* ✅ DISPLAY LOGIC: If Walk-In, extract name. If not, show normal client name */}
+                        {isWalkIn ? (
+                            <span style={{ fontWeight: '600', color: '#1e293b' }}>
+                                {getWalkInClientName(apt.notes)}
+                            </span>
+                        ) : (
+                            <span 
+                                onClick={(e) => { e.stopPropagation(); setReportClientId(apt.client_id); }}
+                                style={{ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }}
+                                title="View Visit Report"
+                            >
+                                {apt.client_name}
+                            </span> 
+                        )}
                     </p>
-                    {/* ✅ Integrated Chat Button */}
-                    <ChatButton 
-                      onClick={() => openAppointmentChat(apt)} 
-                      size="small"
-                      contextType="appointment"
-                      contextId={apt.id}
-                      disableGlobalCounter={true}
-                    />
+                    
+                    {/* ✅ HIDDEN CHAT BUTTON FOR WALK-INS (Provider View) */}
+                    {!isWalkIn && (
+                        <ChatButton 
+                        onClick={() => openAppointmentChat(apt)} 
+                        size="small"
+                        contextType="appointment"
+                        contextId={apt.id}
+                        disableGlobalCounter={true}
+                        />
+                    )}
                 </div>
                 {(apt.status === 'pending' || apt.status === 'scheduled') && !isWalkIn && (
                     <div style={{ marginTop: '5px', marginBottom: '8px' }}>

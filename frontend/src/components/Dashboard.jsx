@@ -15,6 +15,17 @@ import {
 } from 'lucide-react';
 import './Dashboard.css';
 
+// ✅ HELPER TO EXTRACT WALK-IN NAME
+const getWalkInClientName = (notes) => {
+  if (!notes) return "Walk-In Client";
+  // Matches "Walk-In Client: Name |" OR "Walk-In Client: Name" at end of string
+  const match = notes.match(/Walk-In Client: (.*?)(?: \||$)/);
+  if (match && match[1]) {
+      return match[1].trim();
+  }
+  return "Walk-In Client";
+};
+
 function Dashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [dashboardData, setDashboardData] = useState(null);
@@ -261,10 +272,10 @@ function Dashboard({ user, setUser }) {
                 </h3>
                 <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                   {dashboardData.peak_hours?.length > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '160px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '120px' }}>
                       {dashboardData.peak_hours.map((item, idx) => {
                         const max = Math.max(...dashboardData.peak_hours.map(i => i.count));
-                        const height = (item.count / max) * 140;
+                        const height = (item.count / max) * 100;
                         return (
                           <div key={idx} style={{ textAlign: 'center', flex: 1 }}>
                             <div 
@@ -357,23 +368,30 @@ function Dashboard({ user, setUser }) {
                   // ✅ SLICE TO SHOW ONLY 2 ITEMS
                   dashboardData.today_schedule
                     .slice(currentScheduleIndex, currentScheduleIndex + 2)
-                    .map(apt => (
-                    <div 
-                        key={apt.id} 
-                        id={`target-${apt.id}`}
-                        className="timeline-item slide-in" // Added slide-in class if you have animations
-                        style={{animation: 'fadeIn 0.3s ease-out'}}
-                    >
-                      <div className="time-col">
-                        {new Date(apt.appointment_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                      <div className="details-col">
-                        <strong>{apt.client_name}</strong>
-                        <span>{apt.service_name} • {apt.duration} mins</span>
-                      </div>
-                      <span className={`status-pill ${apt.status}`}>{apt.status}</span>
-                    </div>
-                  ))
+                    .map(apt => {
+                      // ✅ 2. EXTRACT NAME LOGIC
+                      const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
+                      const displayName = isWalkIn ? getWalkInClientName(apt.notes) : apt.client_name;
+
+                      return (
+                        <div 
+                            key={apt.id} 
+                            id={`target-${apt.id}`}
+                            className="timeline-item slide-in"
+                            style={{animation: 'fadeIn 0.3s ease-out'}}
+                        >
+                          <div className="time-col">
+                            {new Date(apt.appointment_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </div>
+                          <div className="details-col">
+                            {/* ✅ 3. USE EXTRACTED NAME */}
+                            <strong>{displayName}</strong>
+                            <span>{apt.service_name} • {apt.duration} mins</span>
+                          </div>
+                          <span className={`status-pill ${apt.status}`}>{apt.status}</span>
+                        </div>
+                      );
+                    })
                 ) : (
                   <div className="empty-card">
                     <Calendar size={40} style={{marginBottom: '10px', opacity: 0.5}} />
