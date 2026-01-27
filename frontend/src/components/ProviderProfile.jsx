@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import BookingModal from './BookingModal';
 import ReviewCarousel from './ReviewCarousel'; 
+import ReviewListModal from './ReviewListModal'; // ✅ Import Modal
 import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle, Heart, Star } from 'lucide-react';
 import './ProviderProfile.css';
 import './ChatButton.css';
@@ -18,6 +19,10 @@ const ProviderProfile = ({ user }) => {
     const [selectedService, setSelectedService] = useState(null);
     const [showBookingModal, setShowBookingModal] = useState(false);
     const [isFavorite, setIsFavorite] = useState(false);
+
+    // ✅ Modal State
+    const [viewReviewsService, setViewReviewsService] = useState(null);
+    const [initialRatingFilter, setInitialRatingFilter] = useState('all');
 
     useEffect(() => {
         const fetchProviderData = async () => {
@@ -89,6 +94,13 @@ const ProviderProfile = ({ user }) => {
         setShowBookingModal(true);
     };
 
+    // ✅ Open Review Modal with specific rating filter
+    const handleRatingClick = (e, service, ratingValue = 'all') => {
+        e.stopPropagation();
+        setInitialRatingFilter(ratingValue);
+        setViewReviewsService(service);
+    };
+
     if (loading) return <div className="loading-spinner">Loading Profile...</div>;
     if (error) return <div className="error-view">{error}</div>;
 
@@ -111,8 +123,12 @@ const ProviderProfile = ({ user }) => {
                         <div className="header-meta-row">
                             <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
                             
-                            {/* ✅ STYLED RATING PILL */}
-                            <div className="provider-rating-pill">
+                            {/* ✅ General rating pill opens ALL reviews */}
+                            <div 
+                                className="provider-rating-pill" 
+                                onClick={(e) => handleRatingClick(e, { id: 'provider', name: provider.business_name }, 'all')}
+                                style={{ cursor: 'pointer' }}
+                            >
                                 <Star size={16} fill={provider.avg_rating ? "#f59e0b" : "none"} color="#f59e0b" />
                                 <strong>{rating}</strong>
                                 <span className="review-count">({provider.review_count || 0} reviews)</span>
@@ -155,9 +171,13 @@ const ProviderProfile = ({ user }) => {
                                 <div className="service-info">
                                     <div className="mini-service-header">
                                         <h3>{service.name}</h3>
-                                        {/* ✅ STYLED SERVICE RATING */}
+                                        {/* ✅ Styled service rating opens reviews for that specific star count */}
                                         {service.avg_rating && (
-                                            <div className="service-rating-mini">
+                                            <div 
+                                                className="service-rating-mini" 
+                                                onClick={(e) => handleRatingClick(e, service, Math.round(service.avg_rating).toString())}
+                                                style={{ cursor: 'pointer' }}
+                                            >
                                                 <Star size={12} fill="#f59e0b" color="#f59e0b"/>
                                                 <span>{Number(service.avg_rating).toFixed(1)}</span>
                                             </div>
@@ -233,6 +253,17 @@ const ProviderProfile = ({ user }) => {
                         setShowBookingModal(false);
                         alert("Booking Successful!");
                     }}
+                />
+            )}
+
+            {/* ✅ Reviews Modal Instance */}
+            {viewReviewsService && (
+                <ReviewListModal
+                    serviceId={viewReviewsService.id}
+                    serviceName={viewReviewsService.name}
+                    onClose={() => setViewReviewsService(null)}
+                    user={user}
+                    preFilter={initialRatingFilter} // ✅ Pass the filter
                 />
             )}
         </div>
