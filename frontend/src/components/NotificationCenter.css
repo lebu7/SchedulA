@@ -3,42 +3,63 @@
 /* Wrapper for the Bell Icon */
 .notification-wrapper {
   position: relative;
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  height: auto;
+  flex-shrink: 0;
 }
 
 /* Bell Icon Button */
 .notification-icon {
   position: relative;
   cursor: pointer;
-  padding: 8px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   transition: background-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0; /* 🔑 prevent stretching */
 }
 
-.notification-icon:hover {
-  background-color: #f1f5f9;
+.bell-icon {
+  stroke: #64748b;
+  fill: none;
+}
+
+.notification-icon svg {
+  fill: none;
+  transition:
+    fill 0.2s ease,
+    stroke 0.2s ease;
+}
+
+.notification-icon:hover svg {
+  color: #2563eb;
+  stroke: #2563eb;
 }
 
 /* Red Counter Badge */
 .badge {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: -1px;
+  right: -2px;
   background-color: #ef4444;
   color: white;
-  font-size: 0.7rem;
+  font-size: 0.55rem;
   font-weight: 700;
   min-width: 16px;
+  width: 16px;
   height: 16px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid white;
-  padding: 0 4px;
+  border: 1px solid white;
+  padding: 8px 8px;
+  line-height: 1;
+  box-sizing: border-box;
 }
 
 /* Dropdown Container (Portal Target) */

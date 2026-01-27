@@ -170,7 +170,7 @@ function NotificationCenter() {
         style={{ cursor: 'pointer' }}
       >
         <div className="notification-icon">
-            <Bell size={20} color="#64748b" />
+            <Bell size={20} color="#2563eb" className="bell-icon" />
             {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
         </div>
       </div>
