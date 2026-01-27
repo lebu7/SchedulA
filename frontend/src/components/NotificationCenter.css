@@ -125,7 +125,7 @@
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
-  gap: 12px;
+  gap: 14px; /* Increased gap */
   align-items: flex-start;
   cursor: pointer;
   transition: background 0.15s;
@@ -141,19 +141,43 @@
 }
 
 .notif-item.unread {
-  background-color: #eff6ff; /* Light blue background for unread items */
+  background-color: #eff6ff;
 }
 
 /* Icons inside items */
 .notif-icon {
-  margin-top: 3px;
+  margin-top: 2px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  transition: transform 0.2s ease;
 }
+
 .notif-icon.green {
-  color: #10b981;
+  background-color: #f0fdf4;
+  color: #16a34a;
 }
+
 .notif-icon.blue {
+  background-color: #eff6ff;
   color: #2563eb;
+}
+
+.notif-icon.yellow {
+  background-color: #fffbeb;
+  color: #f59e0b;
+}
+
+.notif-icon svg {
+  stroke: currentColor;
+}
+
+.notif-icon.yellow svg {
+  fill: currentColor;
 }
 
 /* Text Content */

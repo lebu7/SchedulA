@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom'; 
 import api from '../services/auth';
 import { Bell, CheckCheck, CheckCircle, X, Star } from 'lucide-react'; 
-import './Header.css'; 
+import './NotificationCenter.css';
 
 function NotificationCenter() {
   const [notifications, setNotifications] = useState([]);
@@ -17,22 +17,27 @@ function NotificationCenter() {
   
   const [coords, setCoords] = useState({ top: 0, right: 0 });
 
-  // ✅ Standardized UTC-to-Local Real-time formatter
+  // ✅ Updated Nairobi-accurate Real-time formatter
   const timeAgo = (dateStr) => {
     if (!dateStr) return 'Just now';
     try {
       /**
-       * 🟢 THE FIX: 
-       * SQLite sends: "2026-01-26 21:00:00" (UTC)
-       * Standardized: "2026-01-26T21:00:00Z"
-       * This tells JS to convert it to your local time (EAT) before math.
+       * Ensure the timestamp is treated as UTC (standard for .toISOString())
+       * Adding 'Z' forces JS to treat it as Zulu/UTC time.
        */
-      const standardizedDate = dateStr.replace(' ', 'T') + 'Z';
+      const standardizedDate = dateStr.endsWith('Z') 
+        ? dateStr 
+        : dateStr.includes(' ') 
+            ? dateStr.replace(' ', 'T') + 'Z' 
+            : dateStr + 'Z';
+            
       const date = new Date(standardizedDate);
       const now = new Date();
       
+      // Calculate difference in seconds
       const diffInSeconds = Math.floor((now - date) / 1000);
       
+      // If server/client clocks are slightly out of sync, show Just Now
       if (diffInSeconds < 5) return 'Just now';
       if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
       
@@ -55,11 +60,9 @@ function NotificationCenter() {
 
   useEffect(() => {
     fetchNotifications();
-    
-    // Poll for new notifications every 15s
     const fetchInterval = setInterval(fetchNotifications, 15000); 
 
-    // ✅ Real-time update: Refresh UI every 30s to advance "Just now" to "1m ago"
+    // ✅ Forces UI refresh every 30s to advance "Just now" to "1m ago"
     const tickerInterval = setInterval(() => {
       setTick(t => t + 1);
     }, 30000); 
@@ -131,7 +134,6 @@ function NotificationCenter() {
     const title = notif.title ? notif.title.toLowerCase() : '';
     const type = notif.type;
 
-    // Direct navigation for review prompts
     if (title.includes('appointment') && title.includes('?')) {
         navState = { tab: 'appointments', subTab: 'history', targetId: notif.reference_id };
     }
@@ -217,12 +219,14 @@ function NotificationCenter() {
                   className={`notif-item ${notif.is_read ? 'read' : 'unread'}`}
                   onClick={() => handleNotificationClick(notif)}
                 >
-                  <div className={`notif-icon ${notif.type === 'system' ? 'green' : 'blue'}`}>
+                 <div className={`notif-icon ${notif.title?.includes('?') ? 'yellow' : notif.type === 'system' ? 'green' : 'blue'}`}>
                     {notif.title?.includes('?') ? (
-                        <Star size={18} color="#f59e0b" fill="#f59e0b" />
-                    ) : (notif.type === 'system' || notif.title?.includes('Welcome')) 
-                      ? <CheckCircle size={18} /> 
-                      : <Bell size={18} />}
+                      <Star size={18} fill="currentColor" />
+                    ) : (notif.type === 'system' || notif.title?.includes('Welcome')) ? (
+                      <CheckCircle size={18} /> 
+                    ) : (
+                      <Bell size={18} />
+                    )}
                   </div>
                   <div className="notif-text">
                     <p className="notif-title">{notif.title}</p>
