@@ -516,6 +516,7 @@ function ServiceManager({ user }) {
                 serviceId={viewReviewsService.id}
                 serviceName={viewReviewsService.name}
                 onClose={() => setViewReviewsService(null)}
+                user={user} // ✅ Ensure this prop is passed
             />
         )}
 

@@ -1,18 +1,23 @@
 /* frontend/src/components/ReviewListModal.jsx */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../services/auth';
 import ChatButton from './ChatButton'; 
 import { useSocket } from "../contexts/SocketContext";
-import { Star, X, User, MapPin, Clock, Phone, ExternalLink } from 'lucide-react';
+import { Star, X, User, MapPin, Clock, ExternalLink, Filter, ArrowUpDown } from 'lucide-react';
 import './ReviewComponents.css';
 
-const ReviewListModal = ({ serviceId, serviceName, onClose }) => {
+const ReviewListModal = ({ serviceId, serviceName, onClose, user }) => {
     const [reviews, setReviews] = useState([]);
     const [serviceDetails, setServiceDetails] = useState(null);
     const [loading, setLoading] = useState(true);
-    const { roomUnreadCounts, resetRoomUnread } = useSocket();
+    
+    // Filtering & Sorting State
+    const [filterRating, setFilterRating] = useState('all');
+    const [sortBy, setSortBy] = useState('newest');
 
-    // ✅ Prevent background scrolling when modal is open
+    const { roomUnreadCounts, resetRoomUnread } = useSocket();
+    const isProvider = user?.user_type === 'provider';
+
     useEffect(() => {
         document.body.style.overflow = 'hidden';
         return () => {
@@ -38,6 +43,27 @@ const ReviewListModal = ({ serviceId, serviceName, onClose }) => {
         fetchReviewData();
     }, [serviceId]);
 
+    // ✅ Logic for Filtering and Sorting
+    const processedReviews = useMemo(() => {
+        let result = [...reviews];
+
+        // Filter
+        if (filterRating !== 'all') {
+            result = result.filter(r => r.rating === parseInt(filterRating));
+        }
+
+        // Sort
+        result.sort((a, b) => {
+            if (sortBy === 'newest') return new Date(b.created_at) - new Date(a.created_at);
+            if (sortBy === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
+            if (sortBy === 'highest') return b.rating - a.rating;
+            if (sortBy === 'lowest') return a.rating - b.rating;
+            return 0;
+        });
+
+        return result;
+    }, [reviews, filterRating, sortBy]);
+
     const getCategoryClass = (category) => {
         if (!category) return "default-category";
         const cat = category.toLowerCase();
@@ -50,31 +76,17 @@ const ReviewListModal = ({ serviceId, serviceName, onClose }) => {
     const openServiceChat = async (e, service) => {
         if (e) e.stopPropagation(); 
         if (!service) return;
-
         try {
-        const res = await api.post('/chat/rooms', {
-            recipientId: service.provider_id,
-            contextType: 'service',
-            contextId: service.id
-        });
-        
-        // ✅ FIXED: Ensure duration is explicitly passed in the contextData
-        const contextData = { 
-            name: service.name, 
-            price: service.price,
-            duration: service.duration // Added this line
-        };
-        
-        window.dispatchEvent(new CustomEvent('openChatRoom', {
-            detail: {
-            room: res.data.room,
-            context: contextData
-            }
-        }));
-        resetRoomUnread(service.id);
+            const res = await api.post('/chat/rooms', {
+                recipientId: service.provider_id,
+                contextType: 'service',
+                contextId: service.id
+            });
+            const contextData = { name: service.name, price: service.price, duration: service.duration };
+            window.dispatchEvent(new CustomEvent('openChatRoom', { detail: { room: res.data.room, context: contextData } }));
+            resetRoomUnread(service.id);
         } catch (err) {
-        console.error("Failed to initialize service chat:", err);
-        alert("Could not start conversation with provider.");
+            console.error("Failed to initialize service chat:", err);
         }
     };
 
@@ -100,7 +112,7 @@ const ReviewListModal = ({ serviceId, serviceName, onClose }) => {
                     <button className="close-btn" onClick={onClose}><X size={20}/></button>
                 </div>
 
-                <div className="review-modal-grid-header">
+                <div className={`review-modal-grid-header ${isProvider ? 'single-col' : ''}`}>
                     <div className="header-box service-box">
                         <div className="box-top-row">
                             <span className="box-label">Service Details</span>
@@ -113,60 +125,83 @@ const ReviewListModal = ({ serviceId, serviceName, onClose }) => {
                             <span><Clock size={14} /> {serviceDetails?.duration} mins</span>
                             <span className="price-tag-highlight">KES {parseFloat(serviceDetails?.price || 0).toFixed(0)}</span>
                         </div>
-                        <p className="box-desc">
-                            {serviceDetails?.description || "No description available."}
-                        </p>
+                        <p className="box-desc">{serviceDetails?.description || "No description available."}</p>
                     </div>
 
-                    <div className="header-box provider-box">
-                        <div className="box-top-row" style={{ alignItems: 'flex-start' }}>
-                            <div style={{flex: 1}}>
-                                <span className="box-label">Provider</span>
-                                <h4>{serviceDetails?.business_name || serviceDetails?.provider_name}</h4>
+                    {/* ✅ Hide Right Column if user is the Provider */}
+                    {!isProvider && (
+                        <div className="header-box provider-box">
+                            <div className="box-top-row" style={{ alignItems: 'flex-start' }}>
+                                <div style={{flex: 1}}>
+                                    <span className="box-label">Provider</span>
+                                    <h4>{serviceDetails?.business_name || serviceDetails?.provider_name}</h4>
+                                </div>
+                            </div>
+                            <div className="provider-contact-details">
+                                <div className="box-info-item">
+                                    <MapPin size={14} className="icon-blue" /> 
+                                    <span>{serviceDetails?.suburb}, {serviceDetails?.business_address}</span>
+                                </div>
+                                {serviceDetails?.google_maps_link && (
+                                    <a href={serviceDetails.google_maps_link} target="_blank" rel="noopener noreferrer" className="maps-mini-link">
+                                        <ExternalLink size={12} /> View on Map
+                                    </a>
+                                )}
+                                <div className="box-info-item clickable-chat-row" onClick={(e) => openServiceChat(e, serviceDetails)}>
+                                    <div className="mini-chat-wrapper">
+                                        <ChatButton 
+                                            onClick={(e) => openServiceChat(e, serviceDetails)}
+                                            size="small"
+                                            contextType="service"
+                                            contextId={serviceDetails?.id}
+                                            unreadCount={roomUnreadCounts[serviceDetails?.id] || 0}
+                                            disableGlobalCounter={true}
+                                        />
+                                    </div>
+                                    <span className="chat-prompt-text">Contact via chat</span>
+                                </div>
                             </div>
                         </div>
-                        
-                        <div className="provider-contact-details">
-                            <div className="box-info-item">
-                                <MapPin size={14} className="icon-blue" /> 
-                                <span>{serviceDetails?.suburb}, {serviceDetails?.business_address}</span>
-                            </div>
-                            {serviceDetails?.google_maps_link && (
-                                <a href={serviceDetails.google_maps_link} target="_blank" rel="noopener noreferrer" className="maps-mini-link">
-                                    <ExternalLink size={12} /> View on Map
-                                </a>
-                            )}
-                            <div 
-                                className="box-info-item clickable-chat-row" 
-                                onClick={(e) => openServiceChat(e, serviceDetails)}
-                            >
-                                <div className="mini-chat-wrapper">
-                                    <ChatButton 
-                                        onClick={(e) => openServiceChat(e, serviceDetails)}
-                                        size="small"
-                                        contextType="service"
-                                        contextId={serviceDetails?.id}
-                                        unreadCount={roomUnreadCounts[serviceDetails?.id] || 0}
-                                        disableGlobalCounter={true}
-                                    />
-                                </div>
-                                <span className="chat-prompt-text">Contact via chat</span>
-                            </div>
+                    )}
+                </div>
+
+                <div className="reviews-list-controls">
+                    <h4 className="reviews-section-title">Verified Reviews ({processedReviews.length})</h4>
+                    
+                    {/* ✅ Filtering and Sorting Mechanisms */}
+                    <div className="list-tools">
+                        <div className="tool-select">
+                            <Filter size={14} />
+                            <select value={filterRating} onChange={(e) => setFilterRating(e.target.value)}>
+                                <option value="all">All Ratings</option>
+                                <option value="5">5 Stars</option>
+                                <option value="4">4 Stars</option>
+                                <option value="3">3 Stars</option>
+                                <option value="2">2 Stars</option>
+                                <option value="1">1 Star</option>
+                            </select>
+                        </div>
+                        <div className="tool-select">
+                            <ArrowUpDown size={14} />
+                            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="highest">Highest Rated</option>
+                                <option value="lowest">Lowest Rated</option>
+                            </select>
                         </div>
                     </div>
                 </div>
 
-                <h4 className="reviews-section-title">Verified Reviews ({reviews.length})</h4>
-
                 <div className="reviews-scroll-container">
-                    {reviews.length === 0 ? (
+                    {processedReviews.length === 0 ? (
                         <div className="no-reviews">
                             <Star size={40} color="#cbd5e1" />
-                            <p>No reviews yet for this service.</p>
+                            <p>{reviews.length === 0 ? "No reviews yet for this service." : "No reviews match your filters."}</p>
                         </div>
                     ) : (
                         <div className="reviews-grid-layout">
-                            {reviews.map(review => (
+                            {processedReviews.map(review => (
                                 <div key={review.id} className="review-box-item">
                                     <div className="review-header">
                                         <div className="reviewer-info">

@@ -359,3 +359,39 @@
     padding: 15px;
   }
 }
+
+.review-modal-grid-header.single-col {
+  grid-template-columns: 1fr !important;
+}
+
+.reviews-list-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 5px;
+}
+
+.list-tools {
+  display: flex;
+  gap: 10px;
+}
+
+.tool-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  padding: 10px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.tool-select select {
+  border: none;
+  font-size: 12px;
+  color: #475569;
+  outline: none;
+  cursor: pointer;
+  background: transparent;
+}
