@@ -8,6 +8,7 @@ import AppointmentManager from './AppointmentManager';
 import Settings from './Settings';
 import ProviderAnalytics from './ProviderAnalytics'; 
 import BookingModal from './BookingModal'; 
+import ReviewCarousel from './ReviewCarousel'; // ✅ IMPORTED REVIEW CAROUSEL
 import { 
   Calendar, Clock, User, DollarSign, Plus, Bell, RefreshCw, 
   ChevronRight, Briefcase, Zap, Star, Heart, MapPin, List,
@@ -28,6 +29,7 @@ const getWalkInClientName = (notes) => {
 function Dashboard({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [dashboardData, setDashboardData] = useState(null);
+  const [providerReviews, setProviderReviews] = useState([]); // ✅ STATE FOR REVIEWS
   
   // Favorites State
   const [favorites, setFavorites] = useState({ services: [], providers: [] });
@@ -70,6 +72,13 @@ function Dashboard({ user, setUser }) {
       api.get('/insights/summary')
         .then(res => setDashboardData(res.data))
         .catch(err => console.error("Dashboard Load Error:", err));
+
+      // ✅ FETCH REVIEWS IF PROVIDER
+      if (user.user_type === 'provider') {
+        api.get(`/reviews/provider/${user.id}`)
+          .then(res => setProviderReviews(res.data.reviews || []))
+          .catch(err => console.error("Reviews Load Error:", err));
+      }
 
       if (user.user_type === 'client') {
         api.get('/favorites')
@@ -121,14 +130,11 @@ function Dashboard({ user, setUser }) {
   };
 
   const handleBookService = (service) => {
-    // ✅ Handle both "Favorites" objects (item_id) and "Rebook" objects (id)
     const serviceId = service.item_id || service.id; 
     
-    // Ensure we have provider info. Rebook/Fav objects usually have provider_name/business_name flattened.
-    // If it's a raw service object from ServiceList, it might be nested differently, but this covers Dashboard cases.
     const serviceObj = {
         id: serviceId, 
-        service_id: serviceId, // BookingModal often expects service_id for fetching details
+        service_id: serviceId,
         name: service.name,
         price: service.price,
         duration: service.duration,
@@ -267,7 +273,6 @@ function Dashboard({ user, setUser }) {
             {/* Peak Hours & Service Popularity */}
             <div className="insights-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
               
-              {/* 1. Peak Hours Analysis */}
               <div className="section-block" style={{ marginTop: 0 }}>
                 <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <BarChart2 size={18} color="#f59e0b" /> Peak Hours
@@ -305,7 +310,6 @@ function Dashboard({ user, setUser }) {
                 </div>
               </div>
 
-              {/* 2. Service Popularity Ranking */}
               <div className="section-block" style={{ marginTop: 0 }}>
                 <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <TrendingUp size={18} color="#10b981" /> Top Services
@@ -346,7 +350,6 @@ function Dashboard({ user, setUser }) {
             <div className="section-block">
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
                     <h3>📅 Today's Schedule</h3>
-                    {/* ✅ Next Button for Schedule */}
                     {dashboardData.today_schedule?.length > 2 && (
                         <button 
                             onClick={handleNextSchedule}
@@ -367,11 +370,9 @@ function Dashboard({ user, setUser }) {
               
               <div className="timeline-list">
                 {dashboardData.today_schedule?.length > 0 ? (
-                  // ✅ SLICE TO SHOW ONLY 2 ITEMS
                   dashboardData.today_schedule
                     .slice(currentScheduleIndex, currentScheduleIndex + 2)
                     .map(apt => {
-                      // ✅ 2. EXTRACT NAME LOGIC
                       const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
                       const displayName = isWalkIn ? getWalkInClientName(apt.notes) : apt.client_name;
 
@@ -386,7 +387,6 @@ function Dashboard({ user, setUser }) {
                             {new Date(apt.appointment_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                           </div>
                           <div className="details-col">
-                            {/* ✅ 3. USE EXTRACTED NAME */}
                             <strong>{displayName}</strong>
                             <span>{apt.service_name} • {apt.duration} mins</span>
                           </div>
@@ -446,7 +446,6 @@ function Dashboard({ user, setUser }) {
                         key={s.id} 
                         id={`target-${s.id}`}
                         className="rebook-card" 
-                        // ✅ CHANGED: Calls handleBookService directly
                         onClick={() => handleBookService(s)}
                     >
                       <div className="rebook-icon"><RefreshCw size={20} /></div>
@@ -520,6 +519,16 @@ function Dashboard({ user, setUser }) {
             </div>
         )}
 
+        {/* ✅ REVIEWS CAROUSEL FOR PROVIDER DASHBOARD */}
+        {user.user_type === 'provider' && (
+          <div className="sidebar-card">
+            <h4><Star size={18} color="#f59e0b" /> Recent Reviews</h4>
+            <div style={{marginTop: '10px'}}>
+               <ReviewCarousel reviews={providerReviews} />
+            </div>
+          </div>
+        )}
+
         <div className="sidebar-card">
           <h4><Bell size={18} color="#64748b" /> Updates</h4>
           <div className="system-updates-list">
@@ -565,18 +574,37 @@ function Dashboard({ user, setUser }) {
     }
   };
 
+  const renderTabs = () => {
+    const tabs = [
+      { id: 'overview', label: 'Overview' },
+      { id: 'analytics', label: 'Analytics', providerOnly: true },
+      { id: 'services', label: 'Services' },
+      { id: 'appointments', label: user.user_type === 'client' ? 'Schedule' : 'Appointments' },
+      { id: 'settings', label: 'Settings' }
+    ];
+
+    return tabs
+      .filter(tab => !tab.providerOnly || user.user_type === 'provider')
+      .map(tab => (
+        <button 
+          key={tab.id}
+          className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => {
+            if (tab.id === 'appointments') handleAppointmentsTabClick();
+            else setActiveTab(tab.id);
+          }}
+        >
+          {tab.label}
+        </button>
+      ));
+  };
+
   return (
     <div className="container">
       <div className="dashboard">
         <div className="nav-container">
           <div className="dashboard-tabs">
-            <button className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>Overview</button>
-            {user.user_type === 'provider' && (
-              <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
-            )}
-            <button className={`tab-btn ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Services</button>
-            <button className={`tab-btn ${activeTab === 'appointments' ? 'active' : ''}`} onClick={handleAppointmentsTabClick}>{user.user_type === 'client' ? 'Schedule' : 'Appointments'}</button>
-            <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>Settings</button>
+            {renderTabs()}
           </div>
         </div>
         <div className="dashboard-content">{renderContent()}</div>
