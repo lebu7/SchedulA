@@ -60,7 +60,7 @@ function NotificationCenter() {
 
   useEffect(() => {
     fetchNotifications();
-    const fetchInterval = setInterval(fetchNotifications, 15000); 
+    const fetchInterval = setInterval(fetchNotifications, 1000); 
 
     // ✅ Forces UI refresh every 30s to advance "Just now" to "1m ago"
     const tickerInterval = setInterval(() => {
