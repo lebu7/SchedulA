@@ -29,10 +29,8 @@
   margin-bottom: 25px;
 }
 
-/* Control Bar - Desktop (Grid Layout for Stability) */
 .control-bar {
   display: grid;
-  /* ⚡ FIXED: Reduced Location width (1.3fr) to prevent overlap */
   grid-template-columns: 2.5fr 1.3fr 3.2fr;
   gap: 15px;
   background: white;
@@ -43,11 +41,10 @@
   border: 1px solid #e2e8f0;
 }
 
-/* Search Wrapper */
 .search-wrapper {
   position: relative;
   width: 100%;
-  min-width: 0; /* Prevents flex/grid overflow issues */
+  min-width: 0;
 }
 
 .search-icon {
@@ -60,7 +57,6 @@
   z-index: 1;
 }
 
-/* Unified styling for Inputs and Selects */
 .search-wrapper input,
 .search-wrapper select {
   width: 100%;
@@ -85,7 +81,6 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Add back arrow for dropdowns */
 .search-wrapper select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -94,13 +89,12 @@
   cursor: pointer;
 }
 
-/* Filter Group */
 .filters-wrapper {
   display: flex;
   gap: 10px;
   align-items: center;
   justify-content: flex-end;
-  min-width: 0; /* Prevents overflow */
+  min-width: 0;
 }
 
 .filter-item {
@@ -178,7 +172,6 @@
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
 }
 
-/* Card Header */
 .service-header-bar {
   padding: 15px 18px;
   display: flex;
@@ -189,11 +182,15 @@
   gap: 10px;
 }
 
-/* Header Content (Left Side) */
 .header-content {
   flex: 1;
   min-width: 0;
   padding-right: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
 }
 
 .service-name {
@@ -207,7 +204,7 @@
 }
 
 .service-provider {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 12px;
   opacity: 0.9;
   white-space: nowrap;
@@ -216,7 +213,6 @@
   display: block;
 }
 
-/* Header Right Column (Price & Rating) */
 .header-right-col {
   flex-shrink: 0;
   text-align: right;
@@ -225,7 +221,6 @@
   align-items: flex-end;
 }
 
-/* Header Price */
 .header-price {
   background: rgba(255, 255, 255, 0.2);
   padding: 6px 10px;
@@ -245,24 +240,28 @@
   opacity: 0.9;
 }
 
-/* Rating Badge (New) */
-.rating-badge {
-  display: inline-flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  margin-top: 4px;
+/* ✅ UPDATED: MINIMALIST RATING UI */
+.rating-badge-minimal {
+  display: flex;
+  align-items: center; /* Number and stars in one line */
+  gap: 6px;
+  margin-top: 10px; /* Gap from price container */
   cursor: pointer;
+  background: none; /* No background */
+  border: none; /* No border */
+  padding: 0;
   color: white;
-  transition: background 0.2s;
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  opacity: 0.9;
 }
 
-.rating-badge:hover {
-  background: rgba(255, 255, 255, 0.35);
+.rating-num {
+  font-size: 11px; /* Reduced font size */
+  font-weight: 700;
+}
+
+.star-group {
+  display: flex;
+  gap: 1px;
 }
 
 /* Gradients */
@@ -288,7 +287,6 @@
   cursor: pointer;
 }
 
-/* Location Row */
 .location-row {
   display: flex;
   align-items: center;
@@ -321,7 +319,6 @@
   flex: 1;
 }
 
-/* Meta Badges */
 .meta-row {
   display: flex;
   gap: 8px;
@@ -350,7 +347,6 @@
   border: 1px solid #dbeafe;
 }
 
-/* Favorite Button (New) */
 .btn-icon-favorite {
   background: none;
   border: none;
@@ -366,10 +362,6 @@
   transform: scale(1.1);
 }
 
-.btn-icon-favorite:active {
-  transform: scale(0.95);
-}
-
 .service-description {
   color: #64748b;
   font-size: 13px;
@@ -382,7 +374,6 @@
   overflow: hidden;
 }
 
-/* Addons */
 .addon-preview {
   background: #fffbeb;
   border: 1px solid #fcd34d;
@@ -430,7 +421,6 @@
   flex-grow: 1;
 }
 
-/* Book Button */
 .book-btn {
   width: 100%;
   padding: 10px;
@@ -447,20 +437,17 @@
 .book-btn:hover {
   background: #1e293b;
 }
-
 .book-btn:disabled {
   background: #94a3b8;
   cursor: not-allowed;
 }
 
-/* Closed State */
 .closed-client-card {
   opacity: 0.7;
   filter: grayscale(100%);
   pointer-events: none;
 }
 
-/* Empty State */
 .no-services {
   text-align: center;
   padding: 60px 20px;
@@ -473,7 +460,6 @@
   margin: 15px 0 8px;
 }
 
-/* Responsive / Mobile */
 @media (max-width: 900px) {
   .control-bar {
     grid-template-columns: 1fr 1fr;
@@ -490,13 +476,11 @@
     flex-direction: column;
     align-items: stretch;
   }
-
   .filters-wrapper {
     overflow-x: auto;
     padding-bottom: 5px;
     justify-content: flex-start;
   }
-
   .mobile-hide {
     display: none;
   }
@@ -595,18 +579,16 @@
   }
 }
 
-/* Scope the flex properties specifically to the Service Card Header */
 .service-header-bar .header-content {
   flex: 1;
   display: flex;
-  flex-direction: column; /* Stacks Service Name and Provider Button vertically */
-  align-items: flex-start; /* Aligns them to the left */
-  gap: 8px; /* Space between the name and the button */
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   min-width: 0;
-  text-align: left; /* Ensures text doesn't center */
+  text-align: left;
 }
 
-/* Ensure the provider button stays small and left-aligned */
 .provider-link-btn {
   background: rgba(255, 255, 255, 0.15);
   color: white;
@@ -615,7 +597,7 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  width: fit-content; /* Only as wide as the text */
+  width: fit-content;
   max-width: 90%;
   border: 1px solid rgba(255, 255, 255, 0.3);
   transition: all 0.2s ease;
@@ -624,7 +606,7 @@
   text-overflow: ellipsis;
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-  display: block; /* Ensures it behaves as its own block line */
+  display: block;
 }
 
 .provider-link-btn:hover {

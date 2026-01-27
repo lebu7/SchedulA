@@ -544,25 +544,29 @@ function ServiceList({ user }) {
                                    {service.business_name || service.provider_name}
                                 </p>
                               </div>
-                              <div className="header-right-col" style={{textAlign: 'right'}}>
+                              <div className="header-right-col">
                                   <div className="header-price">
                                     <small>From</small>
                                     KES {price}
                                   </div>
                                   
-                                  {/* ✅ RATINGS BADGE: YELLOW STAR */}
+                                  {/* ✅ UPDATED RATINGS: SINGLE LINE, MINIMAL, 5 STARS */}
                                   <div 
-                                    className="rating-badge"
+                                    className="rating-badge-minimal"
                                     onClick={(e) => handleRatingClick(e, service)}
                                     title="View Reviews"
                                   >
-                                    <Star 
-                                        size={14} 
-                                        fill={rating ? "#f59e0b" : "none"} 
-                                        color={rating ? "#f59e0b" : "white"} 
-                                        style={{marginRight: 4}}
-                                    />
-                                    {rating || "New"}
+                                    <span className="rating-num">{rating || "New"}</span>
+                                    <div className="star-group">
+                                      {[...Array(5)].map((_, i) => (
+                                        <Star 
+                                          key={i}
+                                          size={10} 
+                                          fill={rating && i < Math.round(rating) ? "#f59e0b" : "none"} 
+                                          color={rating && i < Math.round(rating) ? "#f59e0b" : "rgba(255,255,255,0.4)"} 
+                                        />
+                                      ))}
+                                    </div>
                                   </div>
                               </div>
                             </div>
