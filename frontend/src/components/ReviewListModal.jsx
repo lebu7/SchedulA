@@ -48,21 +48,33 @@ const ReviewListModal = ({ serviceId, serviceName, onClose }) => {
     };
 
     const openServiceChat = async (e, service) => {
-        e.stopPropagation(); 
+        if (e) e.stopPropagation(); 
+        if (!service) return;
+
         try {
-          const res = await api.post('/chat/rooms', {
+        const res = await api.post('/chat/rooms', {
             recipientId: service.provider_id,
             contextType: 'service',
             contextId: service.id
-          });
-          const contextData = { name: service.name, price: service.price };
-          window.dispatchEvent(new CustomEvent('openChatRoom', {
-            detail: { room: res.data.room, context: contextData }
-          }));
-          resetRoomUnread(service.id);
+        });
+        
+        // ✅ FIXED: Ensure duration is explicitly passed in the contextData
+        const contextData = { 
+            name: service.name, 
+            price: service.price,
+            duration: service.duration // Added this line
+        };
+        
+        window.dispatchEvent(new CustomEvent('openChatRoom', {
+            detail: {
+            room: res.data.room,
+            context: contextData
+            }
+        }));
+        resetRoomUnread(service.id);
         } catch (err) {
-          console.error("Failed to initialize service chat:", err);
-          alert("Could not start conversation with provider.");
+        console.error("Failed to initialize service chat:", err);
+        alert("Could not start conversation with provider.");
         }
     };
 

@@ -13,23 +13,19 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
 
   const userId = Number(localStorage.getItem('userId'));
 
-  // Determine other participant (needed for sender name logic)
   const otherParticipant = room.client_id === userId
     ? { name: room.provider_name || room.business_name, type: 'provider' }
     : { name: room.client_name, type: 'client' };
 
-  // 🔹 Reset room unread when chat opens
   useEffect(() => {
     if (room?.id) resetRoomUnread(room.id);
   }, [room?.id, resetRoomUnread]);
 
-  // Fetch messages + socket listeners
   useEffect(() => {
     if (!room) return;
 
     let isMounted = true;
 
-    // Fetch existing messages
     api.get(`/chat/rooms/${room.id}/messages`).then(res => {
       if (!isMounted) return;
       const processed = res.data.messages.map(msg => ({
@@ -39,10 +35,8 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
       setMessages(processed);
     });
 
-    // Join room
     socket?.emit('join_room', { roomId: room.id });
 
-    // Listen for new messages
     const handleNewMessage = (msg) => {
       if (msg.room_id === room.id && Number(msg.sender_id) !== userId) {
         setMessages(prev => [...prev, {
@@ -52,7 +46,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
       }
     };
 
-    // ✅ Listen for read receipts
     const handleMessagesRead = ({ roomId, readerId }) => {
       if (roomId === room.id && Number(readerId) !== userId) {
         setMessages(prev => prev.map(msg => ({ ...msg, is_read: 1 })));
@@ -62,7 +55,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     socket?.on('new_message', handleNewMessage);
     socket?.on('messages_read', handleMessagesRead);
 
-    // Mark as read immediately on open
     socket?.emit('mark_read', { roomId: room.id });
 
     return () => {
@@ -72,7 +64,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     };
   }, [room, socket, userId, otherParticipant.name]);
 
-  // Scroll to bottom
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ 
@@ -82,12 +73,10 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     }
   }, [messages]);
 
-  // Handle sending
   const handleSend = () => {
     const text = newMessage.trim();
     if (!text) return;
 
-    // Optimistic update
     const tempMsg = {
       id: Date.now(),
       room_id: room.id,
@@ -99,9 +88,7 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     };
     setMessages(prev => [...prev, tempMsg]);
 
-    // Emit message to server
     socket?.emit('send_message', { roomId: room.id, message: text });
-
     setNewMessage('');
   };
 
@@ -109,7 +96,7 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     <div className={inWidget ? "chat-widget-inner" : "chat-modal-overlay"}>
       <div className={`chat-modal ${inWidget ? 'in-widget' : ''}`}>
         
-        {/* ✅ Context Banner */}
+        {/* ✅ Updated Context Banner Logic */}
         {contextInfo && (
           <div className="chat-context-banner-centered">
             <div className="context-icon">
@@ -124,14 +111,17 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
                     <span className="status-tag">{contextInfo.status}</span>
                   </>
                 ) : (
-                  <span>KES {contextInfo.price} • {contextInfo.duration} mins</span>
+                  <span>
+                    KES {Number(contextInfo.price).toLocaleString()} • 
+                    {/* ✅ FIXED: Ensures duration is displayed if available */}
+                    {contextInfo.duration ? ` ${contextInfo.duration} mins` : ' Duration N/A'}
+                  </span>
                 )}
               </div>
             </div>
           </div>
         )}
 
-        {/* MESSAGES AREA */}
         <div className="chat-messages">
           <div className="chat-start-notice">Messages expire after 12 hours.</div>
           {messages.map(msg => {
@@ -139,8 +129,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
             return (
               <div key={msg.id} className={`msg ${isMe ? 'sent' : 'received'}`}>
                 <p className="msg-text">{msg.message}</p>
-                
-                {/* Footer with Time & Read Receipts */}
                 <div className="msg-footer">
                   <span className="time">
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -157,7 +145,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* INPUT AREA */}
         <div className="chat-input">
           <input
             type="text"

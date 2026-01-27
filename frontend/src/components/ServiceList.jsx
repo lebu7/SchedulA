@@ -294,7 +294,11 @@ function ServiceList({ user }) {
         contextId: service.id
       });
       
-      const contextData = { name: service.name, price: service.price };
+      const contextData = { 
+        name: service.name, 
+        price: service.price,
+        duration: service.duration 
+      };
       
       window.dispatchEvent(new CustomEvent('openChatRoom', {
         detail: {
