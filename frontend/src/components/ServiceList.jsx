@@ -103,6 +103,7 @@ function ServiceList({ user }) {
 
   const toggleFavorite = async (e, serviceId) => {
     e.stopPropagation(); 
+    if (user.user_type === 'provider') return; // Disable for providers
     try {
         await api.post('/favorites/toggle', { itemId: serviceId, type: 'service' });
         
@@ -203,8 +204,8 @@ function ServiceList({ user }) {
     setFilteredServices(result);
   };
 
-  // === ACTIONS ===
   const handleBookClick = (service) => {
+    if (user.user_type === 'provider') return;
     if (service.is_closed || isBusinessClosed) return;
     setSelectedService(service);
     setShowBookingModal(true);
@@ -220,59 +221,22 @@ function ServiceList({ user }) {
     setSelectedService(null);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this service? This cannot be undone.")) {
-      try {
-        await api.delete(`/services/${id}`);
-        setAllServices(prev => prev.filter(s => s.id !== id));
-        alert("Service deleted successfully.");
-      } catch (error) {
-        console.error("Delete failed", error);
-        alert("Failed to delete service.");
-      }
-    }
-  };
-
-  const toggleServiceStatus = async (service) => {
-    try {
-      const newStatus = !service.is_closed;
-      await api.put(`/services/${service.id}`, { is_closed: newStatus });
-      setAllServices(prev => prev.map(s => 
-        s.id === service.id ? { ...s, is_closed: newStatus } : s
-      ));
-    } catch (error) {
-      console.error("Toggle status failed", error);
-      alert("Failed to update status.");
-    }
-  };
-
   const handleToggleBusiness = () => {
     const action = isBusinessClosed ? "OPEN" : "CLOSE";
-    if (window.confirm(`Are you sure you want to ${action} the business? This will affect availability for all services.`)) {
+    if (window.confirm(`Are you sure you want to ${action} the business?`)) {
         setIsBusinessClosed(!isBusinessClosed);
-    }
-  };
-
-  const handleEdit = (service) => {
-    navigate(`/services/edit/${service.id}`, { state: { service } });
-  };
-
-  const handleViewAddons = (service) => {
-    const addons = subServices[service.id] || [];
-    if (addons.length === 0) {
-        alert("No add-ons configured for this service.");
-    } else {
-        alert(`Add-ons for ${service.name}:\n\n` + addons.map(a => `- ${a.name}: KES ${a.price}`).join('\n'));
     }
   };
 
   const handleLocationClick = (e, service) => {
     e.stopPropagation(); 
+    if (user.user_type === 'provider') return;
     setMapService(service);
   };
   
   const handleRatingClick = (e, service) => {
       e.stopPropagation();
+      if (user.user_type === 'provider') return;
       setViewReviewsService(service);
   };
 
@@ -287,6 +251,7 @@ function ServiceList({ user }) {
 
   const openServiceChat = async (e, service) => {
     e.stopPropagation(); 
+    if (user.user_type === 'provider') return;
     try {
       const res = await api.post('/chat/rooms', {
         recipientId: service.provider_id,
@@ -309,7 +274,6 @@ function ServiceList({ user }) {
       }));
     } catch (err) {
       console.error("Failed to initialize service chat:", err);
-      alert("Could not start conversation with provider.");
     }
   };
 
@@ -317,17 +281,14 @@ function ServiceList({ user }) {
     <div className="service-list">
       <div className="container">
         
-        {/* ==========================
-            PROVIDER VIEW
-           ========================== */}
-        {user.user_type === 'provider' ? (
-            <>
-                <div className="service-page-header">
-                    <div className="title-section">
-                        <h2>Manage Your Services</h2>
-                        <p>Update prices, manage availability, and add new offerings.</p>
-                    </div>
-                    <div className="provider-top-actions">
+        <div className="service-page-header">
+            <div className="title-section">
+                <h2>{user.user_type === 'provider' ? "Manage Your Services" : "Explore Services"}</h2>
+                <p>{user.user_type === 'provider' ? "View and organize your service offerings." : "Discover the best beauty and wellness professionals near you."}</p>
+            </div>
+            
+            {user.user_type === 'provider' ? (
+                <div className="provider-top-actions">
                          <button className="btn-add-service" onClick={() => navigate('/services/new')}>
                             <Plus size={18} /> Add New Service
                          </button>
@@ -337,334 +298,227 @@ function ServiceList({ user }) {
                          >
                             <Power size={18} /> {isBusinessClosed ? "Re-open Business" : "Close Business"}
                          </button>
-                    </div>
                 </div>
-
-                {isBusinessClosed && (
-                    <div className="business-closed-banner">
-                        ⚠️ Your business is currently marked as <strong>CLOSED</strong>. Clients cannot book any services.
+            ) : (
+                <div className="control-bar">
+                    <div className="search-wrapper">
+                        <Search size={18} className="search-icon" />
+                        <input
+                            type="text"
+                            placeholder="Find services or providers..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
                     </div>
-                )}
 
-                <div className="services-grid">
-                    {filteredServices.map((service) => {
-                        const isDimmed = service.is_closed || isBusinessClosed;
-
-                        return (
-                            <div key={service.id} className={`provider-card ${isDimmed ? 'dimmed-card' : ''}`}>
-                                {isDimmed && (
-                                    <div className="status-overlay-badge">
-                                        {isBusinessClosed ? "BUSINESS CLOSED" : "SERVICE CLOSED"}
-                                    </div>
-                                )}
-
-                                <div className="provider-card-header">
-                                    <h3>{service.name}</h3>
-                                    <span className="provider-category-badge">{service.category}</span>
-                                </div>
-
-                                <p className="provider-card-desc">
-                                    {service.description 
-                                        ? (service.description.length > 100 ? service.description.substring(0, 100) + '...' : service.description)
-                                        : "No description provided."}
-                                </p>
-
-                                <div className="provider-stats-row">
-                                    <div className="stat-item">
-                                        <Clock size={14} style={{marginBottom:'4px'}}/>
-                                        <span>{service.duration}m</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <span style={{fontSize:'12px', fontWeight:'400'}}>Price</span>
-                                        <span>KES {service.price}</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <Store size={14} style={{marginBottom:'4px'}}/>
-                                        <span>Cap: {service.capacity || 1}</span>
-                                    </div>
-                                </div>
-                                
-                                <div style={{marginTop: '10px', fontSize: '0.9rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px'}}>
-                                    <Star size={14} fill={service.avg_rating > 0 ? "#f59e0b" : "none"} color="#f59e0b"/>
-                                    <span>
-                                        {service.avg_rating ? Number(service.avg_rating).toFixed(1) : "New"} 
-                                        <span style={{opacity: 0.7}}> ({service.review_count || 0} reviews)</span>
-                                    </span>
-                                </div>
-
-                                <button className="btn-view-addons" onClick={() => handleViewAddons(service)}>
-                                    View Add-ons ({subServices[service.id]?.length || 0})
-                                </button>
-
-                                <div className="provider-actions-footer">
-                                    <button className="btn-action btn-edit" onClick={() => handleEdit(service)}>
-                                        <Edit size={14} /> Edit
-                                    </button>
-                                    <button className="btn-action btn-delete" onClick={() => handleDelete(service.id)}>
-                                        <Trash2 size={14} /> Delete
-                                    </button>
-                                    <button 
-                                        className={`btn-action ${service.is_closed ? 'btn-toggle-open' : 'btn-toggle-close'}`} 
-                                        onClick={() => toggleServiceStatus(service)}
-                                    >
-                                        {service.is_closed ? (
-                                            <><Unlock size={12} /> Open</>
-                                        ) : (
-                                            <><Lock size={12} /> Close</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </>
-        ) : (
-        /* ==========================
-            CLIENT VIEW
-           ========================== */
-            <>
-                <div className="service-page-header">
-                    <div className="title-section">
-                        <h2>Explore Services</h2>
-                        <p>Discover the best beauty and wellness professionals near you.</p>
+                    <div className="search-wrapper location-search">
+                        <MapPin size={18} className="search-icon" />
+                        <select 
+                            value={selectedSuburb} 
+                            onChange={(e) => setSelectedSuburb(e.target.value)}
+                            className="suburb-filter-select"
+                        >
+                            <option value="">All Locations</option>
+                            {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
+                                <optgroup key={letter} label={letter}>
+                                    {NAIROBI_SUBURBS[letter].map(sub => (
+                                        <option key={sub} value={sub}>{sub}</option>
+                                    ))}
+                                </optgroup>
+                            ))}
+                        </select>
                     </div>
-                    
-                    {/* Client Control Bar */}
-                    <div className="control-bar">
-                        <div className="search-wrapper">
-                            <Search size={18} className="search-icon" />
-                            <input
-                                type="text"
-                                placeholder="Find services or providers..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
 
-                        {/* Suburb Filter */}
-                        <div className="search-wrapper location-search">
-                            <MapPin size={18} className="search-icon" />
-                            <select 
-                                value={selectedSuburb} 
-                                onChange={(e) => setSelectedSuburb(e.target.value)}
-                                className="suburb-filter-select"
-                            >
-                                <option value="">All Locations</option>
-                                {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
-                                    <optgroup key={letter} label={letter}>
-                                        {NAIROBI_SUBURBS[letter].map(sub => (
-                                            <option key={sub} value={sub}>{sub}</option>
-                                        ))}
-                                    </optgroup>
-                                ))}
+                    <div className="filters-wrapper">
+                        <div className="filter-item">
+                            <Filter size={16} />
+                            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+                                <option value="">All Categories</option>
+                                <option value="Salon">Salon</option>
+                                <option value="Spa">Spa</option>
+                                <option value="Barbershop">Barbershop</option>
                             </select>
                         </div>
 
-                        <div className="filters-wrapper">
-                            <div className="filter-item">
-                                <Filter size={16} />
-                                <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
-                                    <option value="">All Categories</option>
-                                    <option value="Salon">Salon</option>
-                                    <option value="Spa">Spa</option>
-                                    <option value="Barbershop">Barbershop</option>
-                                </select>
-                            </div>
-
-                            <div className="filter-item">
-                                <ArrowUpDown size={16} />
-                                <select value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
-                                    <option value="random">Recommended</option>
-                                    <option value="price-asc">Price: Low to High</option>
-                                    <option value="price-desc">Price: High to Low</option>
-                                    <option value="name-asc">Name: A - Z</option>
-                                    <option value="duration-asc">Duration: Shortest</option>
-                                </select>
-                            </div>
-
-                            <div className="filter-item mobile-hide">
-                                <List size={16} />
-                                <select value={itemsToShow} onChange={(e) => setItemsToShow(e.target.value)}>
-                                    <option value={10}>Show 10</option>
-                                    <option value={20}>Show 20</option>
-                                    <option value={50}>Show 50</option>
-                                    <option value="all">Show All</option>
-                                </select>
-                            </div>
-
-                            {(searchTerm || selectedSuburb || selectedCategory || sortOption !== "random") && (
-                                <button
-                                    className="btn-clear"
-                                    onClick={() => {
-                                        setSearchTerm("");
-                                        setSelectedSuburb("");
-                                        setSelectedCategory("");
-                                        setSortOption("random");
-                                    }}
-                                >
-                                    Reset
-                                </button>
-                            )}
+                        <div className="filter-item">
+                            <ArrowUpDown size={16} />
+                            <select value={sortOption} onChange={(e) => setSortOption(e.target.value)}>
+                                <option value="random">Recommended</option>
+                                <option value="price-asc">Price: Low to High</option>
+                                <option value="price-desc">Price: High to Low</option>
+                                <option value="name-asc">Name: A - Z</option>
+                                <option value="duration-asc">Duration: Shortest</option>
+                            </select>
                         </div>
+
+                        {(searchTerm || selectedSuburb || selectedCategory || sortOption !== "random") && (
+                            <button
+                                className="btn-clear"
+                                onClick={() => {
+                                    setSearchTerm("");
+                                    setSelectedSuburb("");
+                                    setSelectedCategory("");
+                                    setSortOption("random");
+                                }}
+                            >
+                                Reset
+                            </button>
+                        )}
                     </div>
                 </div>
+            )}
+        </div>
 
-                {loading ? (
-                  <div className="loading-container">
-                    <div className="spinner"></div>
-                    <p>Finding the best services for you...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="services-grid">
-                      {filteredServices.map((service) => {
-                        const addons = subServices[service.id] || [];
-                        const price = parseFloat(service.price).toFixed(0);
-                        const isDimmed = service.is_closed || isBusinessClosed;
-                        const isFavorite = favoriteIds.has(service.id);
-                        const rating = service.avg_rating ? Number(service.avg_rating).toFixed(1) : null;
+        {user.user_type === 'provider' && isBusinessClosed && (
+            <div className="business-closed-banner">
+                ⚠️ Your business is currently marked as <strong>CLOSED</strong>. Clients cannot book any services.
+            </div>
+        )}
 
-                        return (
-                          <div
-                            key={service.id}
-                            className={`service-card ${isDimmed ? "closed-client-card" : ""}`}
-                            data-status={isBusinessClosed ? "Business Closed" : (service.is_closed ? "Currently Closed" : "")}
-                          >
-                            <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
-                              <div className="header-content">
-                                <h3 className="service-name">{service.name}</h3>
-                                <p 
-                                  className="service-provider" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/provider/${service.provider_id}`);
-                                  }}
-                                  style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                                >
-                                   {service.business_name || service.provider_name}
-                                </p>
-                              </div>
-                              <div className="header-right-col">
-                                  <div className="header-price">
-                                    <small>From</small>
-                                    KES {price}
-                                  </div>
-                                  
-                                  {/* ✅ UPDATED RATINGS: SINGLE LINE, MINIMAL, 5 STARS */}
-                                  <div 
-                                    className="rating-badge-minimal"
-                                    onClick={(e) => handleRatingClick(e, service)}
-                                    title="View Reviews"
-                                  >
-                                    <span className="rating-num">{rating || "New"}</span>
-                                    <div className="star-group">
-                                      {[...Array(5)].map((_, i) => (
-                                        <Star 
-                                          key={i}
-                                          size={10} 
-                                          fill={rating && i < Math.round(rating) ? "#f59e0b" : "none"} 
-                                          color={rating && i < Math.round(rating) ? "#f59e0b" : "rgba(255,255,255,0.4)"} 
-                                        />
-                                      ))}
-                                    </div>
-                                  </div>
-                              </div>
-                            </div>
+        {loading ? (
+          <div className="loading-container">
+            <div className="spinner"></div>
+            <p>Finding the best services for you...</p>
+          </div>
+        ) : (
+          <div className="services-grid">
+            {filteredServices.map((service) => {
+              const addons = subServices[service.id] || [];
+              const price = parseFloat(service.price).toFixed(0);
+              const isDimmed = service.is_closed || isBusinessClosed;
+              const isFavorite = favoriteIds.has(service.id);
+              const rating = service.avg_rating ? Number(service.avg_rating).toFixed(1) : null;
+              const isProvider = user.user_type === 'provider';
 
-                            <div className="service-main" onClick={() => !isDimmed && handleBookClick(service)}>
-                              
-                              {(service.suburb || service.business_address) && (
-                                <div 
-                                    className="meta-row location-row clickable" 
-                                    onClick={(e) => handleLocationClick(e, service)}
-                                    title="View location map"
-                                >
-                                    <MapPin size={13} color="#2563eb" style={{marginRight:'4px', flexShrink:0}} />
-                                    <span className="location-link">
-                                        {service.suburb ? <span style={{fontWeight:'600'}}>{service.suburb}</span> : null}
-                                        {service.suburb && service.business_address ? ", " : ""}
-                                        {service.business_address}
-                                    </span>
-                                </div>
-                              )}
-
-                              <div className="meta-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', gap: '5px' }}>
-                                      <span className="meta-badge category">{service.category}</span>
-                                      <span className="meta-badge duration">
-                                          <Clock size={12} /> {service.duration}m
-                                      </span>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: '8px' }}>
-                                      <button 
-                                        className="btn-icon-favorite"
-                                        onClick={(e) => toggleFavorite(e, service.id)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
-                                        title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-                                      >
-                                        <Heart 
-                                            size={20} 
-                                            fill={isFavorite ? "#ef4444" : "none"} 
-                                            color={isFavorite ? "#ef4444" : "#94a3b8"} 
-                                        />
-                                      </button>
-
-                                      <ChatButton 
-                                        onClick={(e) => {
-                                          openServiceChat(e, service);
-                                          resetRoomUnread(service.id);
-                                        }}
-                                        size="small"
-                                        contextType="service"
-                                        contextId={service.id}
-                                        unreadCount={roomUnreadCounts[service.id] || 0}
-                                        disableGlobalCounter={true}
-                                      />
-                                  </div>
-                              </div>
-
-                              <p className="service-description">
-                                {service.description.length > 80 
-                                    ? service.description.substring(0, 80) + "..." 
-                                    : service.description}
-                              </p>
-
-                              {addons.length > 0 ? (
-                                <div className="addon-preview">
-                                  <div className="addon-title"><Zap size={12} fill="#f59e0b" color="#f59e0b" /> Add-ons available</div>
-                                  <div className="addon-tags">
-                                    {addons.slice(0, 2).map((a) => (
-                                      <span key={a.id} className="addon-tag">{a.name}</span>
-                                    ))}
-                                    {addons.length > 2 && <span className="addon-tag more">+{addons.length - 2} more</span>}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="addon-spacer"></div>
-                              )}
-
-                              <button className="btn btn-primary book-btn" disabled={isDimmed}>
-                                {isDimmed 
-                                    ? (isBusinessClosed ? "Business Closed" : "Service Closed") 
-                                    : "Book Now"}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+              return (
+                <div
+                  key={service.id}
+                  className={`service-card ${isDimmed ? "closed-client-card" : ""} ${isProvider ? "provider-readonly-card" : ""}`}
+                  data-status={isBusinessClosed ? "Business Closed" : (service.is_closed ? "Currently Closed" : "")}
+                >
+                  <div className={`service-header-bar ${getCategoryClass(service.category)}`}>
+                    <div className="header-left-col">
+                      <h3 className="service-name">{service.name}</h3>
+                      <p 
+                        className="service-business-link" 
+                        onClick={(e) => {
+                          if(isProvider) return;
+                          e.stopPropagation();
+                          navigate(`/provider/${service.provider_id}`);
+                        }}
+                      >
+                         {service.business_name}
+                      </p>
                     </div>
 
-                    {filteredServices.length === 0 && !loading && (
-                      <div className="no-services">
-                        <Search size={48} color="#cbd5e1" />
-                        <h3>No services found</h3>
-                        <p>We couldn't find matches for your filters. Try adjusting your search.</p>
+                    <div className="header-right-col">
+                        <div className="header-price">
+                          <small>From</small>
+                          KES {price}
+                        </div>
+                        
+                        <div 
+                          className="rating-badge-minimal"
+                          onClick={(e) => handleRatingClick(e, service)}
+                        >
+                          <span className="rating-num">{rating || "New"}</span>
+                          <div className="star-group">
+                            {[...Array(5)].map((_, i) => (
+                              <Star 
+                                key={i}
+                                size={10} 
+                                fill={rating && i < Math.round(rating) ? "#f59e0b" : "none"} 
+                                color={rating && i < Math.round(rating) ? "#f59e0b" : "rgba(255,255,255,0.4)"} 
+                              />
+                            ))}
+                          </div>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="service-main" onClick={() => !isProvider && !isDimmed && handleBookClick(service)}>
+                    
+                    {(service.suburb || service.business_address) && (
+                      <div 
+                          className={`meta-row location-row ${!isProvider ? 'clickable' : ''}`} 
+                          onClick={(e) => handleLocationClick(e, service)}
+                      >
+                          <MapPin size={13} color="#2563eb" style={{marginRight:'4px', flexShrink:0}} />
+                          <span className="location-link">
+                              {service.suburb ? <span style={{fontWeight:'600'}}>{service.suburb}</span> : null}
+                              {service.suburb && service.business_address ? ", " : ""}
+                              {service.business_address}
+                          </span>
                       </div>
                     )}
-                  </>
-                )}
-            </>
+
+                    <div className="meta-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                            <span className="meta-badge category">{service.category}</span>
+                            <span className="meta-badge duration">
+                                <Clock size={12} /> {service.duration}m
+                            </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              className="btn-icon-favorite"
+                              onClick={(e) => toggleFavorite(e, service.id)}
+                              disabled={isProvider}
+                            >
+                              <Heart 
+                                  size={20} 
+                                  fill={isFavorite ? "#ef4444" : "none"} 
+                                  color={isFavorite ? "#ef4444" : "#94a3b8"} 
+                              />
+                            </button>
+
+                            <ChatButton 
+                              onClick={(e) => openServiceChat(e, service)}
+                              size="small"
+                              contextType="service"
+                              contextId={service.id}
+                              unreadCount={isProvider ? 0 : (roomUnreadCounts[service.id] || 0)}
+                              disableGlobalCounter={true}
+                            />
+                        </div>
+                    </div>
+
+                    <p className="service-description">
+                      {service.description.length > 80 
+                          ? service.description.substring(0, 80) + "..." 
+                          : service.description}
+                    </p>
+
+                    {addons.length > 0 ? (
+                      <div className="addon-preview">
+                        <div className="addon-title"><Zap size={12} fill="#f59e0b" color="#f59e0b" /> Add-ons available</div>
+                        <div className="addon-tags">
+                          {addons.slice(0, 2).map((a) => (
+                            <span key={a.id} className="addon-tag">{a.name}</span>
+                          ))}
+                          {addons.length > 2 && <span className="addon-tag more">+{addons.length - 2} more</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="addon-spacer"></div>
+                    )}
+
+                    <button className="btn btn-primary book-btn" disabled={isDimmed || isProvider}>
+                      {isProvider ? "Preview Mode" : (isDimmed ? (isBusinessClosed ? "Business Closed" : "Service Closed") : "Book Now")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {filteredServices.length === 0 && !loading && (
+          <div className="no-services">
+            <Search size={48} color="#cbd5e1" />
+            <h3>No services found</h3>
+            <p>Try adjusting your search filters.</p>
+          </div>
         )}
 
         {showBookingModal && selectedService && (
@@ -683,48 +537,6 @@ function ServiceList({ user }) {
                 onClose={() => setViewReviewsService(null)}
             />
         )}
-        
-        {bookingSuccess && (
-          <div className="success-message">
-            ✅ Appointment booked successfully! Check your appointments page.
-          </div>
-        )}
-
-        {mapService && (
-            <div className="map-modal-overlay" onClick={() => setMapService(null)}>
-                <div className="map-modal-content" onClick={e => e.stopPropagation()}>
-                    <div className="map-header">
-                        <h3>📍 Location Details</h3>
-                        <button onClick={() => setMapService(null)} className="close-btn"><X size={20} /></button>
-                    </div>
-                    <div className="map-body">
-                        <h4 style={{margin:'0 0 5px 0', color:'#1e293b'}}>{mapService.business_name}</h4>
-                        <p style={{color:'#64748b', fontSize:'14px', marginBottom:'20px'}}>
-                            {mapService.suburb}, {mapService.business_address}
-                        </p>
-                        
-                        <div className="map-actions">
-                            {mapService.google_maps_link ? (
-                                <a 
-                                    href={mapService.google_maps_link} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="btn-open-map"
-                                >
-                                    <MapPin size={18} /> Open in Google Maps <ExternalLink size={14} style={{marginLeft:5}}/>
-                                </a>
-                            ) : (
-                                <div className="no-map-link">
-                                    <MapPin size={40} color="#cbd5e1" />
-                                    <p>No map link provided by this business.</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
       </div>
     </div>
   );

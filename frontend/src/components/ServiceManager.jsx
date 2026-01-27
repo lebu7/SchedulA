@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom"; 
 import api from "../services/auth";
-import ReviewListModal from "./ReviewListModal"; // ✅ Added ReviewListModal
+import ReviewListModal from "./ReviewListModal"; 
 import { 
   Clock, Tag, Users, Edit2, Trash2, Eye, Plus, X, 
-  ChevronDown, ChevronUp, Power, AlertTriangle, Star 
+  ChevronDown, ChevronUp, Power, AlertTriangle, Star, Zap 
 } from "lucide-react";
 import "./ServiceManager.css";
 
@@ -17,7 +17,7 @@ function ServiceManager({ user }) {
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [previewService, setPreviewService] = useState(null);
-  const [viewReviewsService, setViewReviewsService] = useState(null); // ✅ State for ratings modal
+  const [viewReviewsService, setViewReviewsService] = useState(null); 
 
   const [formData, setFormData] = useState({
     name: "", description: "", category: "", duration: "", price: "", capacity: "1", 
@@ -59,7 +59,6 @@ function ServiceManager({ user }) {
 
   const fetchMyServices = async () => {
     try {
-      // ✅ Fetching from main endpoint to ensure we get average ratings
       const response = await api.get("/services");
       const myServices = response.data.services.filter(
         (service) => service.provider_id === user.id
@@ -290,7 +289,6 @@ function ServiceManager({ user }) {
                 id={`service-${service.id}`}
                 className={`provider-service-card ${isClosed ? "dimmed" : ""}`}
               >
-                {/* Colored Header Bar */}
                 <div className={`provider-card-header ${themeClass}`}>
                   <div className="header-left">
                     <h3>{service.name}</h3>
@@ -299,7 +297,6 @@ function ServiceManager({ user }) {
                   <div className="header-right">
                     <div className="header-price">KES {service.price}</div>
                     
-                    {/* ✅ RATING MOVED TO THE RIGHT IN ONE LINE */}
                     <div 
                       className="rating-badge-minimal" 
                       onClick={(e) => handleRatingClick(e, service)}
@@ -320,11 +317,9 @@ function ServiceManager({ user }) {
                   </div>
                 </div>
 
-                {/* Body Content */}
                 <div className="provider-card-body">
                   <p className="description">{service.description || "No description provided."}</p>
                   
-                  {/* Meta Stats Row */}
                   <div className="meta-stats">
                     <div className="stat" title="Duration">
                         <Clock size={14} /> {service.duration}m
@@ -337,7 +332,6 @@ function ServiceManager({ user }) {
                     </div>
                   </div>
 
-                  {/* Add-ons Section */}
                   <div className="addons-wrapper">
                     <button
                         className="toggle-addons-link"
@@ -371,7 +365,6 @@ function ServiceManager({ user }) {
                   </div>
                 </div>
 
-                {/* Footer Actions */}
                 <div className="provider-card-footer">
                    <div className="left-actions">
                        <button className="icon-action-btn preview" title="Preview Client View" onClick={() => setPreviewService(service)}>
@@ -389,7 +382,6 @@ function ServiceManager({ user }) {
                            className={`toggle-status-btn ${service.is_closed ? 'open' : 'close'}`}
                            onClick={() => handleToggleService(service)}
                            disabled={businessClosed}
-                           title={businessClosed ? "Open business first" : (service.is_closed ? "Open Service" : "Close Service")}
                        >
                            {service.is_closed ? "Open" : "Close"}
                        </button>
@@ -402,7 +394,6 @@ function ServiceManager({ user }) {
 
         {/* --- MODALS --- */}
 
-        {/* 1. SERVICE FORM MODAL */}
         {showForm && (
           <div className="modal-overlay" onClick={resetForm}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -452,7 +443,6 @@ function ServiceManager({ user }) {
           </div>
         )}
 
-        {/* 2. SUB-SERVICE MODAL */}
         {(addingSubFor || editingSub) && (
           <div className="modal-overlay" onClick={() => { setAddingSubFor(null); setEditingSub(null); setNewSub({name:"", price:""}); }}>
             <div className="modal-content small-modal" onClick={(e) => e.stopPropagation()}>
@@ -479,44 +469,92 @@ function ServiceManager({ user }) {
           </div>
         )}
 
-        {/* 3. PREVIEW MODAL */}
+        {/* 3. PREVIEW MODAL - UPDATED DESIGN MATCH WITH ADD-ONS RESTORED */}
         {previewService && (
             <div className="modal-overlay" onClick={() => setPreviewService(null)}>
                 <div className="preview-modal-content" onClick={(e) => e.stopPropagation()}>
                     <div className="preview-header">
                         <h4>Client Preview</h4>
-                        <button onClick={() => setPreviewService(null)}><X size={18}/></button>
+                        <button onClick={() => setPreviewService(null)} className="preview-close"><X size={18}/></button>
                     </div>
-                    <div className="preview-card-wrapper">
-                        <div className="service-card">
-                            <div className={`service-header-bar ${getCategoryClass(previewService.category)}`}>
-                                <div className="header-content">
-                                    <h3 className="service-name">{previewService.name}</h3>
-                                    <p className="service-provider">{user.name} — {user.business_name}</p>
-                                </div>
-                                <div className="header-price"><small>From</small> KES {previewService.price}</div>
+                    
+                    <div className="service-card">
+                        <div className={`service-header-bar ${getCategoryClass(previewService.category)}`}>
+                            <div className="header-left-col">
+                                <h3 className="service-name">{previewService.name}</h3>
+                                <p className="service-business-link">
+                                    {user.business_name || "Your Business Name"}
+                                </p>
                             </div>
-                            <div className="service-main">
-                                <div className="meta-row">
-                                    <span className="meta-badge category">{previewService.category}</span>
-                                    <span className="meta-badge duration"><Clock size={12}/> {previewService.duration}m</span>
+
+                            <div className="header-right-col">
+                                <div className="header-price">
+                                    <small>From</small>
+                                    KES {parseFloat(previewService.price).toFixed(0)}
                                 </div>
-                                <p className="service-description">{previewService.description}</p>
-                                <button className="btn btn-primary book-btn">Book Appointment</button>
+                                
+                                <div className="rating-badge-minimal">
+                                    <span className="rating-num">
+                                        {previewService.avg_rating ? Number(previewService.avg_rating).toFixed(1) : "New"}
+                                    </span>
+                                    <div className="star-group">
+                                        {[...Array(5)].map((_, i) => (
+                                            <Star 
+                                                key={i}
+                                                size={10} 
+                                                fill={previewService.avg_rating && i < Math.round(previewService.avg_rating) ? "#f59e0b" : "none"} 
+                                                color={previewService.avg_rating && i < Math.round(previewService.avg_rating) ? "#f59e0b" : "rgba(255,255,255,0.4)"} 
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
+                        </div>
+
+                        <div className="service-main">
+                            <div className="meta-row">
+                                <span className="meta-badge category">{previewService.category}</span>
+                                <span className="meta-badge duration">
+                                    <Clock size={12} /> {previewService.duration}m
+                                </span>
+                            </div>
+
+                            <p className="service-description">
+                                {previewService.description || "No description provided."}
+                            </p>
+
+                            {/* ✅ RESTORED ADD-ONS PREVIEW IN MODAL */}
+                            {(subservices[previewService.id] || []).length > 0 ? (
+                                <div className="addon-preview">
+                                  <div className="addon-title"><Zap size={12} fill="#f59e0b" color="#f59e0b" /> Add-ons available</div>
+                                  <div className="addon-tags">
+                                    {subservices[previewService.id].slice(0, 2).map((a) => (
+                                      <span key={a.id} className="addon-tag">{a.name}</span>
+                                    ))}
+                                    {subservices[previewService.id].length > 2 && (
+                                      <span className="addon-tag more">+{subservices[previewService.id].length - 2} more</span>
+                                    )}
+                                  </div>
+                                </div>
+                            ) : (
+                                <div className="addon-spacer"></div>
+                            )}
+
+                            <button className="btn btn-primary book-btn">
+                                Book Now
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
         )}
 
-        {/* 4. REVIEWS MODAL ✅ Added Reviews Modal Component */}
         {viewReviewsService && (
             <ReviewListModal
                 serviceId={viewReviewsService.id}
                 serviceName={viewReviewsService.name}
                 onClose={() => setViewReviewsService(null)}
-                user={user} // ✅ Ensure this prop is passed
+                user={user}
             />
         )}
 

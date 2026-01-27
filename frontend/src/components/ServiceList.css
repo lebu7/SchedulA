@@ -176,7 +176,7 @@
   padding: 15px 18px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch;
   color: white;
   min-height: 80px;
   gap: 10px;
@@ -193,6 +193,25 @@
   text-align: left;
 }
 
+/* LEFT COLUMN */
+.header-left-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.header-right-col {
+  flex-shrink: 0;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
 .service-name {
   margin: 0;
   font-size: 17px;
@@ -201,6 +220,16 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.service-business-link {
+  margin: 0;
+  margin-top: 22px;
+  font-size: 12px;
+  opacity: 0.95;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .service-provider {
@@ -213,23 +242,14 @@
   display: block;
 }
 
-.header-right-col {
-  flex-shrink: 0;
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
 .header-price {
   background: rgba(255, 255, 255, 0.2);
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-radius: 8px;
   font-weight: 700;
   font-size: 14px;
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
-  white-space: nowrap;
 }
 
 .header-price small {
@@ -243,15 +263,10 @@
 /* ✅ UPDATED: MINIMALIST RATING UI */
 .rating-badge-minimal {
   display: flex;
-  align-items: center; /* Number and stars in one line */
+  align-items: center;
   gap: 6px;
-  margin-top: 10px; /* Gap from price container */
-  cursor: pointer;
-  background: none; /* No background */
-  border: none; /* No border */
-  padding: 0;
   color: white;
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
 .rating-num {
