@@ -1,9 +1,11 @@
+/* frontend/src/components/ServiceManager.jsx */
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom"; 
 import api from "../services/auth";
+import ReviewListModal from "./ReviewListModal"; // ✅ Added ReviewListModal
 import { 
   Clock, Tag, Users, Edit2, Trash2, Eye, Plus, X, 
-  ChevronDown, ChevronUp, Power, AlertTriangle 
+  ChevronDown, ChevronUp, Power, AlertTriangle, Star 
 } from "lucide-react";
 import "./ServiceManager.css";
 
@@ -14,7 +16,8 @@ function ServiceManager({ user }) {
   // Modal & Form States
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState(null);
-  const [previewService, setPreviewService] = useState(null); // 👁️ New Preview State
+  const [previewService, setPreviewService] = useState(null);
+  const [viewReviewsService, setViewReviewsService] = useState(null); // ✅ State for ratings modal
 
   const [formData, setFormData] = useState({
     name: "", description: "", category: "", duration: "", price: "", capacity: "1", 
@@ -41,7 +44,6 @@ function ServiceManager({ user }) {
     fetchMyServices();
   }, [user.id]);
 
-  // Auto-scroll to target from notifications
   useEffect(() => {
     if (services.length > 0 && location.state?.targetId) {
       setTimeout(() => {
@@ -57,6 +59,7 @@ function ServiceManager({ user }) {
 
   const fetchMyServices = async () => {
     try {
+      // ✅ Fetching from main endpoint to ensure we get average ratings
       const response = await api.get("/services");
       const myServices = response.data.services.filter(
         (service) => service.provider_id === user.id
@@ -87,7 +90,6 @@ function ServiceManager({ user }) {
     }
   };
 
-  // ... [Keep existing validation & submit logic] ...
   const validateForm = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = "Service name is required";
@@ -110,20 +112,11 @@ function ServiceManager({ user }) {
         price: parseFloat(formData.price),
         capacity: parseInt(formData.capacity),
       };
-      const res = editingService
+      editingService
         ? await api.put(`/services/${editingService.id}`, submitData)
         : await api.post("/services", submitData);
 
-      if (res.data?.service) {
-        if (editingService) {
-          setServices((prev) => prev.map((s) => s.id === editingService.id ? res.data.service : s));
-        } else {
-          setServices((prev) => [...prev, res.data.service]);
-          await fetchSubservices(res.data.service.id);
-        }
-      } else {
-        await fetchMyServices();
-      }
+      await fetchMyServices();
       setShowForm(false);
       setEditingService(null);
       resetForm();
@@ -208,10 +201,7 @@ function ServiceManager({ user }) {
     }
   };
 
-  // ... [Keep subservice add/edit/delete logic same as provided, just ensure state updates] ...
   const handleAddSubservice = async (serviceId) => {
-      // (Logic same as your provided code, omitted for brevity but preserved in functionality)
-      // Ensure you copy your existing handleAddSubservice logic here
       if (!newSub.name.trim() || newSub.price === "") { alert("Enter name and price."); return; }
       try {
         const payload = { name: newSub.name, description: "", price: parseFloat(newSub.price), additional_price: parseFloat(newSub.price) };
@@ -238,6 +228,11 @@ function ServiceManager({ user }) {
       } catch(e) { alert("Update failed."); }
   };
 
+  const handleRatingClick = (e, service) => {
+      e.stopPropagation();
+      setViewReviewsService(service);
+  };
+
   const resetForm = () => {
     setShowForm(false);
     setEditingService(null);
@@ -245,7 +240,6 @@ function ServiceManager({ user }) {
     setErrors({});
   };
 
-  // Helper for Theme Colors
   const getCategoryClass = (category) => {
     if (!category) return "default-category";
     const cat = category.toLowerCase();
@@ -288,6 +282,7 @@ function ServiceManager({ user }) {
           {services.map((service) => {
             const isClosed = businessClosed || service.is_closed;
             const themeClass = getCategoryClass(service.category);
+            const rating = service.avg_rating ? Number(service.avg_rating).toFixed(1) : null;
             
             return (
               <div
@@ -297,11 +292,32 @@ function ServiceManager({ user }) {
               >
                 {/* Colored Header Bar */}
                 <div className={`provider-card-header ${themeClass}`}>
-                  <div className="header-top">
+                  <div className="header-left">
                     <h3>{service.name}</h3>
                     <span className="cat-badge">{service.category}</span>
                   </div>
-                  <div className="header-price">KES {service.price}</div>
+                  <div className="header-right">
+                    <div className="header-price">KES {service.price}</div>
+                    
+                    {/* ✅ RATING MOVED TO THE RIGHT IN ONE LINE */}
+                    <div 
+                      className="rating-badge-minimal" 
+                      onClick={(e) => handleRatingClick(e, service)}
+                      title="View Customer Feedback"
+                    >
+                      <span className="rating-num">{rating || "New"}</span>
+                      <div className="star-group">
+                        {[...Array(5)].map((_, i) => (
+                          <Star 
+                            key={i}
+                            size={10} 
+                            fill={rating && i < Math.round(rating) ? "#f59e0b" : "none"} 
+                            color={rating && i < Math.round(rating) ? "#f59e0b" : "rgba(255,255,255,0.4)"} 
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Body Content */}
@@ -395,7 +411,6 @@ function ServiceManager({ user }) {
                 <button className="close-btn" onClick={resetForm}><X size={24}/></button>
               </div>
               <form onSubmit={handleSubmit} className="service-form">
-                {/* Form fields same as before, just ensured layout */}
                 <div className="form-group">
                   <label>Service Name *</label>
                   <input type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="e.g., Luxury Facial" />
@@ -464,7 +479,7 @@ function ServiceManager({ user }) {
           </div>
         )}
 
-        {/* 3. PREVIEW MODAL (CLIENT VIEW REPLICA) */}
+        {/* 3. PREVIEW MODAL */}
         {previewService && (
             <div className="modal-overlay" onClick={() => setPreviewService(null)}>
                 <div className="preview-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -473,7 +488,6 @@ function ServiceManager({ user }) {
                         <button onClick={() => setPreviewService(null)}><X size={18}/></button>
                     </div>
                     <div className="preview-card-wrapper">
-                        {/* THIS IS A REPLICA OF THE CLIENT CARD STRUCTURE */}
                         <div className="service-card">
                             <div className={`service-header-bar ${getCategoryClass(previewService.category)}`}>
                                 <div className="header-content">
@@ -494,6 +508,15 @@ function ServiceManager({ user }) {
                     </div>
                 </div>
             </div>
+        )}
+
+        {/* 4. REVIEWS MODAL ✅ Added Reviews Modal Component */}
+        {viewReviewsService && (
+            <ReviewListModal
+                serviceId={viewReviewsService.id}
+                serviceName={viewReviewsService.name}
+                onClose={() => setViewReviewsService(null)}
+            />
         )}
 
         {services.length === 0 && !showForm && (
