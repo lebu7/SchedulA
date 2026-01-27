@@ -65,24 +65,26 @@ export const initializeSocket = (server) => {
             return;
           }
 
+          const now = new Date().toISOString();
           const expiresAt = new Date(
             Date.now() + 12 * 60 * 60 * 1000,
           ).toISOString();
 
           db.run(
-            `INSERT INTO chat_messages (room_id, sender_id, message, expires_at)
-            VALUES (?, ?, ?, ?)`,
-            [roomId, senderId, message, expiresAt],
+            `INSERT INTO chat_messages (room_id, sender_id, message, expires_at, created_at)
+            VALUES (?, ?, ?, ?, ?)`,
+            [roomId, senderId, message, expiresAt, now],
             function (insertErr) {
               if (insertErr) {
                 console.error(insertErr);
                 return socket.emit("error", { message: "Failed to send" });
               }
 
-              db.run(
-                `UPDATE chat_rooms SET last_message_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [roomId],
-              );
+              // ✅ FIX: Update last_message_at to 'now' to prevent early deletion
+              db.run(`UPDATE chat_rooms SET last_message_at = ? WHERE id = ?`, [
+                now,
+                roomId,
+              ]);
 
               const messageData = {
                 id: this.lastID,
@@ -93,7 +95,7 @@ export const initializeSocket = (server) => {
                     ? room.client_name
                     : room.provider_name || room.business_name,
                 message,
-                created_at: new Date().toISOString(),
+                created_at: now,
                 expires_at: expiresAt,
               };
 

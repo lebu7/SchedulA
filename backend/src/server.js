@@ -66,6 +66,7 @@ cron.schedule("*/10 * * * *", () => {
   db.run("PRAGMA foreign_keys = ON;", (err) => {
     if (err) return console.error("❌ DB Pragma Error:", err);
 
+    // This checks last_message_at, which is now updated on every send_message call
     db.run(
       `DELETE FROM chat_rooms WHERE last_message_at < datetime('now', '-12 hours')`,
       function (err) {
@@ -175,8 +176,6 @@ cron.schedule("0 * * * *", async () => {
 cron.schedule("*/30 * * * *", () => {
   console.log("⭐ CRON: Checking for review prompts...");
 
-  // Find appointments completed in the last hour that haven't been reviewed
-  // and where the client hasn't already been notified today for this specific appointment
   const query = `
     SELECT a.id, a.client_id, s.name as service_name, u.notification_preferences
     FROM appointments a
@@ -202,7 +201,6 @@ cron.schedule("*/30 * * * *", () => {
         prefs = {};
       }
 
-      // Check if user has disabled review prompts (default to true if setting missing)
       const inApp = prefs.in_app || {};
       if (inApp.review_prompts !== false) {
         createNotification(
@@ -228,7 +226,7 @@ httpServer.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
   console.log(
-    `⏰ Scheduler active: Reminders (10m), Chat Cleanup (10m), Morning Brief (Daily), Review Prompts (30m)`,
+    `⏰ Scheduler active: Reminders (10m), Chat Cleanup (10m), Morning Brief (Daily)`,
   );
   console.log(`💬 Socket.IO ready`);
 });
