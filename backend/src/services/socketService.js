@@ -163,10 +163,22 @@ export const initializeSocket = (server) => {
 
     socket.on("disconnect", () => {
       console.log(`❌ User ${userId} disconnected`);
+      const now = new Date().toISOString();
+
+      // Update last_seen in DB on disconnect
+      db.run(
+        `UPDATE users SET last_seen = ? WHERE id = ?`,
+        [now, userId],
+        (err) => {
+          if (err) console.error("Error updating last_seen:", err);
+        },
+      );
+
       onlineUsers.delete(userId);
-      // ✅ Broadcast update immediately
+
+      // Broadcast update with the timestamp
       io.emit("online_users", Array.from(onlineUsers));
-      io.emit("user_disconnected", userId);
+      io.emit("user_disconnected", { userId, lastSeen: now });
     });
   });
 

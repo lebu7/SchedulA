@@ -188,3 +188,15 @@
     right: 20px;
   }
 }
+
+.recipient-status-online {
+  font-size: 11px;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.recipient-status-offline {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 400;
+}

@@ -11,25 +11,21 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [contextInfo, setContextInfo] = useState(null);
   const userId = Number(localStorage.getItem('userId'));
-  const { onlineUsers, socket } = useSocket(); // ✅ Get socket instance
+  const { onlineUsers, socket } = useSocket(); 
 
-  // Initial fetch + Polling (Backup)
   useEffect(() => {
     fetchRooms();
     const interval = setInterval(fetchRooms, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ NEW: Listen for Real-Time Updates (Messages & Read Receipts)
   useEffect(() => {
     if (!socket) return;
 
     const handleNewMessage = (msg) => {
       setRooms(prev => {
-        // Find if room exists
         const roomIndex = prev.findIndex(r => r.id === msg.room_id);
         
-        // If new room, fetch all (simplest way to get room details)
         if (roomIndex === -1) {
           fetchRooms();
           return prev;
@@ -38,7 +34,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
         const updatedRooms = [...prev];
         const room = { ...updatedRooms[roomIndex] };
 
-        // Update last message
         room.last_message = {
           message: msg.message,
           sender_id: msg.sender_id,
@@ -46,12 +41,10 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
           is_read: 0 
         };
 
-        // Increment unread if I didn't send it
         if (Number(msg.sender_id) !== userId) {
           room.unread_count = (room.unread_count || 0) + 1;
         }
 
-        // Move to top
         updatedRooms.splice(roomIndex, 1);
         updatedRooms.unshift(room);
         
@@ -59,12 +52,10 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       });
     };
 
-    // ✅ INSTANTLY Turn Tick Blue when read
     const handleMessagesRead = ({ roomId, readerId }) => {
       setRooms(prev => prev.map(room => {
         if (room.id !== roomId) return room;
 
-        // If THEY read MY message -> Update last_message status
         if (Number(readerId) !== userId && room.last_message && Number(room.last_message.sender_id) === userId) {
            return {
              ...room,
@@ -72,7 +63,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
            };
         }
         
-        // If I read THEIR message -> Clear unread count
         if (Number(readerId) === userId) {
            return { ...room, unread_count: 0 };
         }
@@ -114,11 +104,9 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       setContextInfo(null);
     }
 
-    // Optimistically clear unread count in UI
     if (room.unread_count > 0) {
       try {
-        await api.put(`/chat/rooms/${room.id}/mark-read`);
-        // Socket will also broadcast 'messages_read' back to us, ensuring consistency
+        socket?.emit('mark_read', { roomId: room.id });
         setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread_count: 0 } : r));
       } catch (err) { console.error(err); }
     }
@@ -127,6 +115,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       ? room.provider_name || room.business_name
       : room.client_name;
 
+    // ✅ Pass the room object (containing client_last_seen/provider_last_seen) to Widget
     if (inWidget && onRoomSelect) {
       onRoomSelect({ ...room, contextInfo: fetchedContext }, recipientName);
     } else {
@@ -158,8 +147,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       {rooms.map(room => {
         const lastMsg = room.last_message || {};
         const isUnread = room.unread_count > 0;
-        
-        // ✅ Strict Number Comparison
         const isMe = Number(lastMsg.sender_id) === userId;
 
         const time = lastMsg.created_at 
@@ -204,15 +191,14 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
                   )}
                 </small>
                 
-                {/* ✅ Read Receipts / Badge Logic */}
                 {isUnread ? (
                    <span className="chat-list-badge">{room.unread_count}</span>
                 ) : isMe ? (
                    <span className="read-status-icon">
                      {lastMsg.is_read ? (
-                        <CheckCircle size={14} color="#2563eb" /> // Blue (Read)
+                        <CheckCircle size={14} color="#2563eb" /> 
                      ) : (
-                        <Check size={14} color="#94a3b8" /> // Gray (Sent)
+                        <Check size={14} color="#94a3b8" /> 
                      )}
                    </span>
                 ) : null}

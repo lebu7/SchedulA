@@ -96,7 +96,7 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
     <div className={inWidget ? "chat-widget-inner" : "chat-modal-overlay"}>
       <div className={`chat-modal ${inWidget ? 'in-widget' : ''}`}>
         
-        {/* ✅ Updated Context Banner Logic */}
+        {/* ✅ Context Banner with proper duration and price formatting */}
         {contextInfo && (
           <div className="chat-context-banner-centered">
             <div className="context-icon">
@@ -113,7 +113,6 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
                 ) : (
                   <span>
                     KES {Number(contextInfo.price).toLocaleString()} • 
-                    {/* ✅ FIXED: Ensures duration is displayed if available */}
                     {contextInfo.duration ? ` ${contextInfo.duration} mins` : ' Duration N/A'}
                   </span>
                 )}

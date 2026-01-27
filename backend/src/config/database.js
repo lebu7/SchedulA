@@ -28,7 +28,6 @@ export const db = new sqlite3.Database(
       console.log("✅ Connected to SQLite database successfully");
 
       // 🟢 PERMANENT FIX: Enable WAL (Write-Ahead Logging) Mode
-      // This prevents "database locked" and "readonly" errors during concurrent writes
       db.run("PRAGMA journal_mode = WAL;", (pragmaErr) => {
         if (pragmaErr) {
           console.error("❌ Failed to set WAL mode:", pragmaErr.message);
@@ -37,7 +36,6 @@ export const db = new sqlite3.Database(
         }
       });
 
-      // Ensure the file itself is writable by the current process
       try {
         fs.accessSync(dbPath, fs.constants.W_OK);
         initializeDatabase();
@@ -75,6 +73,7 @@ function initializeDatabase() {
       notification_preferences TEXT,
       reset_otp TEXT,
       reset_otp_expires DATETIME,
+      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -161,8 +160,6 @@ function initializeDatabase() {
   /* ---------------------------------------------
      📱 IN-APP CHAT TABLES
   --------------------------------------------- */
-
-  /* Chat Rooms Table */
   db.run(`
     CREATE TABLE IF NOT EXISTS chat_rooms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,7 +175,6 @@ function initializeDatabase() {
     )
   `);
 
-  /* Chat Messages Table */
   db.run(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -193,7 +189,6 @@ function initializeDatabase() {
     )
   `);
 
-  /* Indexes for faster chat queries */
   db.run(
     `CREATE INDEX IF NOT EXISTS idx_messages_expires ON chat_messages(expires_at)`,
   );
@@ -236,7 +231,6 @@ function initializeDatabase() {
       if (!err) {
         db.get("SELECT count(*) as count FROM transactions", [], (e, row) => {
           if (!e && row.count === 0) {
-            console.log("⚙️ Backfilling transactions...");
             db.run(`
             INSERT INTO transactions (appointment_id, amount, reference, type, status)
             SELECT id, amount_paid, payment_reference, 'payment', 'success'
@@ -270,19 +264,19 @@ function initializeDatabase() {
   /* ---------------------------------------------
      🔔 NOTIFICATIONS TABLE
   --------------------------------------------- */
-db.run(`
-  CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    message TEXT NOT NULL,
-    is_read BOOLEAN DEFAULT 0,
-    reference_id INTEGER,
-    created_at DATETIME DEFAULT (datetime('now')), 
-    FOREIGN KEY (user_id) REFERENCES users (id)
-  )
-`);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT 0,
+      reference_id INTEGER,
+      created_at DATETIME DEFAULT (datetime('now')), 
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+  `);
 
   /* ---------------------------------------------
      📱 SMS LOGS TABLE
@@ -297,18 +291,17 @@ db.run(`
         return;
       }
       if (!row.sql.includes("'refund'")) {
-        console.log("⚙️ Migrating sms_logs table...");
         db.serialize(() => {
           db.run("PRAGMA foreign_keys=off;");
           db.run("ALTER TABLE sms_logs RENAME TO sms_logs_old;");
           createSMSLogsTable();
           db.run(`
-            INSERT INTO sms_logs (id, recipient_phone, message_type, message_content, status, details, sent_at)
-            SELECT id, recipient_phone, 
-                   CASE WHEN message_type NOT IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance', 'refund', 'refund_request') THEN 'general' ELSE message_type END,
-                   message_content, status, details, sent_at
-            FROM sms_logs_old
-          `);
+          INSERT INTO sms_logs (id, recipient_phone, message_type, message_content, status, details, sent_at)
+          SELECT id, recipient_phone, 
+                 CASE WHEN message_type NOT IN ('confirmation', 'reminder', 'receipt', 'cancellation', 'notification', 'general', 'acceptance', 'refund', 'refund_request') THEN 'general' ELSE message_type END,
+                 message_content, status, details, sent_at
+          FROM sms_logs_old
+        `);
           db.run("DROP TABLE sms_logs_old;");
           db.run("PRAGMA foreign_keys=on;");
         });
@@ -331,7 +324,7 @@ db.run(`
   }
 
   /* ---------------------------------------------
-     🔍 Ensure missing columns exist (MIGRATIONS)
+     🔍 MIGRATIONS (Column Checks)
   --------------------------------------------- */
   tryAddColumn("users", "gender", "TEXT");
   tryAddColumn("users", "dob", "DATE");
@@ -345,6 +338,9 @@ db.run(`
   tryAddColumn("users", "google_maps_link", "TEXT");
   tryAddColumn("users", "is_open_sat", "INTEGER DEFAULT 0");
   tryAddColumn("users", "is_open_sun", "INTEGER DEFAULT 0");
+
+  // ✅ FIXED: Using constant default for migration to avoid "non-constant default" error
+  tryAddColumn("users", "last_seen", "DATETIME DEFAULT '2026-01-27 00:00:00'");
 
   tryAddColumn("services", "opening_time", "TEXT DEFAULT '08:00'");
   tryAddColumn("services", "closing_time", "TEXT DEFAULT '18:00'");
@@ -383,11 +379,17 @@ function tryAddColumn(table, column, definition) {
       db.run(
         `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
         (alterErr) => {
-          if (alterErr)
+          if (alterErr) {
             console.error(
               `⚠️ Failed to add column ${column} to ${table}:`,
               alterErr.message,
             );
+          } else {
+            // If we just added last_seen, update it to real time
+            if (column === "last_seen") {
+              db.run(`UPDATE users SET last_seen = CURRENT_TIMESTAMP`);
+            }
+          }
         },
       );
     }

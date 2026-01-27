@@ -45,14 +45,12 @@ router.post("/rooms", authenticateToken, (req, res) => {
   );
 });
 
-// ✅ UPDATED: Now fetches `last_msg_read` so read receipts work in the list
 router.get("/rooms", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   db.all(
     `SELECT cr.*, 
-            u1.name as client_name, 
-            u2.name as provider_name, 
-            u2.business_name,
+            u1.name as client_name, u1.last_seen as client_last_seen,
+            u2.name as provider_name, u2.business_name, u2.last_seen as provider_last_seen,
             (SELECT COUNT(*) FROM chat_messages WHERE room_id = cr.id AND sender_id != ? AND is_read = 0 AND expires_at > datetime('now')) as unread_count,
             (SELECT message FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_content,
             (SELECT sender_id FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_sender,
@@ -75,7 +73,7 @@ router.get("/rooms", authenticateToken, (req, res) => {
               message: room.last_msg_content,
               sender_id: room.last_msg_sender,
               created_at: room.last_msg_time,
-              is_read: room.last_msg_read, // ✅ Passed to frontend
+              is_read: room.last_msg_read,
             }
           : null,
       }));
