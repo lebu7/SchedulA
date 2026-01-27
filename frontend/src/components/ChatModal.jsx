@@ -111,10 +111,12 @@ const ChatModal = ({ room, contextInfo, onClose, inWidget = false }) => {
                     <span className="status-tag">{contextInfo.status}</span>
                   </>
                 ) : (
-                  <span>
-                    KES {Number(contextInfo.price).toLocaleString()} • 
-                    {contextInfo.duration ? ` ${contextInfo.duration} mins` : ' Duration N/A'}
-                  </span>
+                  room.context_type !== 'profile' && (
+                    <span>
+                      KES {Number(contextInfo.price).toLocaleString()} • 
+                      {contextInfo.duration ? ` ${contextInfo.duration} mins` : ' Duration N/A'}
+                    </span>
+                  )
                 )}
               </div>
             </div>

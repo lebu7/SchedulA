@@ -69,7 +69,8 @@ const ProviderProfile = ({ user }) => {
             window.dispatchEvent(new CustomEvent('openChatRoom', {
                 detail: {
                     room: res.data.room,
-                    context: { name: "General Inquiry" }
+                    context: { name: "General Inquiry" },
+                    recipientName: data.provider.business_name || data.provider.name
                 }
             }));
         } catch (err) {

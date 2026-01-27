@@ -303,7 +303,8 @@ function ServiceList({ user }) {
       window.dispatchEvent(new CustomEvent('openChatRoom', {
         detail: {
           room: res.data.room,
-          context: contextData
+          context: contextData,
+          recipientName: service.business_name || service.provider_name
         }
       }));
     } catch (err) {
