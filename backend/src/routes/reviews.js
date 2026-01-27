@@ -26,7 +26,6 @@ router.post(
     const { appointment_id, rating, comment } = req.body;
     const client_id = req.user.userId;
 
-    // 1. Fetch Appointment Details
     db.get(
       `SELECT * FROM appointments WHERE id = ?`,
       [appointment_id],
@@ -35,7 +34,6 @@ router.post(
         if (!apt)
           return res.status(404).json({ error: "Appointment not found" });
 
-        // 2. Security Checks
         if (apt.client_id !== client_id) {
           return res
             .status(403)
@@ -47,20 +45,16 @@ router.post(
             .json({ error: "You can only review completed appointments." });
         }
 
-        // 3. Time Constraint Check (Must be < 2 months old)
         const appointmentDate = new Date(apt.appointment_date);
         const twoMonthsAgo = new Date();
         twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
 
         if (appointmentDate < twoMonthsAgo) {
-          return res
-            .status(400)
-            .json({
-              error: "Reviews are closed for appointments older than 2 months.",
-            });
+          return res.status(400).json({
+            error: "Reviews are closed for appointments older than 2 months.",
+          });
         }
 
-        // 4. Insert Review
         db.run(
           `INSERT INTO reviews (appointment_id, client_id, provider_id, service_id, rating, comment)
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -75,18 +69,15 @@ router.post(
           function (insertErr) {
             if (insertErr) {
               if (insertErr.message.includes("UNIQUE")) {
-                return res
-                  .status(400)
-                  .json({
-                    error: "You have already reviewed this appointment.",
-                  });
+                return res.status(400).json({
+                  error: "You have already reviewed this appointment.",
+                });
               }
               return res
                 .status(500)
                 .json({ error: "Failed to submit review." });
             }
 
-            // 5. Notify Provider
             createNotification(
               apt.provider_id,
               "review",
@@ -104,8 +95,8 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ GET: Reviews for a Provider (Latest 20)
-   Used for the "Past 20 Appointments" Carousel
+   ✅ GET: Reviews for a Provider (ALL)
+   REMOVED LIMIT 20 to support frontend filtering
 --------------------------------------------- */
 router.get("/provider/:providerId", (req, res) => {
   const { providerId } = req.params;
@@ -116,8 +107,7 @@ router.get("/provider/:providerId", (req, res) => {
      JOIN users u ON r.client_id = u.id
      JOIN services s ON r.service_id = s.id
      WHERE r.provider_id = ?
-     ORDER BY r.created_at DESC
-     LIMIT 20`,
+     ORDER BY r.created_at DESC`, // ✅ Limit removed
     [providerId],
     (err, rows) => {
       if (err)
@@ -129,7 +119,6 @@ router.get("/provider/:providerId", (req, res) => {
 
 /* ---------------------------------------------
    ✅ GET: Reviews for a Service (All)
-   Used for the Service Card Modal
 --------------------------------------------- */
 router.get("/service/:serviceId", (req, res) => {
   const { serviceId } = req.params;

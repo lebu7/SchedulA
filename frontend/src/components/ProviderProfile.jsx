@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/auth';
 import BookingModal from './BookingModal';
 import ReviewCarousel from './ReviewCarousel'; 
-import ReviewListModal from './ReviewListModal'; // ✅ Import Modal
+import ReviewListModal from './ReviewListModal'; 
 import { MapPin, Clock, Users, ArrowLeft, ExternalLink, Phone, MessageCircle, Heart, Star } from 'lucide-react';
 import './ProviderProfile.css';
 import './ChatButton.css';
@@ -20,7 +20,7 @@ const ProviderProfile = ({ user }) => {
     const [showBookingModal, setShowBookingModal] = useState(false);
     const [isFavorite, setIsFavorite] = useState(false);
 
-    // ✅ Modal State
+    // ✅ Modal & Filtering State
     const [viewReviewsService, setViewReviewsService] = useState(null);
     const [initialRatingFilter, setInitialRatingFilter] = useState('all');
 
@@ -94,7 +94,7 @@ const ProviderProfile = ({ user }) => {
         setShowBookingModal(true);
     };
 
-    // ✅ Open Review Modal with specific rating filter
+    // ✅ FIXED: Logic to open modal with pre-applied filter
     const handleRatingClick = (e, service, ratingValue = 'all') => {
         e.stopPropagation();
         setInitialRatingFilter(ratingValue);
@@ -123,11 +123,12 @@ const ProviderProfile = ({ user }) => {
                         <div className="header-meta-row">
                             <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
                             
-                            {/* ✅ General rating pill opens ALL reviews */}
+                            {/* ✅ General rating pill - Clickable to see ALL reviews */}
                             <div 
                                 className="provider-rating-pill" 
                                 onClick={(e) => handleRatingClick(e, { id: 'provider', name: provider.business_name }, 'all')}
                                 style={{ cursor: 'pointer' }}
+                                title="Click to view all business feedback"
                             >
                                 <Star size={16} fill={provider.avg_rating ? "#f59e0b" : "none"} color="#f59e0b" />
                                 <strong>{rating}</strong>
@@ -171,12 +172,13 @@ const ProviderProfile = ({ user }) => {
                                 <div className="service-info">
                                     <div className="mini-service-header">
                                         <h3>{service.name}</h3>
-                                        {/* ✅ Styled service rating opens reviews for that specific star count */}
+                                        {/* ✅ Service rating - Clickable to see reviews for this specific star count */}
                                         {service.avg_rating && (
                                             <div 
                                                 className="service-rating-mini" 
                                                 onClick={(e) => handleRatingClick(e, service, Math.round(service.avg_rating).toString())}
                                                 style={{ cursor: 'pointer' }}
+                                                title={`View ${Math.round(service.avg_rating)} star reviews for this service`}
                                             >
                                                 <Star size={12} fill="#f59e0b" color="#f59e0b"/>
                                                 <span>{Number(service.avg_rating).toFixed(1)}</span>
@@ -256,14 +258,14 @@ const ProviderProfile = ({ user }) => {
                 />
             )}
 
-            {/* ✅ Reviews Modal Instance */}
+            {/* ✅ Reviews Modal Rendering */}
             {viewReviewsService && (
                 <ReviewListModal
                     serviceId={viewReviewsService.id}
                     serviceName={viewReviewsService.name}
                     onClose={() => setViewReviewsService(null)}
                     user={user}
-                    preFilter={initialRatingFilter} // ✅ Pass the filter
+                    preFilter={initialRatingFilter}
                 />
             )}
         </div>

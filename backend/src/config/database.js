@@ -372,26 +372,28 @@ function initializeDatabase() {
 }
 
 function tryAddColumn(table, column, definition) {
-  db.all(`PRAGMA table_info(${table})`, (err, rows) => {
-    if (err) return;
-    const exists = rows.some((r) => r.name === column);
-    if (!exists) {
-      db.run(
-        `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
-        (alterErr) => {
-          if (alterErr) {
-            console.error(
-              `⚠️ Failed to add column ${column} to ${table}:`,
-              alterErr.message,
-            );
-          } else {
-            // If we just added last_seen, update it to real time
-            if (column === "last_seen") {
-              db.run(`UPDATE users SET last_seen = CURRENT_TIMESTAMP`);
+  // Use db.serialize to ensure these run one after another
+  db.serialize(() => {
+    db.all(`PRAGMA table_info(${table})`, (err, rows) => {
+      if (err) return;
+      const exists = rows.some((r) => r.name === column);
+      if (!exists) {
+        db.run(
+          `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+          (alterErr) => {
+            if (alterErr) {
+              console.error(
+                `⚠️ Migration failed for ${column}:`,
+                alterErr.message,
+              );
+            } else {
+              console.log(`✅ Added ${column} to ${table}`);
+              if (column === "last_seen")
+                db.run(`UPDATE users SET last_seen = CURRENT_TIMESTAMP`);
             }
-          }
-        },
-      );
-    }
+          },
+        );
+      }
+    });
   });
 }
