@@ -99,7 +99,13 @@ const ReviewListModal = ({ serviceId, serviceName, onClose, user, preFilter = 'a
                 contextId: service.id
             });
             const contextData = { name: service.name, price: service.price, duration: service.duration };
-            window.dispatchEvent(new CustomEvent('openChatRoom', { detail: { room: res.data.room, context: contextData } }));
+              window.dispatchEvent(new CustomEvent('openChatRoom', {
+                detail: {
+                room: res.data.room,
+                context: contextData,
+                recipientName: service.business_name || service.provider_name
+                }
+                }));
             resetRoomUnread(service.id);
         } catch (err) {
             console.error("Failed to initialize service chat:", err);
