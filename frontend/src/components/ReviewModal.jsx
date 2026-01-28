@@ -1,14 +1,21 @@
 /* frontend/src/components/ReviewModal.jsx */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/auth';
 import { Star, X } from 'lucide-react';
 import './ReviewComponents.css';
 
 const ReviewModal = ({ appointment, onClose, onSuccess }) => {
-    const [rating, setRating] = useState(0);
+    // ✅ Initialize state with existing review data (if any)
+    const [rating, setRating] = useState(appointment.review_rating || 0);
+    const [comment, setComment] = useState(appointment.review_comment || "");
     const [hover, setHover] = useState(0);
-    const [comment, setComment] = useState("");
     const [loading, setLoading] = useState(false);
+
+    // Update state if appointment prop changes (useful if modal stays open or switches context)
+    useEffect(() => {
+        setRating(appointment.review_rating || 0);
+        setComment(appointment.review_comment || "");
+    }, [appointment]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -16,6 +23,7 @@ const ReviewModal = ({ appointment, onClose, onSuccess }) => {
 
         setLoading(true);
         try {
+            // Backend handles both INSERT and UPDATE (upsert logic)
             await api.post('/reviews', {
                 appointment_id: appointment.id,
                 rating,
@@ -32,11 +40,13 @@ const ReviewModal = ({ appointment, onClose, onSuccess }) => {
         }
     };
 
+    const isUpdate = !!appointment.review_rating;
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="review-modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h3>Rate your experience</h3>
+                    <h3>{isUpdate ? "Update your Review" : "Rate your experience"}</h3>
                     <button className="close-btn" onClick={onClose}><X size={20}/></button>
                 </div>
                 
@@ -74,7 +84,7 @@ const ReviewModal = ({ appointment, onClose, onSuccess }) => {
                     ></textarea>
 
                     <button type="submit" className="btn btn-primary full-width" disabled={loading}>
-                        {loading ? "Submitting..." : "Submit Review"}
+                        {loading ? "Saving..." : (isUpdate ? "Update Review" : "Submit Review")}
                     </button>
                 </form>
             </div>

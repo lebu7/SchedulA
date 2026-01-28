@@ -8,11 +8,11 @@ import RescheduleModal from "./RescheduleModal";
 import CalendarView from "./CalendarView"; 
 import ChatButton from './ChatButton';
 import ClientReportModal from './ClientReportModal';
-import ReviewModal from './ReviewModal'; // ✅ IMPORTED
+import ReviewModal from './ReviewModal'; 
 import { useSocket } from "../contexts/SocketContext";
 import { 
   Receipt, AlertTriangle, CheckCircle, Info, Calendar, Clock, Lock, Unlock,
-  Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare, List, Star // ✅ ADDED Star
+  Search, ArrowUpDown, Filter, X, UserPlus, CheckSquare, List, Star 
 } from "lucide-react"; 
 import "./AppointmentManager.css";
 
@@ -629,10 +629,16 @@ function AppointmentManager({ user }) {
      
      const canDelete = appointmentDate <= sixMonthsAgo;
      
-     // ✅ Check if Reviewable (Completed + < 2 months old)
+     // ✅ UPDATED REVIEW LOGIC
      const twoMonthsAgo = new Date();
      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-     const isReviewable = apt.status === 'completed' && appointmentDate > twoMonthsAgo;
+     
+     // It's reviewable if completed AND (recent OR already reviewed)
+     // If it's old but reviewed, we show the "Your Review" button
+     const hasReview = !!apt.review_id;
+     const isRecentEnough = appointmentDate > twoMonthsAgo;
+     
+     const showReviewButton = apt.status === 'completed' && (isRecentEnough || hasReview);
 
      // ✅ CHECK IF IT'S A WALK-IN
      const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
@@ -675,14 +681,14 @@ function AppointmentManager({ user }) {
                 <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px'}}>
                     {isWalkIn && <span className="walk-in-badge">Walk-In</span>}
                     
-                    {/* ✨ NEW PLACEMENT: Review Pill Button */}
-                    {isReviewable && (
+                    {/* ✨ NEW LOGIC: Show "Your Review" vs "Review" */}
+                    {showReviewButton && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); handleReviewClick(apt); }}
                             style={{
-                                background: '#fffbeb', 
-                                color: '#b45309', 
-                                border: '1px solid #fcd34d', 
+                                background: hasReview ? '#fcdcfaff' : '#fffbeb', 
+                                color: hasReview ? '#651665ff' : '#b45309', 
+                                border: hasReview ? '1px solid #ef86d6ff' : '1px solid #fcd34d', 
                                 padding: '4px 10px', 
                                 borderRadius: '20px', 
                                 fontSize: '0.75rem', 
@@ -693,14 +699,14 @@ function AppointmentManager({ user }) {
                                 gap: '4px', 
                                 whiteSpace: 'nowrap',
                                 transition: 'all 0.2s',
-                                marginTop: isWalkIn ? 0 : '2px' // Align if badge exists
+                                marginTop: isWalkIn ? 0 : '2px' 
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#fef3c7'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#fffbeb'}
-                            title="Rate this service"
+                            onMouseEnter={(e) => e.currentTarget.style.background = hasReview ? '#f7bbefff' : '#fef3c7'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = hasReview ? '#fcdcf9ff' : '#fffbeb'}
+                            title={hasReview ? "Edit your review" : "Rate this service"}
                         >
-                            <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                            Review
+                            <Star size={12} fill={hasReview ? "#f59e0b" : "#f59e0b"} color={hasReview ? "#f59e0b" : "#f59e0b"} />
+                            {hasReview ? "Your Review" : "Review"}
                         </button>
                     )}
                 </div>
@@ -877,8 +883,6 @@ function AppointmentManager({ user }) {
                     {apt.status === 'cancelled' && (
                         <button className="btn btn-primary small-btn" onClick={() => handleRebook(apt)}>Rebook</button>
                     )}
-                    
-                    {/* ❌ REMOVED OLD REVIEW BUTTON FROM HERE */}
                     
                     {canDelete && (
                         <button className="btn btn-danger small-btn" onClick={() => handleDeleteAppointment(apt.id)}>Delete</button>
@@ -1225,8 +1229,7 @@ function AppointmentManager({ user }) {
                 appointment={reviewAppointment}
                 onClose={() => setShowReviewModal(false)}
                 onSuccess={() => {
-                   // Optional: refresh appointments to disable button if desired (requires backend support for 'is_reviewed' flag)
-                   // For now, we rely on the modal alert.
+                   fetchAppointments(); // Refresh to update button status immediately
                 }}
             />
         )}

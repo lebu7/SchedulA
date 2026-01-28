@@ -17,7 +17,7 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, "schedula.db");
 console.log(`📊 Database path: ${dbPath}`);
 
-// ✅ Open the database with explicit READWRITE | CREATE modes to prevent readonly errors
+// ✅ Open the database with explicit READWRITE | CREATE modes
 export const db = new sqlite3.Database(
   dbPath,
   sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
@@ -49,9 +49,7 @@ export const db = new sqlite3.Database(
 );
 
 function initializeDatabase() {
-  /* ---------------------------------------------
-     🧱 USERS TABLE 
-  --------------------------------------------- */
+  // Users Table
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,9 +76,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     💈 SERVICES TABLE
-  --------------------------------------------- */
+  // Services Table
   db.run(`
     CREATE TABLE IF NOT EXISTS services (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,9 +97,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     📅 APPOINTMENTS TABLE
-  --------------------------------------------- */
+  // Appointments Table
   db.run(`
     CREATE TABLE IF NOT EXISTS appointments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,9 +130,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     ⭐ REVIEWS TABLE
-  --------------------------------------------- */
+  // Reviews Table (Correct Definition)
   db.run(`
     CREATE TABLE IF NOT EXISTS reviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,9 +149,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     📱 IN-APP CHAT TABLES
-  --------------------------------------------- */
+  // Chat Tables
   db.run(`
     CREATE TABLE IF NOT EXISTS chat_rooms (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,9 +186,7 @@ function initializeDatabase() {
     `CREATE INDEX IF NOT EXISTS idx_messages_room ON chat_messages(room_id, created_at DESC)`,
   );
 
-  /* ---------------------------------------------
-     ❤️ FAVORITES TABLE
-  --------------------------------------------- */
+  // Favorites Table
   db.run(`
     CREATE TABLE IF NOT EXISTS favorites (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,9 +199,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     💰 TRANSACTIONS TABLE
-  --------------------------------------------- */
+  // Transactions Table
   db.run(
     `
     CREATE TABLE IF NOT EXISTS transactions (
@@ -243,9 +229,7 @@ function initializeDatabase() {
     },
   );
 
-  /* ---------------------------------------------
-     🧠 AI PREDICTIONS TABLE
-  --------------------------------------------- */
+  // AI Predictions Table
   db.run(`
     CREATE TABLE IF NOT EXISTS ai_predictions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -261,9 +245,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     🔔 NOTIFICATIONS TABLE
-  --------------------------------------------- */
+  // Notifications Table
   db.run(`
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,9 +260,7 @@ function initializeDatabase() {
     )
   `);
 
-  /* ---------------------------------------------
-     📱 SMS LOGS TABLE
-  --------------------------------------------- */
+  // SMS Logs Table
   db.get(
     `SELECT sql FROM sqlite_master WHERE type='table' AND name='sms_logs'`,
     [],
@@ -324,6 +304,75 @@ function initializeDatabase() {
   }
 
   /* ---------------------------------------------
+     🛠️ FIX REVIEWS TABLE SCHEMA (Improved Check)
+  --------------------------------------------- */
+  db.get(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='reviews'`,
+    [],
+    (err, row) => {
+      if (err || !row) return;
+
+      // Normalize schema string to remove spaces/tabs for better matching
+      const cleanSql = row.sql.replace(/\s+/g, "");
+
+      // Check if schema has the BAD constraint or MISSES the good constraint
+      const hasBadConstraint = cleanSql.includes(
+        "UNIQUE(client_id,service_id)",
+      );
+      const missingGoodConstraint = !cleanSql.includes(
+        "UNIQUE(appointment_id)",
+      );
+
+      if (hasBadConstraint || missingGoodConstraint) {
+        console.log("⚠️ Outdated reviews schema detected. Migrating...");
+
+        db.serialize(() => {
+          db.run("PRAGMA foreign_keys=OFF");
+
+          // 1. Rename old table
+          db.run("ALTER TABLE reviews RENAME TO reviews_old");
+
+          // 2. Create new table with CORRECT constraints (UNIQUE(appointment_id))
+          db.run(`
+            CREATE TABLE IF NOT EXISTS reviews (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              appointment_id INTEGER NOT NULL,
+              client_id INTEGER NOT NULL,
+              provider_id INTEGER NOT NULL,
+              service_id INTEGER NOT NULL,
+              rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+              comment TEXT,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+              FOREIGN KEY (client_id) REFERENCES users(id),
+              FOREIGN KEY (provider_id) REFERENCES users(id),
+              FOREIGN KEY (service_id) REFERENCES services(id),
+              UNIQUE(appointment_id)
+            )
+          `);
+
+          // 3. Migrate Data
+          // Note: If duplicates exist in old data that violate new constraints, this might fail,
+          // so we use INSERT OR IGNORE to keep at least one review per appointment.
+          db.run(`
+            INSERT OR IGNORE INTO reviews (id, appointment_id, client_id, provider_id, service_id, rating, comment, created_at)
+            SELECT id, appointment_id, client_id, provider_id, service_id, rating, comment, created_at
+            FROM reviews_old
+          `);
+
+          // 4. Cleanup
+          db.run("DROP TABLE reviews_old");
+          db.run("PRAGMA foreign_keys=ON");
+
+          console.log("✅ Reviews table migrated successfully to new schema.");
+        });
+      } else {
+        console.log("✅ Reviews table schema is up to date.");
+      }
+    },
+  );
+
+  /* ---------------------------------------------
      🔍 MIGRATIONS (Column Checks)
   --------------------------------------------- */
   tryAddColumn("users", "gender", "TEXT");
@@ -338,8 +387,6 @@ function initializeDatabase() {
   tryAddColumn("users", "google_maps_link", "TEXT");
   tryAddColumn("users", "is_open_sat", "INTEGER DEFAULT 0");
   tryAddColumn("users", "is_open_sun", "INTEGER DEFAULT 0");
-
-  // ✅ FIXED: Using constant default for migration to avoid "non-constant default" error
   tryAddColumn("users", "last_seen", "DATETIME DEFAULT '2026-01-27 00:00:00'");
 
   tryAddColumn("services", "opening_time", "TEXT DEFAULT '08:00'");
@@ -372,7 +419,6 @@ function initializeDatabase() {
 }
 
 function tryAddColumn(table, column, definition) {
-  // Use db.serialize to ensure these run one after another
   db.serialize(() => {
     db.all(`PRAGMA table_info(${table})`, (err, rows) => {
       if (err) return;

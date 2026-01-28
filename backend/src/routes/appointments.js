@@ -206,29 +206,36 @@ router.get("/", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   const userType = req.user.user_type;
 
+  // ✅ UPDATED: Queries now include LEFT JOIN reviews to fetch review status
   const query =
     userType === "client"
       ? `
       SELECT a.*, s.name AS service_name, s.duration, s.price, 
-             u.name AS provider_name, u.business_name
+             u.name AS provider_name, u.business_name,
+             r.id AS review_id, r.rating AS review_rating, r.comment AS review_comment
       FROM appointments a
       JOIN services s ON a.service_id = s.id
       JOIN users u ON a.provider_id = u.id
+      LEFT JOIN reviews r ON a.id = r.appointment_id
       WHERE a.client_id = ? AND a.client_deleted = 0
       ORDER BY a.appointment_date DESC`
       : `
       SELECT a.*, s.name AS service_name, s.duration, s.price,
              u.name AS client_name, u.phone AS client_phone,
-             a.no_show_risk 
+             a.no_show_risk,
+             r.id AS review_id, r.rating AS review_rating, r.comment AS review_comment
       FROM appointments a
       JOIN services s ON a.service_id = s.id
       JOIN users u ON a.client_id = u.id
+      LEFT JOIN reviews r ON a.id = r.appointment_id
       WHERE a.provider_id = ? AND a.provider_deleted = 0
       ORDER BY a.appointment_date DESC`;
 
   db.all(query, [userId], (err, appointments) => {
-    if (err)
+    if (err) {
+      console.error("Fetch Appointments Error:", err);
       return res.status(500).json({ error: "Failed to fetch appointments" });
+    }
 
     const now = new Date().toISOString();
 
