@@ -46,6 +46,19 @@ router.post(
           return res.status(404).json({ error: "Appointment not found" });
         }
 
+        // 🛑 SECURITY CHECK: Prevent Reviews for Walk-Ins
+        const isWalkIn =
+          apt.payment_reference &&
+          (apt.payment_reference.startsWith("WALK-IN") ||
+            apt.payment_reference.startsWith("WALKIN"));
+
+        if (isWalkIn) {
+          console.warn(`🚫 Attempt to review walk-in appointment blocked.`);
+          return res
+            .status(403)
+            .json({ error: "Walk-in appointments cannot be reviewed." });
+        }
+
         // 2. Validate Ownership & Status
         if (apt.client_id !== client_id) {
           return res
@@ -58,18 +71,7 @@ router.post(
             .json({ error: "You can only review completed appointments." });
         }
 
-        // 3. Check for Time Limit (2 Months)
-        const appointmentDate = new Date(apt.appointment_date);
-        const twoMonthsAgo = new Date();
-        twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-
-        if (appointmentDate < twoMonthsAgo) {
-          return res.status(400).json({
-            error: "Reviews are closed for appointments older than 2 months.",
-          });
-        }
-
-        // 4. Check if Review Exists (Upsert Logic)
+        // 3. Check if Review Exists (Upsert Logic)
         db.get(
           `SELECT id FROM reviews WHERE appointment_id = ?`,
           [appointment_id],
@@ -80,8 +82,12 @@ router.post(
                 .json({ error: "Error checking existing reviews" });
             }
 
+            // ✅ Logic Fork:
+            // If Review Exists -> Allow Update (Ignore Date)
+            // If New Review -> Check Date (Must be < 1 Month)
+
             if (existingReview) {
-              // ✅ UPDATE existing review
+              // ✅ UPDATE existing review (Allowed for all past appointments)
               console.log(
                 `🔄 Updating existing review for Appointment ${appointment_id}`,
               );
@@ -101,7 +107,18 @@ router.post(
                 },
               );
             } else {
-              // ✅ INSERT new review
+              // ✅ INSERT new review (Must be within 1 month)
+              const appointmentDate = new Date(apt.appointment_date);
+              const oneMonthAgo = new Date();
+              oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+              if (appointmentDate < oneMonthAgo) {
+                return res.status(400).json({
+                  error:
+                    "Reviews are closed for appointments older than 1 month.",
+                });
+              }
+
               console.log(
                 `✨ Creating new review for Appointment ${appointment_id}`,
               );

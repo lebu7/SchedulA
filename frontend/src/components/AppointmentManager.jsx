@@ -629,19 +629,23 @@ function AppointmentManager({ user }) {
      
      const canDelete = appointmentDate <= sixMonthsAgo;
      
-     // ✅ UPDATED REVIEW LOGIC
-     const twoMonthsAgo = new Date();
-     twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-     
-     // It's reviewable if completed AND (recent OR already reviewed)
-     // If it's old but reviewed, we show the "Your Review" button
-     const hasReview = !!apt.review_id;
-     const isRecentEnough = appointmentDate > twoMonthsAgo;
-     
-     const showReviewButton = apt.status === 'completed' && (isRecentEnough || hasReview);
-
      // ✅ CHECK IF IT'S A WALK-IN
      const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
+
+     // ✅ UPDATED REVIEW LOGIC: New Review Limit = 1 Month
+     const oneMonthAgo = new Date();
+     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+     
+     const hasReview = !!apt.review_id;
+     const isRecentEnough = appointmentDate > oneMonthAgo;
+     const isProvider = user.user_type === 'provider';
+     
+     // Logic:
+     // Client: (Completed) AND (Recent OR HasReview) AND Not Walk-In
+     // Provider: (Completed) AND (HasReview) AND Not Walk-In -> Cannot Add, only View
+     const showReviewButton = apt.status === 'completed' && !isWalkIn && (
+        isProvider ? hasReview : (isRecentEnough || hasReview)
+     );
 
      // ✅ HELPER TO EXTRACT WALK-IN NAME FROM NOTES
      const getWalkInClientName = (notes) => {
@@ -681,7 +685,7 @@ function AppointmentManager({ user }) {
                 <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px'}}>
                     {isWalkIn && <span className="walk-in-badge">Walk-In</span>}
                     
-                    {/* ✨ NEW LOGIC: Show "Your Review" vs "Review" */}
+                    {/* ✨ NEW LOGIC: Show "Your Review" vs "Review" vs "Client Review" */}
                     {showReviewButton && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); handleReviewClick(apt); }}
@@ -701,12 +705,15 @@ function AppointmentManager({ user }) {
                                 transition: 'all 0.2s',
                                 marginTop: isWalkIn ? 0 : '2px' 
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = hasReview ? '#f7bbefff' : '#fef3c7'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = hasReview ? '#fcdcf9ff' : '#fffbeb'}
-                            title={hasReview ? "Edit your review" : "Rate this service"}
+                            onMouseEnter={(e) => e.currentTarget.style.background = hasReview ? '#f7f0bbff' : '#fef3c7'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = hasReview ? '#fcf6dcff' : '#fffbeb'}
+                            title={isProvider ? "View Client Review" : (hasReview ? "Edit your review" : "Rate this service")}
                         >
                             <Star size={12} fill={hasReview ? "#f59e0b" : "#f59e0b"} color={hasReview ? "#f59e0b" : "#f59e0b"} />
-                            {hasReview ? "Your Review" : "Review"}
+                            {isProvider 
+                                ? "Client Review" 
+                                : (hasReview ? "Your Review" : "Review")
+                            }
                         </button>
                     )}
                 </div>
@@ -1223,10 +1230,11 @@ function AppointmentManager({ user }) {
           />
         )}
 
-        {/* ✅ REVIEW MODAL */}
+        {/* ✅ REVIEW MODAL - Passed 'user' to handle read-only mode for providers */}
         {showReviewModal && reviewAppointment && (
             <ReviewModal
                 appointment={reviewAppointment}
+                user={user}
                 onClose={() => setShowReviewModal(false)}
                 onSuccess={() => {
                    fetchAppointments(); // Refresh to update button status immediately
