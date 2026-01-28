@@ -1,68 +1,70 @@
-/* frontend/src/components/ChatWidget.jsx */
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, ArrowLeft } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
 import ChatListModal from './ChatListModal';
 import ChatModal from './ChatModal';
+import api from '../services/auth';
 import './ChatWidget.css';
 
 const ChatWidget = () => {
   const { globalUnreadCount, socket, onlineUsers } = useSocket();
+  const location = useLocation();
 
   const [isOpen, setIsOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
-  
-  // Header Info State
+
+  // Header Info
   const [recipientName, setRecipientName] = useState('');
   const [recipientRole, setRecipientRole] = useState('');
   const [recipientId, setRecipientId] = useState(null);
   const [lastSeen, setLastSeen] = useState(null);
-  const [, setTick] = useState(0); // Forces re-render for time updates
+  const [, setTick] = useState(0);
+
+  // 🔹 Chat intent flags (ADDED)
+  const [autoFocus, setAutoFocus] = useState(false);
+  const [scrollToUnread, setScrollToUnread] = useState(false);
 
   const widgetRef = useRef(null);
 
-  // Helper to format the Last Seen string
+  /* ------------------ Helpers ------------------ */
+
   const formatLastSeen = (dateStr) => {
     if (!dateStr) return 'Offline';
     try {
-      // Normalize SQLite date string to ISO
-      const standardizedDate = dateStr.includes(' ') 
-        ? dateStr.replace(' ', 'T') + 'Z' 
+      const standardizedDate = dateStr.includes(' ')
+        ? dateStr.replace(' ', 'T') + 'Z'
         : dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
-        
+
       const date = new Date(standardizedDate);
       const now = new Date();
-      const diffInSeconds = Math.floor((now - date) / 1000);
-      
-      if (diffInSeconds < 60) return 'Last seen just now';
-      
-      const diffInMinutes = Math.floor(diffInSeconds / 60);
-      if (diffInMinutes < 60) return `Last seen ${diffInMinutes}m ago`;
-      
-      const diffInHours = Math.floor(diffInMinutes / 60);
-      if (diffInHours < 24) return `Last seen ${diffInHours}h ago`;
+      const diff = Math.floor((now - date) / 1000);
 
-      return `Last seen ${date.toLocaleDateString('en-GB', { 
-        day: 'numeric', 
-        month: 'short' 
+      if (diff < 60) return 'Last seen just now';
+      const m = Math.floor(diff / 60);
+      if (m < 60) return `Last seen ${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `Last seen ${h}h ago`;
+
+      return `Last seen ${date.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short'
       })}`;
-    } catch (e) { 
-      return 'Offline'; 
+    } catch {
+      return 'Offline';
     }
   };
 
-  // ✅ 1. Real-time updates for Last Seen
+  /* ------------------ Socket Updates ------------------ */
+
   useEffect(() => {
     const handleUserOffline = (data) => {
-      // If the user who just disconnected is the one we are chatting with, update their lastSeen
       if (recipientId && Number(data.userId) === Number(recipientId)) {
         setLastSeen(data.lastSeen);
       }
     };
 
     socket?.on('user_disconnected', handleUserOffline);
-    
-    // Ticker to refresh "m ago" strings every minute
     const ticker = setInterval(() => setTick(t => t + 1), 60000);
 
     return () => {
@@ -71,51 +73,85 @@ const ChatWidget = () => {
     };
   }, [socket, recipientId]);
 
-  // ✅ 2. Handle Opening Specific Chat (External Events)
+  /* ------------------ External Events ------------------ */
+
   useEffect(() => {
     const handleOpenSpecificChat = (e) => {
-      const { room, context, recipientName: customName } = e.detail;
+      const {
+        room,
+        context,
+        autoFocus: af,
+        scrollToUnread: stu,
+        recipientName: customName
+      } = e.detail;
+
       setIsOpen(true);
+      setAutoFocus(!!af);
+      setScrollToUnread(!!stu);
 
       const userId = Number(localStorage.getItem('userId'));
       const isClient = Number(room.client_id) === userId;
-      
+
       const rId = isClient ? Number(room.provider_id) : Number(room.client_id);
-      const name = customName || (isClient 
-        ? room.business_name || room.provider_name 
-        : room.client_name);
-      
-      const seen = isClient ? room.provider_last_seen : room.client_last_seen;
+      const name = customName || (
+        isClient ? room.business_name || room.provider_name : room.client_name
+      );
 
       setSelectedRoom({ ...room, contextInfo: context });
       setRecipientName(name);
       setRecipientRole(isClient ? 'Service Provider' : 'Client');
       setRecipientId(rId);
-      setLastSeen(seen);
+      setLastSeen(isClient ? room.provider_last_seen : room.client_last_seen);
     };
 
     const handleToggle = () => setIsOpen(prev => !prev);
+    const handleForceOpen = () => setIsOpen(true);
 
     window.addEventListener('openChatRoom', handleOpenSpecificChat);
     window.addEventListener('toggleChatWidget', handleToggle);
+    window.addEventListener('forceOpenChatWidget', handleForceOpen);
 
     return () => {
       window.removeEventListener('openChatRoom', handleOpenSpecificChat);
       window.removeEventListener('toggleChatWidget', handleToggle);
+      window.removeEventListener('forceOpenChatWidget', handleForceOpen);
     };
   }, []);
 
-  // ✅ 3. General Socket Listeners
-  useEffect(() => {
-    const handleUnreadUpdate = () => {
-      window.dispatchEvent(new CustomEvent('updateChatBadge'));
-    };
-    
-    socket?.on('unread_count_update', handleUnreadUpdate);
-    return () => socket?.off('unread_count_update', handleUnreadUpdate);
-  }, [socket]);
+  /* ------------------ URL Deep-Link Support ------------------ */
 
-  // ✅ 4. Utility Functions
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const chatRoomId = params.get('chatRoomId');
+
+    if (!chatRoomId) return;
+
+    const openFromUrl = async () => {
+      try {
+        setIsOpen(true);
+        setAutoFocus(true);
+        setScrollToUnread(true);
+
+        const res = await api.get(`/chat/rooms/${chatRoomId}`);
+        const room = res.data.room;
+
+        window.dispatchEvent(new CustomEvent('openChatRoom', {
+          detail: {
+            room,
+            autoFocus: true,
+            scrollToUnread: true
+          }
+        }));
+      } catch (err) {
+        console.error('Failed to open chat from URL', err);
+      }
+    };
+
+    openFromUrl();
+  }, [location.search]);
+
+  /* ------------------ Utility ------------------ */
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (isOpen && widgetRef.current && !widgetRef.current.contains(e.target)) {
@@ -128,18 +164,10 @@ const ChatWidget = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  const resetHeader = () => {
-    setSelectedRoom(null);
-    setRecipientName('');
-    setRecipientRole('');
-    setRecipientId(null);
-    setLastSeen(null);
-  };
-
   const handleRoomSelect = (room, name) => {
     const userId = Number(localStorage.getItem('userId'));
     const isClient = Number(room.client_id) === userId;
-    
+
     setSelectedRoom(room);
     setRecipientName(name);
     setRecipientRole(isClient ? 'Service Provider' : 'Client');
@@ -149,11 +177,13 @@ const ChatWidget = () => {
 
   const isOnline = recipientId && onlineUsers.has(Number(recipientId));
 
+  /* ------------------ Render ------------------ */
+
   return (
     <>
       {!isOpen && (
-        <button 
-          className="chat-widget-button" 
+        <button
+          className="chat-widget-button"
           onClick={() => setIsOpen(true)}
           aria-label="Open messages"
         >
@@ -174,18 +204,19 @@ const ChatWidget = () => {
                 </button>
                 <div className="header-info">
                   <span className="recipient-name-header">{recipientName}</span>
-                  {/* ✅ FIXED: Show Online status or Last Seen time */}
                   {isOnline ? (
                     <span className="recipient-status-online">Online</span>
                   ) : (
-                    <span className="recipient-status-offline">{formatLastSeen(lastSeen)}</span>
+                    <span className="recipient-status-offline">
+                      {formatLastSeen(lastSeen)}
+                    </span>
                   )}
                 </div>
               </div>
             ) : (
               <h3 className="widget-title">Messages</h3>
             )}
-            
+
             <button onClick={() => setIsOpen(false)} className="nav-btn close-btn">
               <X size={18} />
             </button>
@@ -196,13 +227,15 @@ const ChatWidget = () => {
               <ChatModal
                 room={selectedRoom}
                 contextInfo={selectedRoom.contextInfo || null}
+                autoFocus={autoFocus}
+                scrollToUnread={scrollToUnread}
                 onClose={() => setIsOpen(false)}
-                inWidget={true}
+                inWidget
               />
             ) : (
               <ChatListModal
                 onClose={() => setIsOpen(false)}
-                inWidget={true}
+                inWidget
                 onRoomSelect={handleRoomSelect}
               />
             )}
