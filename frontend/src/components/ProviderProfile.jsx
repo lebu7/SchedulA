@@ -71,11 +71,15 @@ const ProviderProfile = ({ user }) => {
                 contextType: 'profile',
                 contextId: null
             });
+
+            // ✅ Pass recipientName so ChatModal shows the actual provider name
+            const recipientName = data.provider.business_name || data.provider.name;
+
             window.dispatchEvent(new CustomEvent('openChatRoom', {
                 detail: {
                     room: res.data.room,
                     context: { name: "General Inquiry" },
-                    recipientName: data.provider.business_name || data.provider.name
+                    recipientName  // <-- updated line
                 }
             }));
         } catch (err) {

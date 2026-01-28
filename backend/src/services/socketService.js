@@ -18,6 +18,7 @@ export const initializeSocket = (server) => {
     },
   });
 
+  // Authenticate socket connections
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("No token"));
@@ -38,18 +39,19 @@ export const initializeSocket = (server) => {
     onlineUsers.add(userId);
     socket.join(`user:${userId}`);
 
-    // Broadcast status update
+    // Broadcast online users
     io.emit("online_users", Array.from(onlineUsers));
     socket.broadcast.emit("user_connected", userId);
 
-    socket.on("join_room", async ({ roomId }) => {
+    // Join chat room
+    socket.on("join_room", ({ roomId }) => {
       socket.join(`room:${roomId}`);
     });
 
+    // Send message
     socket.on("send_message", ({ roomId, message }) => {
       const senderId = userId;
 
-      // ✅ Fetch Phone & Prefs for SMS
       db.get(
         `SELECT cr.*, 
                 u1.name AS client_name, u1.phone AS client_phone, u1.notification_preferences AS client_prefs,
@@ -72,7 +74,7 @@ export const initializeSocket = (server) => {
 
           db.run(
             `INSERT INTO chat_messages (room_id, sender_id, message, expires_at, created_at)
-            VALUES (?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?)`,
             [roomId, senderId, message, expiresAt, now],
             function (insertErr) {
               if (insertErr) {
@@ -80,57 +82,53 @@ export const initializeSocket = (server) => {
                 return socket.emit("error", { message: "Failed to send" });
               }
 
-              // ✅ FIX: Update last_message_at to 'now' to prevent early deletion
               db.run(`UPDATE chat_rooms SET last_message_at = ? WHERE id = ?`, [
                 now,
                 roomId,
               ]);
 
+              // Determine sender name accurately
+              const senderName =
+                senderId === room.client_id
+                  ? room.client_name
+                  : room.provider_name || room.business_name;
+
               const messageData = {
                 id: this.lastID,
                 room_id: roomId,
                 sender_id: senderId,
-                sender_name:
-                  room.client_id === senderId
-                    ? room.client_name
-                    : room.provider_name || room.business_name,
+                sender_name: senderName,
                 message,
                 created_at: now,
                 expires_at: expiresAt,
               };
 
-              // Real-time message
+              // Emit message to room
               io.to(`room:${roomId}`).emit("new_message", messageData);
 
-              const isSenderClient =
-                String(room.client_id) === String(senderId);
-              const recipientId = isSenderClient
-                ? room.provider_id
-                : room.client_id;
-
-              // Unread notification
+              // Notify recipient of unread message
+              const recipientId =
+                senderId === room.client_id ? room.provider_id : room.client_id;
               io.to(`user:${recipientId}`).emit("unread_count_update");
 
-              // ✅ OFFLINE SMS CHECK
+              // Send SMS if offline
               if (!onlineUsers.has(Number(recipientId))) {
-                const recipientPhone = isSenderClient
-                  ? room.provider_phone
-                  : room.client_phone;
-                const rawPrefs = isSenderClient
-                  ? room.provider_prefs
-                  : room.client_prefs;
-                const senderName = messageData.sender_name;
+                const recipientPhone =
+                  senderId === room.client_id
+                    ? room.provider_phone
+                    : room.client_phone;
+                const rawPrefs =
+                  senderId === room.client_id
+                    ? room.provider_prefs
+                    : room.client_prefs;
 
                 let prefs = {};
                 try {
                   if (rawPrefs) prefs = JSON.parse(rawPrefs);
                 } catch (e) {}
 
-                // Default enabled unless explicitly false
                 if (prefs.chat_msg !== false && recipientPhone) {
-                  console.log(
-                    `📴 User ${recipientId} is offline. Sending SMS...`,
-                  );
+                  console.log(`📴 User ${recipientId} offline. Sending SMS...`);
                   const cleanMsg =
                     message.length > 30
                       ? message.substring(0, 30) + "..."
@@ -145,13 +143,13 @@ export const initializeSocket = (server) => {
       );
     });
 
+    // Mark messages as read
     socket.on("mark_read", ({ roomId }) => {
       db.run(
         `UPDATE chat_messages SET is_read = 1 WHERE room_id = ? AND sender_id != ?`,
         [roomId, userId],
         (err) => {
           if (!err) {
-            // ✅ Notify sender that messages were read
             io.to(`room:${roomId}`).emit("messages_read", {
               roomId,
               readerId: userId,
@@ -161,11 +159,22 @@ export const initializeSocket = (server) => {
       );
     });
 
+    // Typing indicators
+    socket.on("typing", ({ roomId, userName }) => {
+      socket.to(`room:${roomId}`).emit("user_typing", { roomId, userName });
+    });
+
+    socket.on("stop_typing", ({ roomId, userName }) => {
+      socket
+        .to(`room:${roomId}`)
+        .emit("user_stop_typing", { roomId, userName });
+    });
+
+    // Disconnect
     socket.on("disconnect", () => {
       console.log(`❌ User ${userId} disconnected`);
       const now = new Date().toISOString();
 
-      // Update last_seen in DB on disconnect
       db.run(
         `UPDATE users SET last_seen = ? WHERE id = ?`,
         [now, userId],
@@ -176,7 +185,6 @@ export const initializeSocket = (server) => {
 
       onlineUsers.delete(userId);
 
-      // Broadcast update with the timestamp
       io.emit("online_users", Array.from(onlineUsers));
       io.emit("user_disconnected", { userId, lastSeen: now });
     });
