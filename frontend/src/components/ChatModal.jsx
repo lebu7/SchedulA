@@ -1,4 +1,3 @@
-/* frontend/src/components/ChatModal.jsx */
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Calendar, Clock, Tag, Check, CheckCircle, Loader } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
@@ -68,12 +67,13 @@ const ChatModal = ({ room, contextInfo, recipientName, onClose, inWidget = false
 
     // Listen for new messages
     const handleNewMessage = msg => {
-      if (msg.room_id === room.id) {
+      // ✅ FIX: Ignore messages sent by ME, because handleSend() already added them.
+      if (msg.room_id === room.id && Number(msg.sender_id) !== userId) {
         setMessages(prev => [
           ...prev,
           {
             ...msg,
-            sender_name: Number(msg.sender_id) === userId ? 'You' : msg.sender_name || getOtherParticipantName()
+            sender_name: msg.sender_name || getOtherParticipantName()
           }
         ]);
       }
@@ -196,7 +196,6 @@ const ChatModal = ({ room, contextInfo, recipientName, onClose, inWidget = false
               <div key={msg.id} className={`msg ${isMe ? 'sent' : 'received'}`}>
                 <p className="msg-text">{msg.message}</p>
                 <div className="msg-footer">
-                  <span className="sender-name">{!isMe && msg.sender_name}</span>
                   <span className="time">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   {isMe && (
                     <span className="read-indicator">

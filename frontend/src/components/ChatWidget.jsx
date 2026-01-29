@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, ArrowLeft } from 'lucide-react';
+import { MessageCircle, X, ArrowLeft, SquareUser } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
 import ChatListModal from './ChatListModal';
@@ -202,6 +202,8 @@ const ChatWidget = () => {
                 <button onClick={() => setSelectedRoom(null)} className="nav-btn">
                   <ArrowLeft size={18} />
                 </button>
+                {/* 🔹 Added Avatar Icon to Header */}
+                <SquareUser size={38} strokeWidth={1.5} color="#e2e8f0" fill="#ffffff33" style={{ marginRight: '0px' }} />
                 <div className="header-info">
                   <span className="recipient-name-header">{recipientName}</span>
                   {isOnline ? (

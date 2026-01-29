@@ -1,6 +1,5 @@
-/* frontend/src/components/ChatListModal.jsx */
 import React, { useState, useEffect } from 'react';
-import { X, Check, MessageCircle, CheckCircle } from 'lucide-react';
+import { X, Check, MessageCircle, CheckCircle, CircleUser } from 'lucide-react';
 import { useSocket } from '../contexts/SocketContext';
 import api from '../services/auth';
 import ChatModal from './ChatModal';
@@ -115,7 +114,6 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       ? room.provider_name || room.business_name
       : room.client_name;
 
-    // ✅ Pass the room object (containing client_last_seen/provider_last_seen) to Widget
     if (inWidget && onRoomSelect) {
       onRoomSelect({ ...room, contextInfo: fetchedContext }, recipientName);
     } else {
@@ -170,6 +168,9 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
             className={`chat-preview ${isUnread ? 'unread' : ''}`}
             onClick={() => openChat(room)}
           >
+            {/* 🔹 Avatar Icon (Filled, Sits Left of Text Info) */}
+            <CircleUser size={52} color="#2563eb" fill="#dce5fbff" strokeWidth={1} style={{ marginRight: '8px' }}/>
+            
             <div className="preview-info">
               <div className="preview-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
