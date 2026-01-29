@@ -155,4 +155,14 @@ router.get("/unread-count", authenticateToken, (req, res) => {
   );
 });
 
+// ✅ NEW: Endpoint to get a specific user's online status/last seen
+router.get("/status/:userId", authenticateToken, (req, res) => {
+  const targetId = req.params.userId;
+  db.get(`SELECT last_seen FROM users WHERE id = ?`, [targetId], (err, row) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    if (!row) return res.json({ last_seen: null });
+    res.json({ last_seen: row.last_seen });
+  });
+});
+
 export default router;

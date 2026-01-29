@@ -21,7 +21,7 @@ const ChatWidget = () => {
   const [lastSeen, setLastSeen] = useState(null);
   const [, setTick] = useState(0);
 
-  // 🔹 Chat intent flags (ADDED)
+  // 🔹 Chat intent flags
   const [autoFocus, setAutoFocus] = useState(false);
   const [scrollToUnread, setScrollToUnread] = useState(false);
 
@@ -31,47 +31,97 @@ const ChatWidget = () => {
 
   const formatLastSeen = (dateStr) => {
     if (!dateStr) return 'Offline';
+
     try {
-      const standardizedDate = dateStr.includes(' ')
-        ? dateStr.replace(' ', 'T') + 'Z'
-        : dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+      // 1. Normalize Date: Ensure UTC ('Z') if missing, to match DB 'CURRENT_TIMESTAMP'
+      let standardized = dateStr;
+      if (!standardized.endsWith('Z') && !standardized.includes('+')) {
+        standardized = standardized.replace(' ', 'T') + 'Z';
+      }
 
-      const date = new Date(standardizedDate);
+      const date = new Date(standardized);
+      if (isNaN(date.getTime())) return 'Offline';
+
       const now = new Date();
-      const diff = Math.floor((now - date) / 1000);
+      const diffInSeconds = Math.floor((now - date) / 1000);
 
-      if (diff < 60) return 'Last seen just now';
-      const m = Math.floor(diff / 60);
-      if (m < 60) return `Last seen ${m}m ago`;
-      const h = Math.floor(m / 60);
-      if (h < 24) return `Last seen ${h}h ago`;
+      // Handle small negative diffs (clock skew)
+      if (diffInSeconds < 0) return 'Last seen just now';
+
+      if (diffInSeconds < 60) return 'Last seen just now';
+      
+      const minutes = Math.floor(diffInSeconds / 60);
+      if (minutes < 60) return `Last seen ${minutes}m ago`;
+      
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `Last seen ${hours}h ago`;
 
       return `Last seen ${date.toLocaleDateString('en-GB', {
         day: 'numeric',
         month: 'short'
       })}`;
-    } catch {
+    } catch (err) {
       return 'Offline';
+    }
+  };
+
+  /* ------------------ Data Fetching ------------------ */
+
+  // ✅ New function to fetch fresh last_seen from DB
+  const fetchRecipientStatus = async (id) => {
+    if (!id) return;
+    try {
+      const res = await api.get(`/chat/status/${id}`);
+      if (res.data.last_seen) {
+        setLastSeen(res.data.last_seen);
+      }
+    } catch (err) {
+      console.error("Failed to fetch status", err);
     }
   };
 
   /* ------------------ Socket Updates ------------------ */
 
   useEffect(() => {
+    // 1. When user disconnects, update state immediately
     const handleUserOffline = (data) => {
       if (recipientId && Number(data.userId) === Number(recipientId)) {
-        setLastSeen(data.lastSeen);
+        setLastSeen(data.lastSeen); 
       }
     };
 
+    // 2. When user connects
+    const handleUserOnline = (userId) => {
+       if (recipientId && Number(userId) === Number(recipientId)) {
+          // You could refetch here, but "Online" badge handles it visually
+       }
+    };
+
     socket?.on('user_disconnected', handleUserOffline);
-    const ticker = setInterval(() => setTick(t => t + 1), 60000);
+    socket?.on('user_connected', handleUserOnline);
+    
+    // Auto-refresh text every 60s
+    const ticker = setInterval(() => {
+        setTick(t => t + 1);
+        // Also refetch status occasionally to ensure sync
+        if (recipientId && !onlineUsers.has(recipientId)) {
+            fetchRecipientStatus(recipientId);
+        }
+    }, 60000);
 
     return () => {
       socket?.off('user_disconnected', handleUserOffline);
+      socket?.off('user_connected', handleUserOnline);
       clearInterval(ticker);
     };
-  }, [socket, recipientId]);
+  }, [socket, recipientId, onlineUsers]);
+
+  // ✅ Fetch status immediately when opening a chat (fixing "Offline" on reload)
+  useEffect(() => {
+    if (recipientId && !onlineUsers.has(recipientId)) {
+        fetchRecipientStatus(recipientId);
+    }
+  }, [recipientId, onlineUsers]);
 
   /* ------------------ External Events ------------------ */
 
@@ -101,6 +151,8 @@ const ChatWidget = () => {
       setRecipientName(name);
       setRecipientRole(isClient ? 'Service Provider' : 'Client');
       setRecipientId(rId);
+      
+      // Set initial state from room props, but useEffect will refresh it
       setLastSeen(isClient ? room.provider_last_seen : room.client_last_seen);
     };
 
@@ -172,6 +224,7 @@ const ChatWidget = () => {
     setRecipientName(name);
     setRecipientRole(isClient ? 'Service Provider' : 'Client');
     setRecipientId(isClient ? Number(room.provider_id) : Number(room.client_id));
+    
     setLastSeen(isClient ? room.provider_last_seen : room.client_last_seen);
   };
 
@@ -202,8 +255,9 @@ const ChatWidget = () => {
                 <button onClick={() => setSelectedRoom(null)} className="nav-btn">
                   <ArrowLeft size={18} />
                 </button>
-                {/* 🔹 Added Avatar Icon to Header */}
+                {/* Avatar Icon */}
                 <SquareUser size={38} strokeWidth={1.5} color="#e2e8f0" fill="#ffffff33" style={{ marginRight: '0px' }} />
+                
                 <div className="header-info">
                   <span className="recipient-name-header">{recipientName}</span>
                   {isOnline ? (

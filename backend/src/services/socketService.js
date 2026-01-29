@@ -36,10 +36,22 @@ export const initializeSocket = (server) => {
     const userId = socket.userId;
     console.log(`✅ User ${userId} connected to Chat`);
 
+    // 1. Mark as Online Locally
     onlineUsers.add(userId);
     socket.join(`user:${userId}`);
 
-    // Broadcast online users
+    // 2. ✅ UPDATE LAST SEEN ON CONNECT
+    // This ensures we have a valid timestamp even if the user crashes/closes tab without clean disconnect
+    const now = new Date().toISOString();
+    db.run(
+      `UPDATE users SET last_seen = ? WHERE id = ?`,
+      [now, userId],
+      (err) => {
+        if (err) console.error("Error updating connect time:", err);
+      },
+    );
+
+    // 3. Broadcast online status
     io.emit("online_users", Array.from(onlineUsers));
     socket.broadcast.emit("user_connected", userId);
 
@@ -67,7 +79,7 @@ export const initializeSocket = (server) => {
             return;
           }
 
-          const now = new Date().toISOString();
+          const msgTime = new Date().toISOString();
           const expiresAt = new Date(
             Date.now() + 12 * 60 * 60 * 1000,
           ).toISOString();
@@ -75,7 +87,7 @@ export const initializeSocket = (server) => {
           db.run(
             `INSERT INTO chat_messages (room_id, sender_id, message, expires_at, created_at)
              VALUES (?, ?, ?, ?, ?)`,
-            [roomId, senderId, message, expiresAt, now],
+            [roomId, senderId, message, expiresAt, msgTime],
             function (insertErr) {
               if (insertErr) {
                 console.error(insertErr);
@@ -83,11 +95,10 @@ export const initializeSocket = (server) => {
               }
 
               db.run(`UPDATE chat_rooms SET last_message_at = ? WHERE id = ?`, [
-                now,
+                msgTime,
                 roomId,
               ]);
 
-              // Determine sender name accurately
               const senderName =
                 senderId === room.client_id
                   ? room.client_name
@@ -99,19 +110,16 @@ export const initializeSocket = (server) => {
                 sender_id: senderId,
                 sender_name: senderName,
                 message,
-                created_at: now,
+                created_at: msgTime,
                 expires_at: expiresAt,
               };
 
-              // Emit message to room
               io.to(`room:${roomId}`).emit("new_message", messageData);
 
-              // Notify recipient of unread message
               const recipientId =
                 senderId === room.client_id ? room.provider_id : room.client_id;
               io.to(`user:${recipientId}`).emit("unread_count_update");
 
-              // Send SMS if offline
               if (!onlineUsers.has(Number(recipientId))) {
                 const recipientPhone =
                   senderId === room.client_id
@@ -128,7 +136,6 @@ export const initializeSocket = (server) => {
                 } catch (e) {}
 
                 if (prefs.chat_msg !== false && recipientPhone) {
-                  console.log(`📴 User ${recipientId} offline. Sending SMS...`);
                   const cleanMsg =
                     message.length > 30
                       ? message.substring(0, 30) + "..."
@@ -143,7 +150,6 @@ export const initializeSocket = (server) => {
       );
     });
 
-    // Mark messages as read
     socket.on("mark_read", ({ roomId }) => {
       db.run(
         `UPDATE chat_messages SET is_read = 1 WHERE room_id = ? AND sender_id != ?`,
@@ -159,7 +165,6 @@ export const initializeSocket = (server) => {
       );
     });
 
-    // Typing indicators
     socket.on("typing", ({ roomId, userName }) => {
       socket.to(`room:${roomId}`).emit("user_typing", { roomId, userName });
     });
@@ -170,14 +175,14 @@ export const initializeSocket = (server) => {
         .emit("user_stop_typing", { roomId, userName });
     });
 
-    // Disconnect
     socket.on("disconnect", () => {
       console.log(`❌ User ${userId} disconnected`);
-      const now = new Date().toISOString();
+      const disconnectTime = new Date().toISOString();
 
+      // ✅ UPDATE LAST SEEN ON DISCONNECT
       db.run(
         `UPDATE users SET last_seen = ? WHERE id = ?`,
-        [now, userId],
+        [disconnectTime, userId],
         (err) => {
           if (err) console.error("Error updating last_seen:", err);
         },
@@ -186,7 +191,7 @@ export const initializeSocket = (server) => {
       onlineUsers.delete(userId);
 
       io.emit("online_users", Array.from(onlineUsers));
-      io.emit("user_disconnected", { userId, lastSeen: now });
+      io.emit("user_disconnected", { userId, lastSeen: disconnectTime });
     });
   });
 
