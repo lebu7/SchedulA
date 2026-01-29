@@ -722,18 +722,20 @@ function AppointmentManager({ user }) {
             {user.user_type === "client" ? (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p><strong>With:</strong> {apt.provider_name}</p>
-                   {/* Client View - Chat button visible for clients */}
-                   <ChatButton 
-                      onClick={() => {
-                        openAppointmentChat(apt);
-                        resetRoomUnread(apt.id); 
-                      }}
-                      size="small"
-                      contextType="appointment"
-                      contextId={apt.id}
-                      unreadCount={roomUnreadCounts[apt.id] || 0} 
-                      disableGlobalCounter={true}
-                    />
+                   {/* Client View - Chat button visible for clients if within last month */}
+                   {isRecentEnough && (
+                       <ChatButton 
+                          onClick={() => {
+                            openAppointmentChat(apt);
+                            resetRoomUnread(apt.id); 
+                          }}
+                          size="small"
+                          contextType="appointment"
+                          contextId={apt.id}
+                          unreadCount={roomUnreadCounts[apt.id] || 0} 
+                          disableGlobalCounter={true}
+                        />
+                   )}
                 </div>
             ) : (
                 <div>
@@ -756,8 +758,8 @@ function AppointmentManager({ user }) {
                         )}
                     </p>
                     
-                    {/* ✅ HIDDEN CHAT BUTTON FOR WALK-INS (Provider View) */}
-                    {!isWalkIn && (
+                    {/* ✅ HIDDEN CHAT BUTTON FOR WALK-INS OR OLD APPOINTMENTS (Provider View) */}
+                    {!isWalkIn && isRecentEnough && (
                         <ChatButton 
                         onClick={() => openAppointmentChat(apt)} 
                         size="small"
