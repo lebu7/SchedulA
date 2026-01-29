@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Calendar, Clock, Tag, Check, CheckCircle, Loader } from 'lucide-react';
+import { Send, Calendar, Clock, Tag, Check, CheckCircle } from 'lucide-react'; // Removed Loader import
 import { useSocket } from '../contexts/SocketContext';
 import api from '../services/auth';
 import './ChatModal.css';
@@ -148,7 +148,7 @@ const ChatModal = ({ room, contextInfo, recipientName, onClose, inWidget = false
     clearTimeout(handleTyping.timeout);
     handleTyping.timeout = setTimeout(() => {
       socket.emit('stop_typing', { roomId: fullRoom.id, userName: 'You' });
-    }, 1000);
+    }, 3000);
   };
 
   return (
@@ -207,11 +207,14 @@ const ChatModal = ({ room, contextInfo, recipientName, onClose, inWidget = false
             );
           })}
 
-          {/* Typing indicator */}
+          {/* ✅ UPDATED: Dot Bubble Typing Indicator */}
           {typingUsers.length > 0 && (
-            <div className="typing-indicator">
-              <Loader size={16} className="typing-spinner" />
-              {typingUsers.join(', ')} typing...
+            <div className="typing-bubble-container">
+              <div className="typing-bubble">
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+              </div>
             </div>
           )}
 
