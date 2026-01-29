@@ -317,7 +317,8 @@ function Dashboard({ user, setUser }) {
                 <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', minHeight: '212px' }}>
                   {dashboardData.top_services?.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {dashboardData.top_services.map((svc, idx) => (
+                      {/* ✅ SLICE TO SHOW ONLY TOP 3 */}
+                      {dashboardData.top_services.slice(0, 3).map((svc, idx) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#cbd5e1', width: '20px' }}>#{idx + 1}</span>
                           <div style={{ flex: 1 }}>
