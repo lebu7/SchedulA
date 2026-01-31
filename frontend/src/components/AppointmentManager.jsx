@@ -1252,7 +1252,7 @@ function AppointmentManager({ user }) {
           />
         )}
 
-        {/* ✅ RENDER CLIENT REPORT MODAL */}
+        {/* RENDER CLIENT REPORT MODAL */}
         {reportClientId && (
           <ClientReportModal
             clientId={reportClientId}
