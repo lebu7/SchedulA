@@ -57,6 +57,7 @@
   border-radius: 16px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   z-index: 2000;
@@ -169,7 +170,8 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  background-color: #f8fafc; /* Slate-50 */
+  background-color: #f8fafc;
+  min-height: 0;
 }
 
 /* Responsive */

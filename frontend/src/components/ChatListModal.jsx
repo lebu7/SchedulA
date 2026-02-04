@@ -9,8 +9,9 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
   const [rooms, setRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [contextInfo, setContextInfo] = useState(null);
+
   const userId = Number(localStorage.getItem('userId'));
-  const { onlineUsers, socket } = useSocket(); 
+  const { onlineUsers, socket } = useSocket();
 
   useEffect(() => {
     fetchRooms();
@@ -24,7 +25,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
     const handleNewMessage = (msg) => {
       setRooms(prev => {
         const roomIndex = prev.findIndex(r => r.id === msg.room_id);
-        
+
         if (roomIndex === -1) {
           fetchRooms();
           return prev;
@@ -37,7 +38,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
           message: msg.message,
           sender_id: msg.sender_id,
           created_at: msg.created_at,
-          is_read: 0 
+          is_read: 0
         };
 
         if (Number(msg.sender_id) !== userId) {
@@ -46,7 +47,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
 
         updatedRooms.splice(roomIndex, 1);
         updatedRooms.unshift(room);
-        
+
         return updatedRooms;
       });
     };
@@ -55,15 +56,14 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       setRooms(prev => prev.map(room => {
         if (room.id !== roomId) return room;
 
+        // If other person read my last sent message, mark read tick
         if (Number(readerId) !== userId && room.last_message && Number(room.last_message.sender_id) === userId) {
-           return {
-             ...room,
-             last_message: { ...room.last_message, is_read: 1 }
-           };
+          return { ...room, last_message: { ...room.last_message, is_read: 1 } };
         }
-        
+
+        // If I read, clear badge
         if (Number(readerId) === userId) {
-           return { ...room, unread_count: 0 };
+          return { ...room, unread_count: 0 };
         }
 
         return room;
@@ -88,6 +88,39 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
     }
   };
 
+  // ✅ Robust recipient + sender display name helpers (fixes “missing client names”)
+  const getOtherUserId = (room) => {
+    return Number(room.client_id) === userId ? Number(room.provider_id) : Number(room.client_id);
+  };
+
+  const getRecipientName = (room) => {
+    const amClient = Number(room.client_id) === userId;
+
+    if (amClient) {
+      return (
+        room.provider_display_name ||
+        room.provider_name ||
+        room.business_name ||
+        `Provider #${room.provider_id}`
+      );
+    }
+
+    // Provider view: show client name
+    return (
+      room.client_display_name ||
+      room.client_name ||
+      `Client #${room.client_id}`
+    );
+  };
+
+  const getSenderLabel = (room, lastMsg) => {
+    const isMe = Number(lastMsg?.sender_id) === userId;
+    if (isMe) return 'You';
+
+    // If not me, use the other participant name
+    return getRecipientName(room);
+  };
+
   const openChat = async (room) => {
     let fetchedContext = null;
 
@@ -107,12 +140,12 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       try {
         socket?.emit('mark_read', { roomId: room.id });
         setRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread_count: 0 } : r));
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+      }
     }
 
-    const recipientName = room.client_id === userId
-      ? room.provider_name || room.business_name
-      : room.client_name;
+    const recipientName = getRecipientName(room);
 
     if (inWidget && onRoomSelect) {
       onRoomSelect({ ...room, contextInfo: fetchedContext }, recipientName);
@@ -144,22 +177,16 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
 
       {rooms.map(room => {
         const lastMsg = room.last_message || {};
-        const isUnread = room.unread_count > 0;
-        const isMe = Number(lastMsg.sender_id) === userId;
+        const isUnread = Number(room.unread_count) > 0;
 
-        const time = lastMsg.created_at 
-          ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' }) 
+        const time = lastMsg.created_at
+          ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           : '';
-        
-        const sender = isMe
-          ? 'You' 
-          : (room.client_id === userId ? room.provider_name || room.business_name : room.client_name);
 
-        const recipientName = room.client_id === userId
-          ? room.provider_name || room.business_name
-          : room.client_name;
+        const recipientName = getRecipientName(room);
+        const sender = getSenderLabel(room, lastMsg);
 
-        const otherUserId = room.client_id === userId ? room.provider_id : room.client_id;
+        const otherUserId = getOtherUserId(room);
         const isOnline = onlineUsers.has(otherUserId);
 
         return (
@@ -168,9 +195,14 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
             className={`chat-preview ${isUnread ? 'unread' : ''}`}
             onClick={() => openChat(room)}
           >
-            {/* 🔹 Avatar Icon (Filled, Sits Left of Text Info) */}
-            <CircleUser size={52} color="#2563eb" fill="#dce5fbff" strokeWidth={1} style={{ marginRight: '8px' }}/>
-            
+            <CircleUser
+              size={52}
+              color="#2563eb"
+              fill="#dce5fbff"
+              strokeWidth={1}
+              style={{ marginRight: '8px' }}
+            />
+
             <div className="preview-info">
               <div className="preview-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
@@ -179,7 +211,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
                 </div>
                 <span className="time">{time}</span>
               </div>
-              
+
               <div className="preview-footer">
                 <small className="last-message">
                   {lastMsg.message ? (
@@ -191,17 +223,17 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
                     'No messages yet'
                   )}
                 </small>
-                
+
                 {isUnread ? (
-                   <span className="chat-list-badge">{room.unread_count}</span>
-                ) : isMe ? (
-                   <span className="read-status-icon">
-                     {lastMsg.is_read ? (
-                        <CheckCircle size={14} color="#2563eb" /> 
-                     ) : (
-                        <Check size={14} color="#94a3b8" /> 
-                     )}
-                   </span>
+                  <span className="chat-list-badge">{room.unread_count}</span>
+                ) : Number(lastMsg.sender_id) === userId ? (
+                  <span className="read-status-icon">
+                    {lastMsg.is_read ? (
+                      <CheckCircle size={14} color="#2563eb" />
+                    ) : (
+                      <Check size={14} color="#94a3b8" />
+                    )}
+                  </span>
                 ) : null}
               </div>
             </div>
@@ -218,9 +250,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
           <h3>💬 Messages</h3>
           <button onClick={onClose} className="close-btn"><X size={20} /></button>
         </div>
-        <div className="chat-list-body">
-          {content}
-        </div>
+        <div className="chat-list-body">{content}</div>
       </div>
     </div>
   );

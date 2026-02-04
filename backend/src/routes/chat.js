@@ -1,4 +1,3 @@
-/* backend/src/routes/chat.js */
 import express from "express";
 import { db } from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
@@ -27,15 +26,19 @@ router.post("/rooms", authenticateToken, (req, res) => {
       if (existing) return res.json({ room: existing });
 
       db.run(
-        `INSERT INTO chat_rooms (client_id, provider_id, context_type, context_id) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO chat_rooms (client_id, provider_id, context_type, context_id)
+         VALUES (?, ?, ?, ?)`,
         [clientId, providerId, contextType, contextId || null],
         function (insertErr) {
           if (insertErr)
             return res.status(500).json({ error: "Failed to create room" });
+
           db.get(
             `SELECT * FROM chat_rooms WHERE id = ?`,
             [this.lastID],
             (getErr, newRoom) => {
+              if (getErr)
+                return res.status(500).json({ error: "Database error" });
               res.status(201).json({ room: newRoom });
             },
           );
@@ -47,20 +50,74 @@ router.post("/rooms", authenticateToken, (req, res) => {
 
 router.get("/rooms", authenticateToken, (req, res) => {
   const userId = req.user.userId;
+
   db.all(
-    `SELECT cr.*, 
-            u1.name as client_name, u1.last_seen as client_last_seen,
-            u2.name as provider_name, u2.business_name, u2.last_seen as provider_last_seen,
-            (SELECT COUNT(*) FROM chat_messages WHERE room_id = cr.id AND sender_id != ? AND is_read = 0 AND expires_at > datetime('now')) as unread_count,
-            (SELECT message FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_content,
-            (SELECT sender_id FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_sender,
-            (SELECT created_at FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_time,
-            (SELECT is_read FROM chat_messages WHERE room_id = cr.id AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1) as last_msg_read
+    `SELECT cr.*,
+
+            u1.name as client_name,
+            u1.last_seen as client_last_seen,
+
+            u2.name as provider_name,
+            u2.business_name as business_name,
+            u2.last_seen as provider_last_seen,
+
+            /* ✅ Guaranteed display names */
+            COALESCE(NULLIF(u1.name,''), NULLIF(u1.business_name,''), 'Client') as client_display_name,
+            COALESCE(NULLIF(u2.business_name,''), NULLIF(u2.name,''), 'Provider') as provider_display_name,
+
+            (SELECT COUNT(*)
+              FROM chat_messages
+              WHERE room_id = cr.id
+                AND sender_id != ?
+                AND is_read = 0
+                AND expires_at > datetime('now')
+            ) as unread_count,
+
+            (SELECT message
+              FROM chat_messages
+              WHERE room_id = cr.id
+                AND expires_at > datetime('now')
+              ORDER BY created_at DESC
+              LIMIT 1
+            ) as last_msg_content,
+
+            (SELECT sender_id
+              FROM chat_messages
+              WHERE room_id = cr.id
+                AND expires_at > datetime('now')
+              ORDER BY created_at DESC
+              LIMIT 1
+            ) as last_msg_sender,
+
+            (SELECT created_at
+              FROM chat_messages
+              WHERE room_id = cr.id
+                AND expires_at > datetime('now')
+              ORDER BY created_at DESC
+              LIMIT 1
+            ) as last_msg_time,
+
+            (SELECT is_read
+              FROM chat_messages
+              WHERE room_id = cr.id
+                AND expires_at > datetime('now')
+              ORDER BY created_at DESC
+              LIMIT 1
+            ) as last_msg_read
+
      FROM chat_rooms cr
      JOIN users u1 ON cr.client_id = u1.id
      JOIN users u2 ON cr.provider_id = u2.id
+
      WHERE (cr.client_id = ? OR cr.provider_id = ?)
-     AND EXISTS (SELECT 1 FROM chat_messages m WHERE m.room_id = cr.id AND m.expires_at > datetime('now'))
+
+     /* ✅ IMPORTANT: hide rooms with no messages */
+     AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.room_id = cr.id
+          AND m.expires_at > datetime('now')
+     )
+
      ORDER BY cr.last_message_at DESC`,
     [userId, userId, userId],
     (err, rooms) => {
@@ -86,16 +143,19 @@ router.get("/rooms", authenticateToken, (req, res) => {
 router.get("/rooms/:roomId/messages", authenticateToken, (req, res) => {
   const { roomId } = req.params;
   const userId = req.user.userId;
+
   db.get(
     `SELECT * FROM chat_rooms WHERE id = ? AND (client_id = ? OR provider_id = ?)`,
     [roomId, userId, userId],
     (err, room) => {
       if (err || !room) return res.status(403).json({ error: "Access denied" });
+
       db.all(
-        `SELECT m.*, u.name as sender_name 
+        `SELECT m.*, u.name as sender_name
          FROM chat_messages m
          JOIN users u ON m.sender_id = u.id
-         WHERE m.room_id = ? AND m.expires_at > datetime('now')
+         WHERE m.room_id = ?
+           AND m.expires_at > datetime('now')
          ORDER BY m.created_at ASC`,
         [roomId],
         (msgErr, messages) => {
@@ -113,7 +173,7 @@ router.get("/context/:type/:id", authenticateToken, (req, res) => {
 
   if (type === "appointment") {
     db.get(
-      `SELECT a.id, a.appointment_date, a.status, s.name as service_name, 
+      `SELECT a.id, a.appointment_date, a.status, s.name as service_name,
               u.name as provider_name, u.business_name, a.total_price
        FROM appointments a
        JOIN services s ON a.service_id = s.id
@@ -144,9 +204,15 @@ router.get("/context/:type/:id", authenticateToken, (req, res) => {
 
 router.get("/unread-count", authenticateToken, (req, res) => {
   const userId = req.user.userId;
+
   db.get(
-    `SELECT COUNT(*) as count FROM chat_messages m JOIN chat_rooms r ON m.room_id = r.id 
-     WHERE (r.client_id = ? OR r.provider_id = ?) AND m.sender_id != ? AND m.is_read = 0 AND m.expires_at > datetime('now')`,
+    `SELECT COUNT(*) as count
+     FROM chat_messages m
+     JOIN chat_rooms r ON m.room_id = r.id
+     WHERE (r.client_id = ? OR r.provider_id = ?)
+       AND m.sender_id != ?
+       AND m.is_read = 0
+       AND m.expires_at > datetime('now')`,
     [userId, userId, userId],
     (err, result) => {
       if (err) return res.status(500).json({ error: "Database error" });
@@ -155,7 +221,6 @@ router.get("/unread-count", authenticateToken, (req, res) => {
   );
 });
 
-// ✅ NEW: Endpoint to get a specific user's online status/last seen
 router.get("/status/:userId", authenticateToken, (req, res) => {
   const targetId = req.params.userId;
   db.get(`SELECT last_seen FROM users WHERE id = ?`, [targetId], (err, row) => {
