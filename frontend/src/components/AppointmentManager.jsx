@@ -257,14 +257,41 @@ function AppointmentManager({ user }) {
   });
   const [loading, setLoading] = useState(true);
   
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 768px)").matches;
+  });
+
   const [viewMode, setViewMode] = useState(() => {
     if (location.state?.viewMode) return location.state.viewMode;
-    return 'list';
+    // ✅ Default: desktop/tablet = cards, mobile = list
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches) return "list";
+    return "cards";
   }); 
 
   useEffect(() => {
     if (location.state?.viewMode) setViewMode(location.state.viewMode);
   }, [location.state]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const handle = () => {
+      const mobile = mq.matches;
+      setIsMobile(mobile);
+      // ✅ Requirement: Mobile view only shows list view
+      if (mobile) setViewMode("list");
+    };
+
+    handle();
+    if (mq.addEventListener) mq.addEventListener("change", handle);
+    else mq.addListener(handle);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", handle);
+      else mq.removeListener(handle);
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState(() => {
     if (location.state?.subTab) return location.state.subTab;
@@ -300,6 +327,20 @@ function AppointmentManager({ user }) {
   // ✅ REVIEWS STATE
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewAppointment, setReviewAppointment] = useState(null);
+
+  // ✅ LIST VIEW PREVIEW MODAL (click a row to open full card)
+  const [showAptPreviewModal, setShowAptPreviewModal] = useState(false);
+  const [previewApt, setPreviewApt] = useState(null);
+
+  const openAptPreview = (apt) => {
+    setPreviewApt(apt);
+    setShowAptPreviewModal(true);
+  };
+
+  const closeAptPreview = () => {
+    setShowAptPreviewModal(false);
+    setPreviewApt(null);
+  };
 
   const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
@@ -471,6 +512,60 @@ function AppointmentManager({ user }) {
       hour: "2-digit",
       minute: "2-digit",
     });
+
+  const formatAptDateTime = (d) => {
+    try {
+      return new Date(d).toLocaleString("en-KE", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return d;
+    }
+  };
+
+  const renderAppointmentRow = (apt, type) => {
+    const isWalkIn = apt.payment_reference && apt.payment_reference.startsWith("WALK-IN");
+    const nameLabel =
+      user.user_type === "provider"
+        ? (apt.client_name || (isWalkIn ? "Walk-In Client" : "Client"))
+        : (apt.provider_name || apt.business_name || "Provider");
+
+    const status = apt.status || type;
+    const amount = Number(apt.total_price ?? apt.price ?? 0);
+
+    return (
+      <button
+        key={apt.id}
+        type="button"
+        className={`appointment-row ${location.state?.targetId == apt.id ? "highlight-target" : ""}`}
+        onClick={() => openAptPreview(apt)}
+      >
+        <div className="row-main">
+          <div className="row-left">
+            <div className="row-title">
+              <span className="row-service">{apt.service_name}</span>
+              {isWalkIn && <span className="walk-in-badge small">Walk-In</span>}
+            </div>
+            <div className="row-sub">
+              <span className="row-name">{nameLabel}</span>
+              <span className="row-dot">•</span>
+              <span className="row-date">{formatAptDateTime(apt.appointment_date)}</span>
+            </div>
+          </div>
+
+          <div className="row-right">
+            <span className={`row-status ${status}`}>{status}</span>
+            <span className="row-amount">KES {amount.toLocaleString()}</span>
+          </div>
+        </div>
+      </button>
+    );
+  };
 
   const handleStatusUpdate = async (id, status, notes = null) => {
     setUpdating(id);
@@ -857,25 +952,32 @@ function AppointmentManager({ user }) {
                 )}
             </div>
 
-            {renderAddons(apt)}
+            {/* ✅ Add-ons now collapsed by default for consistent card alignment */}
+            <details className="addons-dropdown">
+              <summary className="addons-summary">
+                💅 Add-ons ({parseAddons(apt).length})
+              </summary>
+              <div className="addons-dropdown-content">
+                {renderAddons(apt)}
+              </div>
+            </details>
 
-            {!isWalkIn && (
-                <div className="total-cost-box">
-                    <div className="total-row">
-                    <span>Base Price:</span>
-                    <strong>KES {basePrice.toLocaleString()}</strong>
-                    </div>
-                    <div className="total-row">
-                    <span>Add-ons:</span>
-                    <strong>+ KES {addonsTotal.toLocaleString()}</strong>
-                    </div>
-                    <div className="total-divider" />
-                    <div className="total-row total-final">
-                    <span>Total:</span>
-                    <strong>KES {total.toLocaleString()}</strong>
-                    </div>
+            {/* ✅ Totals container now also shows for Walk-Ins (Issue #5) */}
+            <div className="total-cost-box">
+                <div className="total-row">
+                  <span>Base Price:</span>
+                  <strong>KES {basePrice.toLocaleString()}</strong>
                 </div>
-            )}
+                <div className="total-row">
+                  <span>Add-ons:</span>
+                  <strong>+ KES {addonsTotal.toLocaleString()}</strong>
+                </div>
+                <div className="total-divider" />
+                <div className="total-row total-final">
+                  <span>Total:</span>
+                  <strong>KES {total.toLocaleString()}</strong>
+                </div>
+            </div>
             </div>
 
             <div className="appointment-actions">
@@ -1057,7 +1159,7 @@ function AppointmentManager({ user }) {
                     </div>
                 ) : (
                     <div className="appointments-list">
-                        {itemsToDisplay.map(apt => renderAppointmentCard(apt, type))}
+                        {itemsToDisplay.map(apt => (viewMode === 'list' ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)))}
                     </div>
                 )}
             </div>
@@ -1069,7 +1171,7 @@ function AppointmentManager({ user }) {
 
     return (
       <div className="appointments-list">
-        {displayList.map((apt) => renderAppointmentCard(apt, type))}
+        {displayList.map((apt) => (viewMode === 'list' ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)))}
       </div>
     );
   };
@@ -1090,22 +1192,33 @@ function AppointmentManager({ user }) {
             </h2>
             
             <div className="am-controls" style={{ display: 'flex', gap: '10px' }}>
-                {user.user_type === 'provider' && (
-                    <div className="view-toggle-pills" style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+                {!isMobile && (
+                    <div className="view-toggle-pills" style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px' }}>
+                        <button 
+                            className={`pill-btn ${viewMode === 'cards' ? 'active' : ''}`} 
+                            onClick={() => setViewMode('cards')}
+                            style={{ padding: '6px 12px', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'cards' ? 'white' : 'transparent', boxShadow: viewMode === 'cards' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
+                        >
+                            <CheckSquare size={16} /> Cards
+                        </button>
+
                         <button 
                             className={`pill-btn ${viewMode === 'list' ? 'active' : ''}`} 
                             onClick={() => setViewMode('list')}
-                            style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'list' ? 'white' : 'transparent', boxShadow: viewMode === 'list' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
+                            style={{ padding: '6px 12px', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'list' ? 'white' : 'transparent', boxShadow: viewMode === 'list' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
                         >
                             <List size={16} /> List
                         </button>
-                        <button 
-                            className={`pill-btn ${viewMode === 'calendar' ? 'active' : ''}`} 
-                            onClick={() => setViewMode('calendar')}
-                            style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'calendar' ? 'white' : 'transparent', boxShadow: viewMode === 'calendar' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
-                        >
-                            <Calendar size={16} /> Calendar
-                        </button>
+
+                        {user.user_type === 'provider' && (
+                            <button 
+                                className={`pill-btn ${viewMode === 'calendar' ? 'active' : ''}`} 
+                                onClick={() => setViewMode('calendar')}
+                                style={{ padding: '6px 12px', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', background: viewMode === 'calendar' ? 'white' : 'transparent', boxShadow: viewMode === 'calendar' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', fontSize: '13px' }}
+                            >
+                                <Calendar size={16} /> Calendar
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -1212,6 +1325,23 @@ function AppointmentManager({ user }) {
                   {renderAppointmentsList(processedAppointments[activeTab], activeTab)}
                 </div>
             </>
+        )}
+
+        {/* ✅ LIST VIEW PREVIEW MODAL */}
+        {showAptPreviewModal && previewApt && (
+          <div className="apt-preview-overlay" onClick={closeAptPreview} role="presentation">
+            <div className="apt-preview-modal" onClick={(e) => e.stopPropagation()} role="presentation">
+              <div className="apt-preview-header">
+                <h3 style={{ margin: 0, fontSize: "16px", color: "#0f172a" }}>Appointment Details</h3>
+                <button className="apt-preview-close" onClick={closeAptPreview} type="button" aria-label="Close">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="apt-preview-body">
+                {renderAppointmentCard(previewApt, activeTab)}
+              </div>
+            </div>
+          </div>
         )}
 
         {showBooking && (
