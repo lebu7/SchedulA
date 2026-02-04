@@ -19,7 +19,8 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     const scrollbarWidth =
       window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    if (scrollbarWidth > 0)
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
 
     return () => {
       document.body.style.overflow = prevOverflow;
@@ -116,26 +117,91 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     setSlots(generated);
   };
 
+  const safeClose = () => {
+    try {
+      onClose?.();
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const safeSuccess = async () => {
+    try {
+      await onSuccess?.();
+    } catch (e) {
+      // ✅ Even if refresh fails, we already closed the modal.
+      console.warn("onSuccess failed:", e);
+    }
+  };
+
   const handleConfirm = async () => {
     if (!selectedDate || !selectedTime) return;
 
-    // 🔒 1. Lock immediately
     setSaving(true);
 
-    const newDateTime = new Date(`${selectedDate}T${selectedTime}:00`).toISOString();
+    const newDateTime = new Date(
+      `${selectedDate}T${selectedTime}:00`
+    ).toISOString();
 
     try {
-      // 2. Send request ONCE
       await api.put(`/appointments/${appointment.id}`, {
         appointment_date: newDateTime,
       });
 
       alert("Appointment rescheduled successfully!");
-      onSuccess?.();
-      onClose?.(); // Close modal on success
+
+      // ✅ Close FIRST (so UI always closes), then refresh in the background
+      safeClose();
+      await safeSuccess();
     } catch (err) {
-      // 3. Unlock only on error so user can retry
       alert(err.response?.data?.error || "Failed to reschedule.");
+      setSaving(false);
+    }
+  };
+
+  // ✅ Reject handler (closes modal ONLY if the reject update succeeded)
+  const handleRejectReschedule = async () => {
+    if (saving) return;
+
+    // Try common field names (use whichever you set from backend)
+    const oldDateISO =
+      appointment?.old_appointment_date ||
+      appointment?.original_appointment_date ||
+      appointment?.previous_appointment_date ||
+      appointment?.old_appointment_date_iso ||
+      null;
+
+    const oldStatus =
+      appointment?.old_status || appointment?.previous_status || null;
+
+    if (!oldDateISO) {
+      alert(
+        "Cannot reject reschedule: missing original appointment time from the server."
+      );
+      return;
+    }
+
+    const confirmReject = window.confirm(
+      "Reject this reschedule request and revert to the original appointment time?"
+    );
+    if (!confirmReject) return;
+
+    setSaving(true);
+
+    try {
+      await api.put(`/appointments/${appointment.id}`, {
+        appointment_date: oldDateISO,
+        ...(oldStatus ? { status: oldStatus } : {}),
+        notes: appointment?.notes || null,
+      });
+
+      alert("Reschedule rejected. Appointment reverted to the original time.");
+
+      // ✅ Close FIRST (so it always closes if API succeeded)
+      safeClose();
+      await safeSuccess();
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to reject reschedule.");
       setSaving(false);
     }
   };
@@ -145,6 +211,14 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     today.setDate(today.getDate() + 1);
     return today.toISOString().split("T")[0];
   };
+
+  // ✅ Only show Reject button when backend provided an "old/original" date to revert to
+  const canRejectReschedule = !!(
+    appointment?.old_appointment_date ||
+    appointment?.original_appointment_date ||
+    appointment?.previous_appointment_date ||
+    appointment?.old_appointment_date_iso
+  );
 
   return (
     <div
@@ -259,15 +333,44 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
 
         {/* FOOTER */}
         <div className="modal-footer">
-          <button className="btn btn-text" onClick={onClose} disabled={saving}>
+          <button
+            type="button"
+            className="btn btn-text"
+            onClick={() => {
+              if (!saving) onClose?.();
+            }}
+            disabled={saving}
+          >
             Cancel
           </button>
 
+          {canRejectReschedule && (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleRejectReschedule();
+              }}
+              disabled={saving}
+              style={{ marginLeft: "8px" }}
+              title="Reject and revert to the original appointment time"
+            >
+              {saving ? "Updating..." : "Reject Reschedule"}
+            </button>
+          )}
+
           <div className="pay-btn-wrapper">
             <button
+              type="button"
               className="btn btn-primary btn-block"
-              onClick={handleConfirm}
-              disabled={!selectedTime || saving} // 🔒 Disable if saving
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleConfirm();
+              }}
+              disabled={!selectedTime || saving}
             >
               {saving ? "Updating..." : "Confirm New Time"}
             </button>

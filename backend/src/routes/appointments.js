@@ -200,13 +200,52 @@ const shouldNotify = (prefsString, category) => {
 };
 
 /* ---------------------------------------------
+   ✅ RESCHEDULE META HELPERS (NO DB MIGRATION)
+   We store a small "system" blob inside notes:
+   \n\n[SYS_RESCHEDULE]{"prev_date":"...","prev_status":"scheduled"}[/SYS_RESCHEDULE]
+--------------------------------------------- */
+const RES_META_OPEN = "[SYS_RESCHEDULE]";
+const RES_META_CLOSE = "[/SYS_RESCHEDULE]";
+
+function extractRescheduleMeta(notes) {
+  if (!notes) return { meta: null, cleanNotes: notes || "" };
+  const start = notes.lastIndexOf(RES_META_OPEN);
+  const end = notes.lastIndexOf(RES_META_CLOSE);
+
+  if (start === -1 || end === -1 || end < start) {
+    return { meta: null, cleanNotes: notes };
+  }
+
+  const jsonPart = notes.substring(start + RES_META_OPEN.length, end).trim();
+  let meta = null;
+
+  try {
+    meta = JSON.parse(jsonPart);
+  } catch (e) {
+    meta = null;
+  }
+
+  const before = notes.substring(0, start).trimEnd();
+  const after = notes.substring(end + RES_META_CLOSE.length).trim();
+
+  const cleanNotes = [before, after].filter(Boolean).join("\n").trim();
+  return { meta, cleanNotes };
+}
+
+function appendRescheduleMeta(existingNotes, metaObj) {
+  const safeNotes = (existingNotes || "").trim();
+  const meta = `${RES_META_OPEN}${JSON.stringify(metaObj)}${RES_META_CLOSE}`;
+  // keep user notes intact; append system block at end
+  return safeNotes ? `${safeNotes}\n\n${meta}` : meta;
+}
+
+/* ---------------------------------------------
    ✅ Fetch appointments (client & provider)
 --------------------------------------------- */
 router.get("/", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   const userType = req.user.user_type;
 
-  // ✅ UPDATED: Queries now include LEFT JOIN reviews to fetch review status
   const query =
     userType === "client"
       ? `
@@ -361,7 +400,6 @@ router.get("/client-history/:clientId", authenticateToken, (req, res) => {
     return res.status(403).json({ error: "Access denied. Providers only." });
   }
 
-  // 1. Fetch Client Profile
   db.get(
     `SELECT id, name, phone, email, created_at FROM users WHERE id = ?`,
     [clientId],
@@ -369,7 +407,6 @@ router.get("/client-history/:clientId", authenticateToken, (req, res) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (!client) return res.status(404).json({ error: "Client not found" });
 
-      // 2. Fetch Appointments strictly with this Provider
       db.all(
         `SELECT a.*, s.name AS service_name
          FROM appointments a
@@ -381,7 +418,6 @@ router.get("/client-history/:clientId", authenticateToken, (req, res) => {
           if (err2)
             return res.status(500).json({ error: "Failed to fetch history" });
 
-          // 3. Calculate Aggregated Stats
           const completedApts = history.filter((a) => a.status === "completed");
           const totalVisits = completedApts.length;
           const totalSpent = history.reduce(
@@ -435,8 +471,6 @@ router.get("/providers/:id/availability", (req, res) => {
         (err2, closedDay) => {
           if (err2) return res.status(500).json({ error: "Database error" });
 
-          // ⚠️ FIX: REMOVED 'completed' so completed appointments DO NOT block slots anymore.
-          // Only 'pending', 'scheduled', and 'paid' block slots.
           db.all(
             `SELECT a.appointment_date, s.duration 
              FROM appointments a
@@ -592,7 +626,6 @@ router.post(
                   appointmentDate.getTime() + service.duration * 60000,
                 ).toISOString();
 
-                // ⚠️ FIX: Check active slots (excluding completed) for capacity check
                 db.all(
                   `SELECT a.id 
                  FROM appointments a
@@ -637,7 +670,6 @@ router.post(
                     if (is_walk_in) {
                       payment_status =
                         paymentAmt >= total_price ? "paid" : "deposit-paid";
-                      // Walk-ins are scheduled (blocking time) until marked complete
                       status = "scheduled";
                     } else {
                       payment_status =
@@ -899,7 +931,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ Update appointment
+   ✅ Update appointment (UPDATED FOR RESCHEDULE REJECTION)
 --------------------------------------------- */
 router.put("/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -916,6 +948,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
     if (err) return res.status(500).json({ error: "Database error" });
     if (!apt) return res.status(404).json({ error: "Appointment not found" });
 
+    // Provider can't change locked appointments
     if (
       userType === "provider" &&
       ["completed", "cancelled", "no-show", "rebooked"].includes(apt.status)
@@ -923,6 +956,113 @@ router.put("/:id", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Appointment status locked." });
     }
 
+    // ✅ Detect if this appointment currently holds a reschedule request meta
+    const { meta: existingResMeta, cleanNotes: cleanExistingNotes } =
+      extractRescheduleMeta(apt.notes);
+
+    // ✅ SPECIAL CASE: Provider "rejects" a RESCHEDULE request
+    // Frontend currently calls status="cancelled" for reject.
+    // If appointment is pending and contains reschedule meta, we treat it as "reschedule rejected"
+    // and revert to the previous date + previous status.
+    const isProviderRejectingReschedule =
+      userType === "provider" &&
+      status === "cancelled" &&
+      apt.status === "pending" &&
+      existingResMeta &&
+      existingResMeta.prev_date &&
+      existingResMeta.prev_status;
+
+    if (isProviderRejectingReschedule) {
+      const prevDateISO = existingResMeta.prev_date;
+      const prevStatus = existingResMeta.prev_status;
+
+      // Restore appointment_date & status + remove SYS meta from notes
+      db.run(
+        `UPDATE appointments 
+         SET appointment_date = ?, status = ?, notes = ?
+         WHERE id = ? AND provider_id = ?`,
+        [prevDateISO, prevStatus, cleanExistingNotes || "", id, userId],
+        async (eUp) => {
+          if (eUp) {
+            console.error("Reschedule reject revert failed:", eUp);
+            return res
+              .status(500)
+              .json({ error: "Failed to reject reschedule" });
+          }
+
+          // Fetch full appointment for notifications/SMS
+          db.get(
+            `SELECT a.*, 
+                  c.name AS client_name, c.phone AS client_phone, c.notification_preferences AS client_prefs,
+                  s.name AS service_name,
+                  p.name AS provider_name, p.business_name, p.phone AS provider_phone, p.notification_preferences AS provider_prefs
+           FROM appointments a
+           JOIN users c ON a.client_id = c.id
+           JOIN services s ON a.service_id = s.id
+           JOIN users p ON a.provider_id = p.id
+           WHERE a.id = ?`,
+            [id],
+            async (err3, fullApt) => {
+              if (!err3 && fullApt) {
+                const clientObj = {
+                  name: fullApt.client_name,
+                  phone: fullApt.client_phone,
+                  notification_preferences: fullApt.client_prefs,
+                };
+                const providerObj = {
+                  name: fullApt.provider_name,
+                  business_name: fullApt.business_name,
+                  phone: fullApt.provider_phone,
+                  notification_preferences: fullApt.provider_prefs,
+                };
+
+                // In-app notify client (reschedule rejection)
+                if (shouldNotify(fullApt.client_prefs, "booking_alerts")) {
+                  createNotification(
+                    fullApt.client_id,
+                    "reschedule",
+                    "Reschedule Rejected",
+                    `Your reschedule request for #${id} was rejected. Your appointment remains at the original time.`,
+                    id,
+                  );
+                }
+
+                // Optional: notify provider side too (audit)
+                if (shouldNotify(fullApt.provider_prefs, "booking_alerts")) {
+                  createNotification(
+                    fullApt.provider_id,
+                    "reschedule",
+                    "Reschedule Rejection Sent",
+                    `You rejected the reschedule request for #${id}. Appointment restored to original time.`,
+                    id,
+                  );
+                }
+
+                // ✅ SMS to client: reschedule rejected, suggest next steps
+                await smsService.sendRescheduleRejectedNotice(
+                  { ...fullApt, id },
+                  clientObj,
+                  { name: fullApt.service_name },
+                  providerObj,
+                  prevDateISO, // original time (restored)
+                  apt.appointment_date, // the requested time that was rejected (was current before revert)
+                  req.body?.notes || null, // reason (if provider typed one)
+                );
+              }
+            },
+          );
+
+          return res.json({
+            message:
+              "Reschedule rejected. Appointment restored to original time.",
+          });
+        },
+      );
+
+      return; // stop normal logic
+    }
+
+    // Normal update flow below
     let newRiskScore = null;
 
     if (appointment_date && appointment_date !== apt.appointment_date) {
@@ -965,6 +1105,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
     const isReschedule =
       appointment_date && appointment_date !== apt.appointment_date;
 
+    // Client reschedule → always becomes pending for provider approval
     if (isReschedule && userType === "client") {
       effectiveStatus = "pending";
     }
@@ -973,13 +1114,32 @@ router.put("/:id", authenticateToken, async (req, res) => {
       updates.push("status = ?");
       params.push(effectiveStatus);
     }
+
     if (appointment_date) {
       updates.push("appointment_date = ?");
       params.push(appointment_date);
     }
-    if (notes) {
+
+    // ✅ Notes update:
+    // - If caller sends notes explicitly, use it.
+    // - If client is rescheduling, append SYS meta with prev_date + prev_status
+    //   without overwriting their existing notes.
+    let finalNotesToSave = null;
+
+    if (typeof notes === "string") {
+      finalNotesToSave = notes;
+    } else if (isReschedule && userType === "client") {
+      // Store previous date/status so provider can reject and we can revert.
+      const resMeta = {
+        prev_date: apt.appointment_date,
+        prev_status: apt.status || "scheduled",
+      };
+      finalNotesToSave = appendRescheduleMeta(apt.notes, resMeta);
+    }
+
+    if (finalNotesToSave !== null) {
       updates.push("notes = ?");
-      params.push(notes);
+      params.push(finalNotesToSave);
     }
 
     if (newRiskScore !== null) {
@@ -989,6 +1149,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
     if (!updates.length)
       return res.status(400).json({ error: "No fields to update" });
+
     params.push(id, userId);
 
     const q =
@@ -1333,7 +1494,7 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
         client_id: row.client_id,
         service_id: row.service_id,
         appointment_date: row.appointment_date,
-        amount_paid: newPaid, // Use total paid so far
+        amount_paid: newPaid,
         total_price: row.total_price,
         deposit_amount: row.deposit_amount,
       });
@@ -1511,10 +1672,8 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
       }
 
       const amountToRefund = Number(apt.refund_amount || apt.amount_paid || 0);
-
-      if (amountToRefund <= 0) {
+      if (amountToRefund <= 0)
         return res.status(400).json({ error: "No amount to refund" });
-      }
 
       db.run(
         `UPDATE appointments SET refund_status = 'processing' WHERE id = ?`,

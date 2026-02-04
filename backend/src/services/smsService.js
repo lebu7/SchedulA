@@ -80,13 +80,21 @@ async function logSMS(phone, message, status, details) {
     else if (message.includes("Reminder")) messageType = "reminder";
     else if (message.includes("CANCELLED")) messageType = "cancellation";
     else if (message.includes("REFUND")) messageType = "refund";
-    else if (message.includes("RESCHEDULE")) messageType = "notification";
+    // ✅ Keep all reschedule-related messages within allowed enum:
+    else if (message.toUpperCase().includes("RESCHEDULE"))
+      messageType = "notification";
 
     if (db) {
+      // ✅ Add callback so logging failures NEVER crash node
       db.run(
         `INSERT INTO sms_logs (recipient_phone, message_type, message_content, status, details, sent_at)
          VALUES (?, ?, ?, ?, ?, datetime('now'))`,
         [phone, messageType, message, status, JSON.stringify(details)],
+        (err) => {
+          if (err) {
+            console.error("⚠️ SMS log insert failed (non-fatal):", err.message);
+          }
+        },
       );
     }
   } catch (error) {
@@ -266,7 +274,10 @@ export async function sendRescheduleNotification(
 
   const newDate = new Date(appointment.appointment_date).toLocaleString(
     "en-KE",
-    { dateStyle: "medium", timeStyle: "short" },
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
   );
   const oldDate = new Date(oldDateISO).toLocaleString("en-KE", {
     dateStyle: "medium",
@@ -288,6 +299,46 @@ export async function sendRescheduleNotification(
     }
     await sendSMS(provider.phone, provMsg);
   }
+}
+
+/* ---------------------------------------------
+   ✅ NEW: Reschedule Rejected Notice (Requirement #4)
+--------------------------------------------- */
+export async function sendRescheduleRejectedNotice(
+  appointment,
+  client,
+  service,
+  provider,
+  restoredOldDateISO,
+  rejectedRequestedDateISO,
+  reason,
+) {
+  if (!shouldSend(client, "reschedule")) return;
+
+  const restoredOldDate = new Date(restoredOldDateISO).toLocaleString("en-KE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  const requestedNewDate = rejectedRequestedDateISO
+    ? new Date(rejectedRequestedDateISO).toLocaleString("en-KE", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
+
+  const who = provider?.business_name || provider?.name || "Provider";
+
+  const msg =
+    `❌ Reschedule Rejected (Appt #${appointment.id})\n` +
+    `Your request to move ${service.name}` +
+    (requestedNewDate ? ` to ${requestedNewDate}` : "") +
+    ` was rejected by ${who}.\n` +
+    `✅ Your appointment remains scheduled for: ${restoredOldDate}.\n` +
+    (reason ? `Reason: ${reason}\n` : "") +
+    `You can open the app to reschedule again or cancel if needed.`;
+
+  return await sendSMS(client.phone, msg);
 }
 
 export async function sendScheduledReminders() {
@@ -359,6 +410,7 @@ export default {
   sendRefundNotification,
   sendRefundRequest,
   sendRescheduleNotification,
+  sendRescheduleRejectedNotice,
   sendScheduledReminders,
   getSMSStats,
 };
