@@ -537,3 +537,32 @@
   align-items: center;
   border-radius: 10px;
 }
+.review-modal-content .modal-header {
+  position: relative; /* anchor for absolute children */
+}
+
+.review-modal-content .close-btn {
+  position: absolute !important;
+  top: 1px !important;
+  right: 1px !important;
+  z-index: 5 !important;
+  margin: 0 !important;
+  transform: none !important;
+
+  /* keep your existing look */
+  background: #f1f5f9;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+}
+
+.review-modal-content .close-btn:hover {
+  background: #e2e8f0;
+  color: #ef4444;
+}
