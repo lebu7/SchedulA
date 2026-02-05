@@ -36,7 +36,7 @@ const parseAddons = (apt) => {
     try {
       selectedAddons = JSON.parse(selectedAddons);
     } catch (e) {
-      console.warn("Failed to parse addons JSON for appointment", apt.id, e);
+      console.warn("Failed to parse addons JSON for appointment", apt?.id, e);
       selectedAddons = [];
     }
   }
@@ -98,8 +98,8 @@ function PaymentInfoModal({ payment, user, onClose }) {
     const pending = Math.max(total - paid, 0);
 
     const providerName =
-      user.user_type === "provider"
-        ? payment.business_name || payment.name
+      user?.user_type === "provider"
+        ? user.business_name || user.name
         : payment.provider_name || payment.provider;
 
     let statusLabel = "Balance Due";
@@ -489,6 +489,7 @@ function AppointmentManager({ user }) {
 
   useEffect(() => {
     fetchAppointments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -549,10 +550,7 @@ function AppointmentManager({ user }) {
     if (window.confirm("Remove this appointment from your dashboard?")) {
       try {
         await api.delete(`/appointments/${id}`);
-
-        // ✅ close preview immediately
         closePreviewIfOpenFor(id);
-
         await fetchAppointments();
         alert("Appointment deleted.");
       } catch (err) {
@@ -636,6 +634,9 @@ function AppointmentManager({ user }) {
           },
         })
       );
+
+      // ✅ FIX: always clear unread badge when opening from anywhere (list OR card)
+      resetRoomUnread(apt.id);
     } catch (err) {
       console.error("Failed to initialize chat room:", err);
       alert("Could not open chat at this time.");
@@ -757,10 +758,7 @@ function AppointmentManager({ user }) {
       setCancelling(id);
       try {
         await api.put(`/appointments/${id}`, { status: "cancelled" });
-
-        // ✅ close preview immediately
         closePreviewIfOpenFor(id);
-
         await fetchAppointments();
         alert("Appointment cancelled. Refund request sent to provider.");
       } finally {
@@ -774,10 +772,7 @@ function AppointmentManager({ user }) {
     setUpdating(appointmentId);
     try {
       const res = await api.post(`/appointments/${appointmentId}/process-refund`);
-
-      // ✅ close preview immediately
       closePreviewIfOpenFor(appointmentId);
-
       alert("✅ " + res.data.message);
       await fetchAppointments();
     } catch (error) {
@@ -871,7 +866,11 @@ function AppointmentManager({ user }) {
       (sum, addon) => sum + Number(addon.price ?? addon.additional_price ?? 0),
       0
     );
-    const basePrice = Number(apt.price ?? (apt.total_price ?? 0) - addonsTotal ?? 0);
+
+    const basePrice = Number(
+      apt.price ?? ((apt.total_price ?? 0) - addonsTotal)
+    );
+
     const total = Number(apt.total_price ?? basePrice + addonsTotal);
     const deposit = Number(apt.deposit_amount ?? Math.round(total * 0.3));
     const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
@@ -893,7 +892,9 @@ function AppointmentManager({ user }) {
     const handleStatusChange = (e) => {
       const newStatus = e.target.value;
       if (newStatus === "completed" && pending > 0) {
-        alert(`⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`);
+        alert(
+          `⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`
+        );
         return;
       }
       handleStatusUpdate(apt.id, newStatus);
@@ -990,12 +991,6 @@ function AppointmentManager({ user }) {
                     transition: "all 0.2s",
                     marginTop: isWalkIn ? 0 : "2px",
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = hasReview ? "#f7f0bbff" : "#fef3c7")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = hasReview ? "#fcf6dcff" : "#fffbeb")
-                  }
                   title={isProvider ? "View Client Review" : hasReview ? "Edit your review" : "Rate this service"}
                 >
                   <Star size={12} fill="#f59e0b" color="#f59e0b" />
@@ -1012,10 +1007,7 @@ function AppointmentManager({ user }) {
               </p>
               {isRecentEnough && (
                 <ChatButton
-                  onClick={() => {
-                    openAppointmentChat(apt);
-                    resetRoomUnread(apt.id);
-                  }}
+                  onClick={() => openAppointmentChat(apt)}
                   size="small"
                   contextType="appointment"
                   contextId={apt.id}
@@ -1164,11 +1156,13 @@ function AppointmentManager({ user }) {
             )}
           </div>
 
+          {/* ✅ Add-ons dropdown (closed by default) */}
           <details className="addons-dropdown">
             <summary className="addons-summary">💅 Add-ons ({parseAddons(apt).length})</summary>
             <div className="addons-dropdown-content">{renderAddons(apt)}</div>
           </details>
 
+          {/* ✅ Total cost box ALSO for walk-ins */}
           <div className="total-cost-box">
             <div className="total-row">
               <span>Base Price:</span>
@@ -1194,7 +1188,6 @@ function AppointmentManager({ user }) {
                   <button
                     className="btn btn-primary small-btn"
                     onClick={() => {
-                      // ✅ if reschedule opened from preview modal, close it first
                       closePreviewIfOpenFor(apt.id);
                       handleReschedule(apt);
                     }}
@@ -1238,11 +1231,7 @@ function AppointmentManager({ user }) {
                   >
                     {updating === apt.id ? "..." : "Confirm"}
                   </button>
-                  <button
-                    className="btn-status reject"
-                    onClick={() => handleReject(apt.id)}
-                    disabled={updating === apt.id}
-                  >
+                  <button className="btn-status reject" onClick={() => handleReject(apt.id)} disabled={updating === apt.id}>
                     Reject
                   </button>
                 </div>
@@ -1262,11 +1251,11 @@ function AppointmentManager({ user }) {
               {type === "upcoming" && (apt.status === "scheduled" || apt.status === "completed") && (
                 <div className="status-dropdown-container">
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%" }}>
-                    {actionsDisabled && !isWalkIn && (
+                    {actionsDisabled && !apt.payment_reference?.startsWith("WALK-IN") && (
                       <Clock size={16} color="#94a3b8" title="Available when appointment time reached" />
                     )}
 
-                    {isWalkIn && apt.status === "scheduled" ? (
+                    {apt.payment_reference?.startsWith("WALK-IN") && apt.status === "scheduled" ? (
                       <button
                         className="btn btn-success small-btn"
                         onClick={() => handleStatusUpdate(apt.id, "completed")}
@@ -1291,9 +1280,18 @@ function AppointmentManager({ user }) {
                     ) : (
                       <select
                         value={apt.status}
-                        onChange={handleStatusChange}
-                        disabled={updating === apt.id || (actionsDisabled && !isWalkIn)}
-                        className={`status-select ${actionsDisabled && !isWalkIn ? "disabled-select" : ""}`}
+                        onChange={(e) => {
+                          const newStatus = e.target.value;
+                          if (newStatus === "completed" && pending > 0) {
+                            alert(
+                              `⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`
+                            );
+                            return;
+                          }
+                          handleStatusUpdate(apt.id, newStatus);
+                        }}
+                        disabled={updating === apt.id || (actionsDisabled && !apt.payment_reference?.startsWith("WALK-IN"))}
+                        className={`status-select ${actionsDisabled && !apt.payment_reference?.startsWith("WALK-IN") ? "disabled-select" : ""}`}
                         title={
                           actionsDisabled
                             ? "Actions disabled for future appointments (Enable Test Mode to override)"
@@ -1302,14 +1300,16 @@ function AppointmentManager({ user }) {
                       >
                         <option value="scheduled">Scheduled</option>
                         <option value="completed">
-                          {pending > 0 && !isWalkIn ? "🔒 Completed (Pay Balance First)" : "Completed"}
+                          {pending > 0 && !apt.payment_reference?.startsWith("WALK-IN")
+                            ? "🔒 Completed (Pay Balance First)"
+                            : "Completed"}
                         </option>
                         <option value="cancelled">Cancelled</option>
                         <option value="no-show">No Show</option>
                       </select>
                     )}
                   </div>
-                  {actionsDisabled && !isWalkIn && (
+                  {actionsDisabled && !apt.payment_reference?.startsWith("WALK-IN") && (
                     <small style={{ color: "#94a3b8", fontSize: "11px", marginTop: "4px", display: "block" }}>
                       Action available on date
                     </small>
@@ -1340,7 +1340,7 @@ function AppointmentManager({ user }) {
       const term = searchTerm.toLowerCase();
       displayList = displayList.filter(
         (apt) =>
-          apt.service_name.toLowerCase().includes(term) ||
+          (apt.service_name || "").toLowerCase().includes(term) ||
           (apt.client_name && apt.client_name.toLowerCase().includes(term)) ||
           (apt.provider_name && apt.provider_name.toLowerCase().includes(term)) ||
           (apt.notes && apt.notes.toLowerCase().includes(term))
@@ -1409,18 +1409,11 @@ function AppointmentManager({ user }) {
             }}
           >
             <div className="status-filters">
-              <button
-                className={`filter-pill ${upcomingSubTab === "due" ? "active" : ""}`}
-                onClick={() => setUpcomingSubTab("due")}
-              >
-                <AlertTriangle size={14} style={{ marginBottom: "-2px", marginRight: "4px" }} /> Actions Due (
-                {dueAppointments.length})
+              <button className={`filter-pill ${upcomingSubTab === "due" ? "active" : ""}`} onClick={() => setUpcomingSubTab("due")}>
+                <AlertTriangle size={14} style={{ marginBottom: "-2px", marginRight: "4px" }} /> Actions Due ({dueAppointments.length})
               </button>
 
-              <button
-                className={`filter-pill ${upcomingSubTab === "future" ? "active" : ""}`}
-                onClick={() => setUpcomingSubTab("future")}
-              >
+              <button className={`filter-pill ${upcomingSubTab === "future" ? "active" : ""}`} onClick={() => setUpcomingSubTab("future")}>
                 <Calendar size={14} style={{ marginBottom: "-2px", marginRight: "4px" }} /> Future ({futureAppointments.length})
               </button>
             </div>
@@ -1451,9 +1444,7 @@ function AppointmentManager({ user }) {
             </div>
           ) : (
             <div className="appointments-list">
-              {itemsToDisplay.map((apt) =>
-                viewMode === "list" ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)
-              )}
+              {itemsToDisplay.map((apt) => (viewMode === "list" ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)))}
             </div>
           )}
         </div>
@@ -1493,11 +1484,9 @@ function AppointmentManager({ user }) {
           </h2>
 
           <div className="am-controls" style={{ display: "flex", gap: "10px" }}>
+            {/* ✅ Desktop-only view toggles. Mobile forced to list. */}
             {!isMobile && (
-              <div
-                className="view-toggle-pills"
-                style={{ display: "flex", background: "#f1f5f9", padding: "4px", borderRadius: "10px" }}
-              >
+              <div className="view-toggle-pills" style={{ display: "flex", background: "#f1f5f9", padding: "4px", borderRadius: "10px" }}>
                 <button
                   className={`pill-btn ${viewMode === "cards" ? "active" : ""}`}
                   onClick={() => setViewMode("cards")}
@@ -1644,11 +1633,7 @@ function AppointmentManager({ user }) {
                 const count = tab === "history" ? processedAppointments.history.length : processedAppointments[tab]?.length;
 
                 return (
-                  <button
-                    key={tab}
-                    className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                    onClick={() => setActiveTab(tab)}
-                  >
+                  <button key={tab} className={`tab-btn ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
                     {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count || 0})
                   </button>
                 );
@@ -1661,24 +1646,15 @@ function AppointmentManager({ user }) {
             </div>
 
             {activeTab === "history" && (
-              <div
-                className="history-filters"
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}
-              >
+              <div className="history-filters" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                 <div className="status-filters">
                   <button className={`filter-pill ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")}>
                     All Status
                   </button>
-                  <button
-                    className={`filter-pill ${historyFilter === "completed" ? "active" : ""}`}
-                    onClick={() => setHistoryFilter("completed")}
-                  >
+                  <button className={`filter-pill ${historyFilter === "completed" ? "active" : ""}`} onClick={() => setHistoryFilter("completed")}>
                     Completed
                   </button>
-                  <button
-                    className={`filter-pill ${historyFilter === "cancelled" ? "active" : ""}`}
-                    onClick={() => setHistoryFilter("cancelled")}
-                  >
+                  <button className={`filter-pill ${historyFilter === "cancelled" ? "active" : ""}`} onClick={() => setHistoryFilter("cancelled")}>
                     Cancelled
                   </button>
                 </div>
@@ -1792,11 +1768,7 @@ function AppointmentManager({ user }) {
               ) : (
                 <p>No services found. Please create a service first.</p>
               )}
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowServiceSelector(false)}
-                style={{ marginTop: "15px", width: "100%" }}
-              >
+              <button className="btn btn-secondary" onClick={() => setShowServiceSelector(false)} style={{ marginTop: "15px", width: "100%" }}>
                 Cancel
               </button>
             </div>
