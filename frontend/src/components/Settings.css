@@ -429,7 +429,7 @@ input:checked + .slider:before {
     gap: 10px;
     overflow-x: auto;
     overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
     scrollbar-width: none; /* Firefox */
   }
   .settings-tabs::-webkit-scrollbar {
