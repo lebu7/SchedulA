@@ -1473,8 +1473,10 @@ function AppointmentManager({ user }) {
               {upcomingSubTab === "due" ? "✅ You're all caught up! No actions due." : "No upcoming future appointments."}
             </div>
           ) : (
-            <div className="appointments-list">
-              {itemsToDisplay.map((apt) => (viewMode === "list" ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)))}
+            <div className={`appointments-list ${viewMode === "list" ? "list-mode" : ""}`}>
+              {itemsToDisplay.map((apt) =>
+                viewMode === "list" ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)
+              )}
             </div>
           )}
         </div>
@@ -1485,8 +1487,10 @@ function AppointmentManager({ user }) {
       return <div className="no-appointments">No appointments found matching your filters.</div>;
 
     return (
-      <div className="appointments-list">
-        {displayList.map((apt) => (viewMode === "list" ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)))}
+      <div className={`appointments-list ${viewMode === "list" ? "list-mode" : ""}`}>
+        {displayList.map((apt) =>
+          viewMode === "list" ? renderAppointmentRow(apt, type) : renderAppointmentCard(apt, type)
+        )}
       </div>
     );
   };

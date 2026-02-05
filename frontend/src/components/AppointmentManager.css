@@ -1216,3 +1216,33 @@
   border-color: #cbd5e1;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
+.appointments-list:has(.appointment-row) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Remove the grid-only override (not needed once it's flex) */
+.appointments-list:has(.appointment-row) .appointment-row {
+  grid-column: unset;
+}
+
+/* Make rows consistent width and stop layout jump */
+.appointment-row {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Better text wrapping so long names/services don't blow up the row */
+.row-service {
+  max-width: 100%;
+}
+
+.row-sub {
+  max-width: 100%;
+}
+
+/* Ensure right side never shrinks weirdly */
+.row-right {
+  min-width: 110px;
+}
