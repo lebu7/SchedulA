@@ -1,6 +1,6 @@
 /* frontend/src/contexts/SocketContext.jsx */
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { io } from "socket.io-client";
 
 const SocketContext = createContext();
 
@@ -15,27 +15,30 @@ export const SocketProvider = ({ children, user }) => {
   // 🔹 Explicit GLOBAL unread count (dashboard button only)
   const [globalUnreadCount, setGlobalUnreadCount] = useState(0);
 
-  // 🆕 Per-room unread counts
+  // 🆕 Per-room unread counts (keyed by roomId)
   const [roomUnreadCounts, setRoomUnreadCounts] = useState({});
 
   const [onlineUsers, setOnlineUsers] = useState(new Set());
 
   // Fetch unread count via REST API (GLOBAL only)
   const fetchUnreadCount = async () => {
-    if (!localStorage.getItem('token')) return;
+    if (!localStorage.getItem("token")) return;
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/chat/unread-count`,
+        `${
+          import.meta.env.VITE_API_URL || "http://localhost:5000"
+        }/api/chat/unread-count`,
         {
-          headers: { 
-            'Authorization': `Bearer ${localStorage.getItem('token')}` 
-          }
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
         }
       );
+
       if (response.ok) {
         const data = await response.json();
-        console.log('🔄 Unread count updated (GLOBAL):', data.count);
+        console.log("🔄 Unread count updated (GLOBAL):", data.count);
 
         // Keep original state
         setUnreadCount(data.count);
@@ -44,15 +47,16 @@ export const SocketProvider = ({ children, user }) => {
         setGlobalUnreadCount(data.count);
       }
     } catch (err) {
-      console.error('Failed to fetch unread count:', err);
+      console.error("Failed to fetch unread count:", err);
     }
   };
 
   // 🆕 Reset unread count for a specific room
   const resetRoomUnread = (roomId) => {
-    setRoomUnreadCounts(prev => ({
+    if (!roomId) return;
+    setRoomUnreadCounts((prev) => ({
       ...prev,
-      [roomId]: 0
+      [roomId]: 0,
     }));
   };
 
@@ -60,66 +64,73 @@ export const SocketProvider = ({ children, user }) => {
   useEffect(() => {
     if (!user) return;
 
-    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
     const newSocket = io(socketUrl, {
-      auth: { token: localStorage.getItem('token') },
+      auth: { token: localStorage.getItem("token") },
       reconnection: true,
       reconnectionAttempts: 5,
-      reconnectionDelay: 1000
+      reconnectionDelay: 1000,
     });
 
-    // Event handlers
     const handlers = {
       connect: () => {
-        console.log('✅ Connected to real-time chat');
+        console.log("✅ Connected to real-time chat");
         fetchUnreadCount();
       },
+
       unread_count_update: () => {
-        console.log('🔔 Received unread update event (GLOBAL)');
+        console.log("🔔 Received unread update event (GLOBAL)");
         fetchUnreadCount();
       },
+
+      // ✅ Per-room increments (roomId is the correct key)
       new_message: ({ roomId }) => {
-        setRoomUnreadCounts(prev => ({
+        if (!roomId) return;
+        setRoomUnreadCounts((prev) => ({
           ...prev,
-          [roomId]: (prev[roomId] || 0) + 1
+          [roomId]: (prev[roomId] || 0) + 1,
         }));
       },
+
       online_users: (users) => setOnlineUsers(new Set(users)),
-      user_connected: (userId) => setOnlineUsers(prev => new Set(prev).add(userId)),
-      user_disconnected: (userId) => setOnlineUsers(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(userId);
-        return newSet;
-      }),
+      user_connected: (userId) =>
+        setOnlineUsers((prev) => new Set(prev).add(userId)),
+      user_disconnected: (userId) =>
+        setOnlineUsers((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(userId);
+          return newSet;
+        }),
     };
 
-    // Subscribe to events
-    Object.keys(handlers).forEach(event => newSocket.on(event, handlers[event]));
+    Object.keys(handlers).forEach((event) =>
+      newSocket.on(event, handlers[event])
+    );
 
     setSocket(newSocket);
 
     // ✅ FALLBACK: Poll every 2 seconds to ensure count is always accurate
     const intervalId = setInterval(fetchUnreadCount, 2000);
 
-    // Cleanup on unmount / user change
     return () => {
       clearInterval(intervalId);
-      Object.keys(handlers).forEach(event => newSocket.off(event));
+      Object.keys(handlers).forEach((event) => newSocket.off(event));
       newSocket.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   return (
-    <SocketContext.Provider 
-      value={{ 
+    <SocketContext.Provider
+      value={{
         socket,
-        unreadCount,            // legacy
-        globalUnreadCount,      // 🔹 use ONLY on dashboard main button
-        roomUnreadCounts,       // 🆕 per service/room unread count
-        resetRoomUnread,        // 🆕 call when a chat opens
-        setUnreadCount, 
-        fetchUnreadCount, 
-        onlineUsers 
+        unreadCount, // legacy
+        globalUnreadCount, // 🔹 use ONLY on dashboard main button
+        roomUnreadCounts, // 🆕 per room unread count (key: roomId)
+        resetRoomUnread, // 🆕 call when a room opens
+        setUnreadCount,
+        fetchUnreadCount,
+        onlineUsers,
       }}
     >
       {children}

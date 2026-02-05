@@ -487,8 +487,32 @@ function AppointmentManager({ user }) {
 
   const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
+  // ✅ NEW: appointmentId -> roomId map (so badges match SocketContext which keys by roomId)
+  const [appointmentRoomMap, setAppointmentRoomMap] = useState({});
+
+  const buildAppointmentRoomMap = (rooms) => {
+    const map = {};
+    (rooms || []).forEach((r) => {
+      if (r?.context_type === "appointment" && r?.context_id) {
+        map[Number(r.context_id)] = Number(r.id);
+      }
+    });
+    return map;
+  };
+
+  const fetchRoomsForMapping = async () => {
+    try {
+      const res = await api.get("/chat/rooms");
+      const rooms = res.data.rooms || [];
+      setAppointmentRoomMap(buildAppointmentRoomMap(rooms));
+    } catch (e) {
+      // non-fatal
+    }
+  };
+
   useEffect(() => {
     fetchAppointments();
+    fetchRoomsForMapping();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -625,18 +649,23 @@ function AppointmentManager({ user }) {
         price: apt.total_price,
       };
 
+      const room = res.data.room;
+
+      // ✅ ensure mapping exists for this appointment immediately
+      if (room?.id) {
+        setAppointmentRoomMap((prev) => ({ ...prev, [apt.id]: Number(room.id) }));
+        resetRoomUnread(Number(room.id)); // ✅ clear badge by ROOM id (correct)
+      }
+
       window.dispatchEvent(
         new CustomEvent("openChatRoom", {
           detail: {
-            room: res.data.room,
+            room,
             context: contextData,
             recipientName: recipientName,
           },
         })
       );
-
-      // ✅ FIX: always clear unread badge when opening from anywhere (list OR card)
-      resetRoomUnread(apt.id);
     } catch (err) {
       console.error("Failed to initialize chat room:", err);
       alert("Could not open chat at this time.");
@@ -668,15 +697,20 @@ function AppointmentManager({ user }) {
     }
   };
 
+  // ✅ UPDATED: detect your backend tag format too
   const isReschedulePending = (apt) => {
+    const notes = typeof apt?.notes === "string" ? apt.notes : "";
+    const hasSysTag = notes.includes("[SYS_RESCHEDULE]");
+
     return (
       apt?.status === "pending" &&
-      (apt?.is_reschedule_request ||
+      (hasSysTag ||
+        apt?.is_reschedule_request ||
         apt?.reschedule_from ||
         apt?.old_appointment_date ||
         apt?.original_appointment_date ||
         apt?.previous_appointment_date ||
-        (typeof apt?.notes === "string" && apt.notes.toLowerCase().includes("reschedule")))
+        notes.toLowerCase().includes("reschedule"))
     );
   };
 
@@ -867,10 +901,7 @@ function AppointmentManager({ user }) {
       0
     );
 
-    const basePrice = Number(
-      apt.price ?? ((apt.total_price ?? 0) - addonsTotal)
-    );
-
+    const basePrice = Number(apt.price ?? (apt.total_price ?? 0) - addonsTotal);
     const total = Number(apt.total_price ?? basePrice + addonsTotal);
     const deposit = Number(apt.deposit_amount ?? Math.round(total * 0.3));
     const paid = Number(apt.amount_paid ?? apt.payment_amount ?? 0);
@@ -887,17 +918,6 @@ function AppointmentManager({ user }) {
         service: apt.service_name,
         provider: apt.provider_name,
       },
-    };
-
-    const handleStatusChange = (e) => {
-      const newStatus = e.target.value;
-      if (newStatus === "completed" && pending > 0) {
-        alert(
-          `⚠️ Cannot mark as Completed.\n\nBalance Due: KES ${pending.toLocaleString()}\n\nPlease process the payment first.`
-        );
-        return;
-      }
-      handleStatusUpdate(apt.id, newStatus);
     };
 
     const isFuture = new Date(apt.appointment_date) > new Date();
@@ -928,6 +948,10 @@ function AppointmentManager({ user }) {
     };
 
     const showReschedulePill = isReschedulePending(apt);
+
+    // ✅ IMPORTANT: roomUnreadCounts keys by ROOM id, not appointment id
+    const roomId = appointmentRoomMap[apt.id];
+    const unreadForThisAppointment = roomId ? roomUnreadCounts[roomId] || 0 : 0;
 
     return (
       <div
@@ -1011,7 +1035,7 @@ function AppointmentManager({ user }) {
                   size="small"
                   contextType="appointment"
                   contextId={apt.id}
-                  unreadCount={roomUnreadCounts[apt.id] || 0}
+                  unreadCount={unreadForThisAppointment}
                   disableGlobalCounter={true}
                 />
               )}
@@ -1048,6 +1072,7 @@ function AppointmentManager({ user }) {
                     size="small"
                     contextType="appointment"
                     contextId={apt.id}
+                    unreadCount={unreadForThisAppointment}
                     disableGlobalCounter={true}
                   />
                 )}
@@ -1292,11 +1317,7 @@ function AppointmentManager({ user }) {
                         }}
                         disabled={updating === apt.id || (actionsDisabled && !apt.payment_reference?.startsWith("WALK-IN"))}
                         className={`status-select ${actionsDisabled && !apt.payment_reference?.startsWith("WALK-IN") ? "disabled-select" : ""}`}
-                        title={
-                          actionsDisabled
-                            ? "Actions disabled for future appointments (Enable Test Mode to override)"
-                            : ""
-                        }
+                        title={actionsDisabled ? "Actions disabled for future appointments (Enable Test Mode to override)" : ""}
                       >
                         <option value="scheduled">Scheduled</option>
                         <option value="completed">
@@ -1409,11 +1430,18 @@ function AppointmentManager({ user }) {
             }}
           >
             <div className="status-filters">
-              <button className={`filter-pill ${upcomingSubTab === "due" ? "active" : ""}`} onClick={() => setUpcomingSubTab("due")}>
-                <AlertTriangle size={14} style={{ marginBottom: "-2px", marginRight: "4px" }} /> Actions Due ({dueAppointments.length})
+              <button
+                className={`filter-pill ${upcomingSubTab === "due" ? "active" : ""}`}
+                onClick={() => setUpcomingSubTab("due")}
+              >
+                <AlertTriangle size={14} style={{ marginBottom: "-2px", marginRight: "4px" }} /> Actions Due (
+                {dueAppointments.length})
               </button>
 
-              <button className={`filter-pill ${upcomingSubTab === "future" ? "active" : ""}`} onClick={() => setUpcomingSubTab("future")}>
+              <button
+                className={`filter-pill ${upcomingSubTab === "future" ? "active" : ""}`}
+                onClick={() => setUpcomingSubTab("future")}
+              >
                 <Calendar size={14} style={{ marginBottom: "-2px", marginRight: "4px" }} /> Future ({futureAppointments.length})
               </button>
             </div>
@@ -1486,7 +1514,10 @@ function AppointmentManager({ user }) {
           <div className="am-controls" style={{ display: "flex", gap: "10px" }}>
             {/* ✅ Desktop-only view toggles. Mobile forced to list. */}
             {!isMobile && (
-              <div className="view-toggle-pills" style={{ display: "flex", background: "#f1f5f9", padding: "4px", borderRadius: "10px" }}>
+              <div
+                className="view-toggle-pills"
+                style={{ display: "flex", background: "#f1f5f9", padding: "4px", borderRadius: "10px" }}
+              >
                 <button
                   className={`pill-btn ${viewMode === "cards" ? "active" : ""}`}
                   onClick={() => setViewMode("cards")}
@@ -1646,15 +1677,24 @@ function AppointmentManager({ user }) {
             </div>
 
             {activeTab === "history" && (
-              <div className="history-filters" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div
+                className="history-filters"
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}
+              >
                 <div className="status-filters">
                   <button className={`filter-pill ${historyFilter === "all" ? "active" : ""}`} onClick={() => setHistoryFilter("all")}>
                     All Status
                   </button>
-                  <button className={`filter-pill ${historyFilter === "completed" ? "active" : ""}`} onClick={() => setHistoryFilter("completed")}>
+                  <button
+                    className={`filter-pill ${historyFilter === "completed" ? "active" : ""}`}
+                    onClick={() => setHistoryFilter("completed")}
+                  >
                     Completed
                   </button>
-                  <button className={`filter-pill ${historyFilter === "cancelled" ? "active" : ""}`} onClick={() => setHistoryFilter("cancelled")}>
+                  <button
+                    className={`filter-pill ${historyFilter === "cancelled" ? "active" : ""}`}
+                    onClick={() => setHistoryFilter("cancelled")}
+                  >
                     Cancelled
                   </button>
                 </div>
