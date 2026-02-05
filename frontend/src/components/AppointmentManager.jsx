@@ -493,8 +493,10 @@ function AppointmentManager({ user }) {
   const buildAppointmentRoomMap = (rooms) => {
     const map = {};
     (rooms || []).forEach((r) => {
-      if (r?.context_type === "appointment" && r?.context_id) {
-        map[Number(r.context_id)] = Number(r.id);
+      const type = r?.context_type ?? r?.contextType;
+      const ctxId = r?.context_id ?? r?.contextId;
+      if (type === "appointment" && ctxId) {
+        map[Number(ctxId)] = Number(r.id);
       }
     });
     return map;

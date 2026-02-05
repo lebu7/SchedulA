@@ -72,36 +72,49 @@ export const SocketProvider = ({ children, user }) => {
       reconnectionDelay: 1000,
     });
 
-    const handlers = {
-      connect: () => {
-        console.log("✅ Connected to real-time chat");
-        fetchUnreadCount();
-      },
+const handlers = {
+  connect: () => {
+    console.log("✅ Connected to real-time chat");
+    fetchUnreadCount();
+  },
 
-      unread_count_update: () => {
-        console.log("🔔 Received unread update event (GLOBAL)");
-        fetchUnreadCount();
-      },
+  unread_count_update: () => {
+    console.log("🔔 Received unread update event (GLOBAL)");
+    fetchUnreadCount();
+  },
 
-      // ✅ Per-room increments (roomId is the correct key)
-      new_message: ({ roomId }) => {
-        if (!roomId) return;
-        setRoomUnreadCounts((prev) => ({
-          ...prev,
-          [roomId]: (prev[roomId] || 0) + 1,
-        }));
-      },
+  // ✅ Per-room increments (supports backend: room_id) + ignores my own outgoing messages
+  new_message: (msg) => {
+    const roomId = Number(msg?.roomId ?? msg?.room_id);
+    if (!roomId) return;
 
-      online_users: (users) => setOnlineUsers(new Set(users)),
-      user_connected: (userId) =>
-        setOnlineUsers((prev) => new Set(prev).add(userId)),
-      user_disconnected: (userId) =>
-        setOnlineUsers((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(userId);
-          return newSet;
-        }),
-    };
+    const myId =
+      Number(localStorage.getItem("userId")) ||
+      Number(user?.id) ||
+      Number(user?.userId);
+
+    if (myId && Number(msg?.sender_id) === myId) return;
+
+    setRoomUnreadCounts((prev) => ({
+      ...prev,
+      [roomId]: (prev[roomId] || 0) + 1,
+    }));
+  },
+
+  online_users: (users) => setOnlineUsers(new Set(users)),
+
+  user_connected: (userId) =>
+    setOnlineUsers((prev) => new Set(prev).add(Number(userId))),
+
+  // ✅ Backend sends: { userId, lastSeen }, but sometimes you may emit just userId
+  user_disconnected: (payload) =>
+    setOnlineUsers((prev) => {
+      const newSet = new Set(prev);
+      const id = typeof payload === "object" ? payload.userId : payload;
+      newSet.delete(Number(id));
+      return newSet;
+    }),
+};
 
     Object.keys(handlers).forEach((event) =>
       newSocket.on(event, handlers[event])
