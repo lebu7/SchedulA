@@ -153,7 +153,7 @@ function Header({ user, onLogout }) {
             <div className="user-menu">
               <NotificationCenter />
 
-              {/* ✅ DESKTOP: avatar opens profile modal */}
+              {/* ✅ DESKTOP: name + avatar (avatar opens profile modal) */}
               <div className="user-info desktop-only">
                 <span className="user-name" title="View Profile">
                   {user.name.split(' ')[0]}
@@ -184,6 +184,12 @@ function Header({ user, onLogout }) {
                   <User size={20} color="#fff" />
                 </button>
               </div>
+
+              {/* ✅ DESKTOP LOGOUT BUTTON (RESTORED) */}
+              <button onClick={onLogout} className="btn-logout desktop-only">
+                <LogOut size={18} />
+                <span>Logout</span>
+              </button>
             </div>
           ) : (
             <div className="auth-links">
@@ -213,7 +219,7 @@ function Header({ user, onLogout }) {
               <div className="mobile-user-sub">({user?.user_type})</div>
             </div>
 
-            {/* ✅ Profile opens the SAME modal as desktop */}
+            {/* ✅ Profile opens same modal as desktop */}
             <button type="button" className="mobile-user-item" onClick={openProfileModalFromMobile} role="menuitem">
               <User size={16} />
               <span>Profile</span>
@@ -227,7 +233,7 @@ function Header({ user, onLogout }) {
           document.body
         )}
 
-      {/* ✅ Profile Modal (shared desktop + mobile) */}
+      {/* ✅ Profile Modal */}
       {showModal && user && (
         <div className="modal-overlay" onPointerDown={() => setShowModal(false)}>
           <div className="modal-content profile-modal" onPointerDown={(e) => e.stopPropagation()}>
