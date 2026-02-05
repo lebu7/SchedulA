@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom'; 
+import { useNavigate } from 'react-router-dom';
 import api from '../services/auth';
-import { Bell, CheckCheck, CheckCircle, X, Star, MessageSquare } from 'lucide-react'; 
+import { Bell, CheckCheck, CheckCircle, X, Star, MessageSquare } from 'lucide-react';
 import './NotificationCenter.css';
 
 function NotificationCenter() {
@@ -10,21 +10,23 @@ function NotificationCenter() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [, setTick] = useState(0);
-  const bellRef = useRef(null); 
-  const dropdownRef = useRef(null); 
-  const navigate = useNavigate(); 
-  
-  const [coords, setCoords] = useState({ top: 0, right: 0 });
+
+  const bellRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const navigate = useNavigate();
+
+  // use fixed positioning coords
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
 
   // --- Time formatter (unchanged) ---
   const timeAgo = (dateStr) => {
     if (!dateStr) return 'Just now';
     try {
-      const standardizedDate = dateStr.endsWith('Z') 
-        ? dateStr 
-        : dateStr.includes(' ') 
-            ? dateStr.replace(' ', 'T') + 'Z' 
-            : dateStr + 'Z';
+      const standardizedDate = dateStr.endsWith('Z')
+        ? dateStr
+        : dateStr.includes(' ')
+          ? dateStr.replace(' ', 'T') + 'Z'
+          : dateStr + 'Z';
 
       const date = new Date(standardizedDate);
       const now = new Date();
@@ -58,16 +60,48 @@ function NotificationCenter() {
     };
   }, []);
 
-  // --- Positioning ---
-  useEffect(() => {
-    if (isOpen && bellRef.current) {
-      const rect = bellRef.current.getBoundingClientRect();
-      setCoords({
-        top: rect.bottom + window.scrollY + 10,
-        right: window.innerWidth - rect.right
-      });
-    }
+  // ✅ Positioning: fixed + clamp to viewport + update on scroll/resize while open
+  const updatePosition = useCallback(() => {
+    if (!isOpen || !bellRef.current) return;
+
+    const rect = bellRef.current.getBoundingClientRect();
+
+    // Dropdown width (actual if mounted, else fallback)
+    const dropdownWidth = dropdownRef.current?.offsetWidth || 340;
+
+    const padding = 10; // keep off edges
+    const viewportW = window.innerWidth;
+
+    // Prefer aligning dropdown right edge with bell right edge
+    let left = rect.right - dropdownWidth;
+
+    // Clamp so it never goes off-screen
+    left = Math.max(padding, Math.min(left, viewportW - dropdownWidth - padding));
+
+    const top = rect.bottom + 10;
+
+    setCoords({ top, left });
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // wait a frame so dropdown has a width
+    const raf = requestAnimationFrame(updatePosition);
+
+    const onScroll = () => updatePosition();
+    const onResize = () => updatePosition();
+
+    // capture scroll from containers too
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [isOpen, updatePosition]);
 
   // --- Outside click ---
   useEffect(() => {
@@ -118,17 +152,13 @@ function NotificationCenter() {
     // ✅ CHAT NOTIFICATION
     if (notif.type === 'chat' && notif.reference_id) {
       try {
-        // Force dashboard route (deep-linkable)
         navigate(`/dashboard?chatRoomId=${notif.reference_id}`, { replace: true });
 
-        // Ensure widget opens even if closed
         window.dispatchEvent(new CustomEvent('forceOpenChatWidget'));
 
-        // Fetch room
         const res = await api.get(`/chat/rooms/${notif.reference_id}`);
         const room = res.data.room;
 
-        // Dispatch open event with focus intent
         window.dispatchEvent(
           new CustomEvent('openChatRoom', {
             detail: {
@@ -174,7 +204,7 @@ function NotificationCenter() {
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setIsOpen(!isOpen);
+          setIsOpen((prev) => !prev);
         }}
       >
         <div className="notification-icon">
@@ -187,7 +217,12 @@ function NotificationCenter() {
         <div
           ref={dropdownRef}
           className="notification-dropdown"
-          style={{ top: coords.top, right: coords.right, zIndex: 9999 }}
+          style={{
+            top: coords.top,
+            left: coords.left,
+            position: 'fixed',
+            zIndex: 9999
+          }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="notif-header">

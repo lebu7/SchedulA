@@ -62,10 +62,11 @@
   box-sizing: border-box;
 }
 
-/* Dropdown Container (Portal Target) */
+/* ✅ Dropdown Container (Portal Target) */
 .notification-dropdown {
-  position: absolute; /* Essential for portal positioning */
-  width: 340px;
+  /* JS sets position: fixed + top/left */
+  width: min(340px, calc(100vw - 20px)); /* ✅ fixes mobile cut-off */
+  max-width: calc(100vw - 20px);
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -75,8 +76,11 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  z-index: 9999; /* Ensure it floats above everything */
+  z-index: 9999;
   animation: fadeIn 0.2s ease-out;
+
+  /* ✅ prevent accidental overflow on tiny screens */
+  box-sizing: border-box;
 }
 
 /* Header Section */
@@ -146,7 +150,7 @@
   padding: 14px 16px;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
-  gap: 14px; /* Increased gap */
+  gap: 14px;
   align-items: flex-start;
   cursor: pointer;
   transition: background 0.15s;
@@ -193,6 +197,11 @@
   color: #f59e0b;
 }
 
+.notif-icon.purple {
+  background-color: #f3e8ff;
+  color: #7c3aed;
+}
+
 .notif-icon svg {
   stroke: currentColor;
 }
@@ -207,6 +216,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .notif-title {
