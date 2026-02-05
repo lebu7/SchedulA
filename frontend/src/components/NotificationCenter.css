@@ -1,11 +1,14 @@
-/* frontend/src/components/NotificationCenter.css */
-
 /* Wrapper for the Bell Icon */
 .notification-wrapper {
   position: relative;
   display: flex;
   align-items: center;
-  height: auto;
+
+  /* ✅ HARD LOCK SIZE so it never overlaps the avatar area */
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+
   flex-shrink: 0;
 }
 
@@ -20,7 +23,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0; /* 🔑 prevent stretching */
+  flex-shrink: 0;
+
+  /* ✅ make it a real button visually */
+  border: none;
+  background: transparent;
+  padding: 0;
+
+  /* ✅ prevent weird overlay click issues */
+  pointer-events: auto;
+}
+
+.notification-icon:hover {
+  background-color: #f1f5f9;
 }
 
 .bell-icon {
@@ -57,15 +72,15 @@
   align-items: center;
   justify-content: center;
   border: 1px solid white;
-  padding: 8px 8px;
+
+  /* ✅ keep badge from stretching */
   line-height: 1;
   box-sizing: border-box;
 }
 
 /* ✅ Dropdown Container (Portal Target) */
 .notification-dropdown {
-  /* JS sets position: fixed + top/left */
-  width: min(340px, calc(100vw - 20px)); /* ✅ fixes mobile cut-off */
+  width: min(340px, calc(100vw - 20px));
   max-width: calc(100vw - 20px);
   background: white;
   border: 1px solid #e2e8f0;
@@ -78,8 +93,6 @@
   flex-direction: column;
   z-index: 9999;
   animation: fadeIn 0.2s ease-out;
-
-  /* ✅ prevent accidental overflow on tiny screens */
   box-sizing: border-box;
 }
 
@@ -112,18 +125,6 @@
 
 .mark-read-text:hover {
   text-decoration: underline;
-}
-
-.close-notif {
-  cursor: pointer;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  transition: color 0.2s;
-}
-
-.close-notif:hover {
-  color: #ef4444;
 }
 
 /* List Container */
