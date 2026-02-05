@@ -282,12 +282,21 @@ function ServiceManager({ user }) {
             const isClosed = businessClosed || service.is_closed;
             const themeClass = getCategoryClass(service.category);
             const rating = service.avg_rating ? Number(service.avg_rating).toFixed(1) : null;
+
+            // ✅ Issue #3 fix: make closed cards truly grey/black (not just dim)
+            const closedCardStyle = isClosed
+              ? {
+                  filter: "grayscale(1) saturate(0)",
+                  opacity: 0.78,
+                }
+              : undefined;
             
             return (
               <div
                 key={service.id}
                 id={`service-${service.id}`}
                 className={`provider-service-card ${isClosed ? "dimmed" : ""}`}
+                style={closedCardStyle}
               >
                 <div className={`provider-card-header ${themeClass}`}>
                   <div className="header-left">

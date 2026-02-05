@@ -60,6 +60,15 @@
   height: 42px; /* Fixed compact height */
 }
 
+/* ✅ Issue #4: Header buttons should be smaller + almost boxes */
+.manager-header .header-actions .btn {
+  border-radius: 10px !important; /* ⬅️ boxy instead of pill */
+  height: 38px; /* ⬅️ slightly shorter */
+  padding: 8px 12px; /* ⬅️ tighter */
+  font-size: 12.5px;
+  gap: 6px;
+}
+
 /* 1. Add New Service (Primary Dark Pill) */
 .btn-primary {
   background-color: #0f172a;
@@ -130,10 +139,21 @@
   border-color: #cbd5e1;
 }
 
-/* Dimmed state when closed */
+/* ✅ Issue #3: True black/grey state when closed (not “still colored”) */
 .provider-service-card.dimmed {
-  filter: grayscale(100%);
+  filter: grayscale(1) saturate(0) contrast(0.95);
   opacity: 0.8;
+}
+
+/* Extra: ensure all colorful header elements also appear grey */
+.provider-service-card.dimmed .provider-card-header,
+.provider-service-card.dimmed .cat-badge,
+.provider-service-card.dimmed .header-price,
+.provider-service-card.dimmed .rating-badge-minimal,
+.provider-service-card.dimmed .toggle-status-btn,
+.provider-service-card.dimmed .icon-action-btn,
+.provider-service-card.dimmed .add-addon-small-btn {
+  filter: grayscale(1) saturate(0);
 }
 
 /* Card Header */

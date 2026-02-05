@@ -457,10 +457,55 @@
   cursor: not-allowed;
 }
 
+/* ✅ Issue #3: Strong “closed” look (no visible colors) */
 .closed-client-card {
-  opacity: 0.7;
-  filter: grayscale(100%);
-  pointer-events: none;
+  opacity: 0.78;
+  filter: grayscale(1) saturate(0) contrast(0.95);
+  /* NOTE: removed pointer-events:none so icons/links can still be tapped if you allow it in JS */
+}
+
+/* Ensure header gradients + badges also appear grey */
+.closed-client-card .service-header-bar,
+.closed-client-card .header-price,
+.closed-client-card .rating-badge-minimal,
+.closed-client-card .meta-badge,
+.closed-client-card .addon-preview,
+.closed-client-card .addon-tag,
+.closed-client-card .location-row {
+  filter: grayscale(1) saturate(0);
+}
+
+/* Make the add-on “yellow” area not look colorful when closed */
+.closed-client-card .addon-preview {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+.closed-client-card .addon-title,
+.closed-client-card .addon-tag,
+.closed-client-card .addon-tag.more {
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+/* Make primary text slightly muted */
+.closed-client-card .service-name,
+.closed-client-card .service-business-link,
+.closed-client-card .location-link {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* But body text becomes grey */
+.closed-client-card .service-description {
+  color: #64748b;
+}
+
+/* Optional: make the “Book Now” always look disabled when closed */
+.closed-client-card .book-btn {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+.closed-client-card .book-btn:hover {
+  background: #94a3b8;
 }
 
 .no-services {
