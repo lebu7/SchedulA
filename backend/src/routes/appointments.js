@@ -931,7 +931,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ Update appointment (UPDATED FOR RESCHEDULE REJECTION)
+   ✅ Update appointment (UPDATED FOR RESCHEDULE REJECTION + SAFE META)
 --------------------------------------------- */
 router.put("/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -963,7 +963,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
     // ✅ SPECIAL CASE: Provider "rejects" a RESCHEDULE request
     // Frontend currently calls status="cancelled" for reject.
     // If appointment is pending and contains reschedule meta, we treat it as "reschedule rejected"
-    // and revert to the previous date + previous status.
+    // and revert to the previous date + previous status (pending OR scheduled).
     const isProviderRejectingReschedule =
       userType === "provider" &&
       status === "cancelled" &&
@@ -975,6 +975,13 @@ router.put("/:id", authenticateToken, async (req, res) => {
     if (isProviderRejectingReschedule) {
       const prevDateISO = existingResMeta.prev_date;
       const prevStatus = existingResMeta.prev_status;
+
+      // Keep the rejected-requested date for messaging (what the client asked for)
+      const rejectedRequestedDateISO = apt.appointment_date;
+
+      // Optional reason typed by provider (your UI prompts sometimes)
+      const providerReason =
+        typeof notes === "string" && notes.trim() ? notes.trim() : null;
 
       // Restore appointment_date & status + remove SYS meta from notes
       db.run(
@@ -1022,7 +1029,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                     fullApt.client_id,
                     "reschedule",
                     "Reschedule Rejected",
-                    `Your reschedule request for #${id} was rejected. Your appointment remains at the original time.`,
+                    `Your reschedule request for #${id} was rejected. Your appointment has been restored to the original time.`,
                     id,
                   );
                 }
@@ -1039,15 +1046,33 @@ router.put("/:id", authenticateToken, async (req, res) => {
                 }
 
                 // ✅ SMS to client: reschedule rejected, suggest next steps
-                await smsService.sendRescheduleRejectedNotice(
-                  { ...fullApt, id },
-                  clientObj,
-                  { name: fullApt.service_name },
-                  providerObj,
-                  prevDateISO, // original time (restored)
-                  apt.appointment_date, // the requested time that was rejected (was current before revert)
-                  req.body?.notes || null, // reason (if provider typed one)
-                );
+                // (Fallback-safe: if helper isn't implemented yet, don't crash route)
+                try {
+                  if (
+                    typeof smsService.sendRescheduleRejectedNotice ===
+                    "function"
+                  ) {
+                    await smsService.sendRescheduleRejectedNotice(
+                      { ...fullApt, id },
+                      clientObj,
+                      { name: fullApt.service_name },
+                      providerObj,
+                      prevDateISO, // restored/original time
+                      rejectedRequestedDateISO, // requested time that was rejected
+                      providerReason, // optional reason
+                    );
+                  } else {
+                    // Keep silent to avoid breaking flows; smsService update will add this function
+                    console.warn(
+                      "smsService.sendRescheduleRejectedNotice not implemented yet",
+                    );
+                  }
+                } catch (smsErr) {
+                  console.error(
+                    "Failed to send reschedule rejection SMS:",
+                    smsErr,
+                  );
+                }
               }
             },
           );
@@ -1055,6 +1080,10 @@ router.put("/:id", authenticateToken, async (req, res) => {
           return res.json({
             message:
               "Reschedule rejected. Appointment restored to original time.",
+            restored: {
+              appointment_date: prevDateISO,
+              status: prevStatus,
+            },
           });
         },
       );
@@ -1121,20 +1150,28 @@ router.put("/:id", authenticateToken, async (req, res) => {
     }
 
     // ✅ Notes update:
-    // - If caller sends notes explicitly, use it.
-    // - If client is rescheduling, append SYS meta with prev_date + prev_status
-    //   without overwriting their existing notes.
+    // - If caller sends notes explicitly, keep them.
+    // - If client is rescheduling, ALWAYS append SYS meta (even if they sent notes),
+    //   and ensure we don't double-stack old SYS blocks.
     let finalNotesToSave = null;
 
-    if (typeof notes === "string") {
-      finalNotesToSave = notes;
-    } else if (isReschedule && userType === "client") {
-      // Store previous date/status so provider can reject and we can revert.
+    if (isReschedule && userType === "client") {
       const resMeta = {
         prev_date: apt.appointment_date,
         prev_status: apt.status || "scheduled",
       };
-      finalNotesToSave = appendRescheduleMeta(apt.notes, resMeta);
+
+      // Choose the base notes to preserve:
+      // - If client provided notes, use that
+      // - Otherwise preserve existing notes
+      const baseNotes = typeof notes === "string" ? notes : apt.notes || "";
+
+      // Remove any existing SYS_RESCHEDULE block (avoid stacking multiple)
+      const { cleanNotes: cleanedBaseNotes } = extractRescheduleMeta(baseNotes);
+
+      finalNotesToSave = appendRescheduleMeta(cleanedBaseNotes, resMeta);
+    } else if (typeof notes === "string") {
+      finalNotesToSave = notes;
     }
 
     if (finalNotesToSave !== null) {
@@ -1168,6 +1205,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
         );
       }
 
+      // IMPORTANT: This remains for true cancellations (not reschedule rejection)
       if (status === "cancelled") {
         try {
           await handleAutomaticRefund(id, userType, notes);
