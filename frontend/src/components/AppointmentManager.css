@@ -772,6 +772,102 @@
     width: 100%;
   }
 
+  /* Keep tabs/filters/sub-tabs on a single line (horizontal scroll) */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+    gap: 8px;
+    padding-bottom: 10px;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+
+  .history-filters {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding: 10px 12px;
+    gap: 12px;
+  }
+
+  .history-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+    gap: 6px;
+  }
+
+  .status-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .date-select {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .sub-tab-pills {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  .sub-tab-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pill-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .dev-mode-toggle {
+    flex: 0 0 auto;
+    margin-left: 0;
+    white-space: nowrap;
+  }
+
+  .appointments-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+  .am-controls {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .search-box,
+  .sort-box,
+  .sort-box select {
+    width: 100%;
+  }
+
   .history-filters {
     flex-direction: column;
     align-items: flex-start;
@@ -780,7 +876,6 @@
   .appointments-list {
     grid-template-columns: 1fr;
   }
-}
 
 @media (min-width: 769px) and (max-width: 1024px) {
   .appointments-list {
@@ -896,7 +991,7 @@
 }
 
 .addons-summary::after {
-  content: "▾";
+  content: "â–¾";
   font-size: 12px;
   color: #64748b;
   transition: transform 0.2s ease;
@@ -1155,10 +1250,106 @@
    12. MOBILE POLISH FOR LIST-ONLY EXPERIENCE
    ===================================================== */
 @media (max-width: 768px) {
-  .appointment-row {
-    border-radius: 14px;
-    padding: 12px 12px;
+  .am-header-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
+
+  .am-controls {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .search-box,
+  .sort-box,
+  .sort-box select {
+    width: 100%;
+  }
+
+  /* Keep tabs/filters/sub-tabs on a single line (horizontal scroll) */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+    gap: 8px;
+    padding-bottom: 10px;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+
+  .history-filters {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding: 10px 12px;
+    gap: 12px;
+  }
+
+  .history-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+    gap: 6px;
+  }
+
+  .status-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .date-select {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .sub-tab-pills {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  .sub-tab-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pill-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .dev-mode-toggle {
+    flex: 0 0 auto;
+    margin-left: 0;
+    white-space: nowrap;
+  }
+
+  .appointments-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 
   .row-main {
     align-items: flex-start;
@@ -1179,7 +1370,7 @@
   .apt-preview-body {
     padding: 12px;
   }
-}
+
 .view-toggle-pills {
   display: flex;
   gap: 6px;

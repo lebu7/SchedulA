@@ -52,6 +52,7 @@
   gap: 8px;
   transition: all 0.2s;
   position: relative;
+  white-space: nowrap; /* ✅ helps on mobile */
 }
 
 .tab-btn:hover {
@@ -305,6 +306,7 @@ input:checked + .slider:before {
     transform: translateY(0);
   }
 }
+
 /* 🔔 Notifications Section Specific Styling */
 .section-header-row {
   display: flex;
@@ -403,4 +405,126 @@ input:checked + .slider:before {
   filter: grayscale(0.5); /* Removes some color saturation */
   box-shadow: none;
   transform: none;
+}
+
+/* ✅ MOBILE RESPONSIVENESS (Issue #2) */
+@media (max-width: 768px) {
+  .settings-container {
+    margin: 16px auto;
+    padding: 0 12px;
+  }
+
+  .settings-container h2 {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .settings-section {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  /* Tabs: allow horizontal scroll on small screens */
+  .settings-tabs {
+    gap: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+  }
+  .settings-tabs::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+
+  .tab-btn {
+    padding: 10px 6px;
+    font-size: 14px;
+    flex: 0 0 auto;
+  }
+
+  /* ✅ Profile: stack -> password goes below personal details */
+  .profile-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .profile-column h3 {
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+  }
+
+  /* ✅ Notifications header row: stack title and pills */
+  .section-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .pill-nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .pill-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+  }
+
+  /* ✅ Business info (suburb + address) should be vertical */
+  .flex-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ✅ Business hours split should be vertical */
+  .business-hours-split {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .weekend-card {
+    width: 100%;
+    padding: 14px;
+  }
+
+  /* Inputs should not overflow */
+  .form-group input,
+  .suburb-dropdown {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Toggles: tighter spacing on mobile */
+  .toggle-info {
+    padding-right: 12px;
+  }
+
+  /* Buttons: full width + cleaner tap target */
+  .save-btn {
+    width: 100%;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .settings-section {
+    padding: 14px;
+  }
+
+  .toggle-row {
+    padding: 14px 0;
+  }
+
+  .toggle-row:hover {
+    padding-left: 6px;
+    padding-right: 6px;
+    margin-left: -6px;
+    margin-right: -6px;
+  }
+
+  .pill-btn {
+    font-size: 12px;
+    gap: 6px;
+  }
 }

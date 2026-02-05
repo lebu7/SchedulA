@@ -31,6 +31,29 @@ const NAIROBI_SUBURBS = {
 
 const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
+
+  // ✅ MOBILE DETECTION (for responsive layout without touching CSS yet)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 768px)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e) => setIsMobile(e.matches);
+
+    // Safari fallback support
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+
+    setIsMobile(mq.matches);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else mq.removeListener(handler);
+    };
+  }, []);
   
   const [activeTab, setActiveTab] = useState(() => {
       const validTabs = ['profile', 'notifications', 'hours'];
@@ -272,6 +295,19 @@ const Settings = ({ user, setUser }) => {
 
   const smallInputStyle = { padding: '8px 10px', fontSize: '13px', height: 'auto' };
 
+  // ✅ RESPONSIVE WRAPPER STYLES (only affect mobile)
+  const profileLayoutStyle = isMobile
+    ? { display: 'flex', flexDirection: 'column', gap: '18px' }
+    : undefined;
+
+  const businessLocationRowStyle = isMobile
+    ? { display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '15px' }
+    : { display: 'flex', gap: '20px', marginBottom: '15px' };
+
+  const businessHoursRowStyle = isMobile
+    ? { display: 'flex', flexDirection: 'column', gap: '18px', alignItems: 'stretch' }
+    : { display: 'flex', gap: '30px', alignItems: 'flex-start' };
+
   return (
     <div className="settings-container">
       <h2>⚙️ Account Settings</h2>
@@ -292,7 +328,7 @@ const Settings = ({ user, setUser }) => {
       </div>
 
       {activeTab === 'profile' && (
-        <div className="settings-section profile-layout">
+        <div className="settings-section profile-layout" style={profileLayoutStyle}>
           <div className="profile-column">
             <h3>Personal Details</h3>
             <form onSubmit={handleProfileUpdate} className="settings-form">
@@ -336,6 +372,8 @@ const Settings = ({ user, setUser }) => {
               </button>
             </form>
           </div>
+
+          {/* ✅ Password section stays BELOW on mobile because layout becomes column */}
           <div className="profile-column password-column">
             <h3>Change Password</h3>
             <form onSubmit={handlePasswordChange} className="settings-form">
@@ -427,10 +465,17 @@ const Settings = ({ user, setUser }) => {
           <form onSubmit={handleBusinessInfoUpdate} className="settings-form">
              <div style={{marginBottom: '25px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
                 <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '15px'}}>📍 Location (Required)</h4>
-                <div style={{display:'flex', gap:'20px', marginBottom: '15px'}}>
+
+                {/* ✅ MOBILE: stack Suburb then Address */}
+                <div style={businessLocationRowStyle}>
                     <div className="form-group" style={{flex: 1}}>
                         <label>Suburb *</label>
-                        <select value={profile.suburb} onChange={(e) => { setProfile(p => ({ ...p, suburb: e.target.value })); setHasChanges(true); }} className="suburb-dropdown" required>
+                        <select
+                          value={profile.suburb}
+                          onChange={(e) => { setProfile(p => ({ ...p, suburb: e.target.value })); setHasChanges(true); }}
+                          className="suburb-dropdown"
+                          required
+                        >
                             <option value="">Select Suburb</option>
                             {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
                                 <optgroup key={letter} label={letter}>
@@ -439,20 +484,31 @@ const Settings = ({ user, setUser }) => {
                             ))}
                         </select>
                     </div>
+
                     <div className="form-group" style={{flex: 2}}>
                         <label>Business Address / Landmark *</label>
-                        <input type="text" value={profile.business_address} onChange={e => { setProfile({...profile, business_address: e.target.value}); setHasChanges(true); }} placeholder="e.g. 2nd Floor, City Mall" style={smallInputStyle} required />
+                        <input
+                          type="text"
+                          value={profile.business_address}
+                          onChange={e => { setProfile({...profile, business_address: e.target.value}); setHasChanges(true); }}
+                          placeholder="e.g. 2nd Floor, City Mall"
+                          style={smallInputStyle}
+                          required
+                        />
                     </div>
                 </div>
+
                 <div className="form-group">
                     <label>Google Maps Link <small style={{color:'#64748b'}}>(Optional)</small></label>
                     <input type="url" value={profile.google_maps_link} onChange={e => { setProfile({...profile, google_maps_link: e.target.value}); setHasChanges(true); }} placeholder="Paste link here" style={smallInputStyle} />
                 </div>
              </div>
-             <div style={{display: 'flex', gap: '30px', alignItems: 'flex-start'}}>
+
+             {/* ✅ MOBILE: stack Mon-Fri Hours then Weekend Ops */}
+             <div style={businessHoursRowStyle}>
                 <div style={{flex: 1}}>
                     <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '15px'}}>⏰ Mon-Fri Hours</h4>
-                    <div className="form-group-row" style={{display:'flex', gap:'15px'}}>
+                    <div className="form-group-row" style={{display:'flex', gap:'15px', flexDirection: isMobile ? 'column' : 'row'}}>
                         <div className="form-group" style={{flex:1}}>
                             <label>Opening</label>
                             <input type="time" value={hours.opening_time} onChange={e => { setHours({...hours, opening_time: e.target.value}); setHasChanges(true); }} style={smallInputStyle} />
@@ -463,6 +519,7 @@ const Settings = ({ user, setUser }) => {
                         </div>
                     </div>
                 </div>
+
                 <div style={{flex: 1.2, padding: '15px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0'}}>
                     <h5 style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px' }}>Weekend Operations</h5>
                     <Toggle label="Open on Saturdays" desc="Operate on Saturdays" checked={hours.is_open_sat} onChange={() => { setHours({...hours, is_open_sat: !hours.is_open_sat}); setHasChanges(true); }} />
@@ -470,6 +527,7 @@ const Settings = ({ user, setUser }) => {
                     <Toggle label="Open on Sundays" desc="Operate on Sundays" checked={hours.is_open_sun} onChange={() => { setHours({...hours, is_open_sun: !hours.is_open_sun}); setHasChanges(true); }} />
                 </div>
              </div>
+
              <button type="submit" className="save-btn" style={{marginTop: '30px'}} disabled={loading || !hasChanges}>
                 {loading ? 'Saving...' : 'Save All Changes'}
              </button>
