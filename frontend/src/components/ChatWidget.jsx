@@ -21,7 +21,7 @@ const ChatWidget = () => {
   const [lastSeen, setLastSeen] = useState(null);
   const [, setTick] = useState(0);
 
-  // 🔹 Chat intent flags
+  // Chat intent flags
   const [autoFocus, setAutoFocus] = useState(false);
   const [scrollToUnread, setScrollToUnread] = useState(false);
 
@@ -45,7 +45,6 @@ const ChatWidget = () => {
       const now = new Date();
       const diffInSeconds = Math.floor((now - date) / 1000);
 
-      // Handle small negative diffs (clock skew)
       if (diffInSeconds < 0) return 'Last seen just now';
 
       if (diffInSeconds < 60) return 'Last seen just now';
@@ -67,7 +66,6 @@ const ChatWidget = () => {
 
   /* ------------------ Data Fetching ------------------ */
 
-  // ✅ New function to fetch fresh last_seen from DB
   const fetchRecipientStatus = async (id) => {
     if (!id) return;
     try {
@@ -93,7 +91,6 @@ const ChatWidget = () => {
     // 2. When user connects
     const handleUserOnline = (userId) => {
        if (recipientId && Number(userId) === Number(recipientId)) {
-          // You could refetch here, but "Online" badge handles it visually
        }
     };
 
@@ -103,7 +100,6 @@ const ChatWidget = () => {
     // Auto-refresh text every 60s
     const ticker = setInterval(() => {
         setTick(t => t + 1);
-        // Also refetch status occasionally to ensure sync
         if (recipientId && !onlineUsers.has(recipientId)) {
             fetchRecipientStatus(recipientId);
         }
@@ -116,7 +112,6 @@ const ChatWidget = () => {
     };
   }, [socket, recipientId, onlineUsers]);
 
-  // ✅ Fetch status immediately when opening a chat (fixing "Offline" on reload)
   useEffect(() => {
     if (recipientId && !onlineUsers.has(recipientId)) {
         fetchRecipientStatus(recipientId);
@@ -151,8 +146,6 @@ const ChatWidget = () => {
       setRecipientName(name);
       setRecipientRole(isClient ? 'Service Provider' : 'Client');
       setRecipientId(rId);
-      
-      // Set initial state from room props, but useEffect will refresh it
       setLastSeen(isClient ? room.provider_last_seen : room.client_last_seen);
     };
 

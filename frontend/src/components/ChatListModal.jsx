@@ -56,7 +56,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
       setRooms(prev => prev.map(room => {
         if (room.id !== roomId) return room;
 
-        // If other person read my last sent message, mark read tick
+        // when last sent message is read, mark read tick
         if (Number(readerId) !== userId && room.last_message && Number(room.last_message.sender_id) === userId) {
           return { ...room, last_message: { ...room.last_message, is_read: 1 } };
         }
@@ -88,7 +88,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
     }
   };
 
-  // ✅ Robust recipient + sender display name helpers (fixes “missing client names”)
+  // Robust recipient + sender display name helpers
   const getOtherUserId = (room) => {
     return Number(room.client_id) === userId ? Number(room.provider_id) : Number(room.client_id);
   };
@@ -117,7 +117,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
     const isMe = Number(lastMsg?.sender_id) === userId;
     if (isMe) return 'You';
 
-    // If not me, use the other participant name
+    // use the other participant name
     return getRecipientName(room);
   };
 
@@ -247,7 +247,7 @@ const ChatListModal = ({ onClose, inWidget = false, onRoomSelect }) => {
     <div className="chat-list-overlay" onClick={onClose}>
       <div className="chat-list-modal" onClick={e => e.stopPropagation()}>
         <div className="chat-list-header">
-          <h3>💬 Messages</h3>
+          <h3>Messages</h3>
           <button onClick={onClose} className="close-btn"><X size={20} /></button>
         </div>
         <div className="chat-list-body">{content}</div>

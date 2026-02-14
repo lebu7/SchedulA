@@ -60,7 +60,7 @@ function NotificationCenter() {
     };
   }, []);
 
-  // ✅ Positioning: fixed + clamp to viewport + update on scroll/resize while open
+  // Positioning: fixed + clamp to viewport + update on scroll/resize while open
   const updatePosition = useCallback(() => {
     if (!isOpen || !bellRef.current) return;
 
@@ -136,7 +136,7 @@ function NotificationCenter() {
     } catch {}
   };
 
-  // 🔥 CHAT-AWARE CLICK HANDLER (unchanged)
+  // CHAT-AWARE CLICK HANDLER (unchanged)
   const handleNotificationClick = async (notif) => {
     if (!notif.is_read) markAsRead(notif.id);
     setIsOpen(false);
@@ -183,14 +183,12 @@ function NotificationCenter() {
   };
 
   const toggleOpen = (e) => {
-    // ✅ Use onClick (not onMouseDown) so we don’t interfere with other header clicks
     e.stopPropagation();
     setIsOpen((prev) => !prev);
   };
 
   return (
     <>
-      {/* ✅ Hard-sized wrapper so it never overlaps the avatar */}
       <div className="notification-wrapper" ref={bellRef}>
         <button
           type="button"

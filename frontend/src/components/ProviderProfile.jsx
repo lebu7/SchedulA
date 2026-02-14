@@ -20,7 +20,7 @@ const ProviderProfile = ({ user }) => {
     const [showBookingModal, setShowBookingModal] = useState(false);
     const [isFavorite, setIsFavorite] = useState(false);
 
-    // ✅ Modal & Filtering State
+    // Modal & Filtering State
     const [viewReviewsService, setViewReviewsService] = useState(null);
     const [initialRatingFilter, setInitialRatingFilter] = useState('all');
 
@@ -72,14 +72,14 @@ const ProviderProfile = ({ user }) => {
                 contextId: null
             });
 
-            // ✅ Pass recipientName so ChatModal shows the actual provider name
+            // Pass recipientName so ChatModal shows the actual provider name
             const recipientName = data.provider.business_name || data.provider.name;
 
             window.dispatchEvent(new CustomEvent('openChatRoom', {
                 detail: {
                     room: res.data.room,
                     context: { name: "General Inquiry" },
-                    recipientName  // <-- updated line
+                    recipientName
                 }
             }));
         } catch (err) {
@@ -98,7 +98,7 @@ const ProviderProfile = ({ user }) => {
         setShowBookingModal(true);
     };
 
-    // ✅ FIXED: Logic to open modal with pre-applied filter
+    // FIXED: Logic to open modal with pre-applied filter
     const handleRatingClick = (e, service, ratingValue = 'all') => {
         e.stopPropagation();
         setInitialRatingFilter(ratingValue);
@@ -127,7 +127,7 @@ const ProviderProfile = ({ user }) => {
                         <div className="header-meta-row">
                             <span className="joined-tag">Joined {new Date(provider.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}</span>
                             
-                            {/* ✅ General rating pill - Clickable to see ALL reviews */}
+                            {/* General rating pill - Clickable to see ALL reviews */}
                             <div 
                                 className="provider-rating-pill" 
                                 onClick={(e) => handleRatingClick(e, { id: 'provider', name: provider.business_name }, 'all')}
@@ -176,7 +176,7 @@ const ProviderProfile = ({ user }) => {
                                 <div className="service-info">
                                     <div className="mini-service-header">
                                         <h3>{service.name}</h3>
-                                        {/* ✅ Service rating - Clickable to see reviews for this specific star count */}
+                                        {/* Service rating - Clickable to see reviews for this specific star count */}
                                         {service.avg_rating && (
                                             <div 
                                                 className="service-rating-mini" 
@@ -262,7 +262,7 @@ const ProviderProfile = ({ user }) => {
                 />
             )}
 
-            {/* ✅ Reviews Modal Rendering */}
+            {/* Reviews Modal Rendering */}
             {viewReviewsService && (
                 <ReviewListModal
                     serviceId={viewReviewsService.id}

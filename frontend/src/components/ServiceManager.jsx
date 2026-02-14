@@ -283,7 +283,6 @@ function ServiceManager({ user }) {
             const themeClass = getCategoryClass(service.category);
             const rating = service.avg_rating ? Number(service.avg_rating).toFixed(1) : null;
 
-            // ✅ Issue #3 fix: make closed cards truly grey/black (not just dim)
             const closedCardStyle = isClosed
               ? {
                   filter: "grayscale(1) saturate(0)",
@@ -478,7 +477,7 @@ function ServiceManager({ user }) {
           </div>
         )}
 
-        {/* 3. PREVIEW MODAL - UPDATED DESIGN MATCH WITH ADD-ONS RESTORED */}
+        {/* 3. PREVIEW MODAL */}
         {previewService && (
             <div className="modal-overlay" onClick={() => setPreviewService(null)}>
                 <div className="preview-modal-content" onClick={(e) => e.stopPropagation()}>

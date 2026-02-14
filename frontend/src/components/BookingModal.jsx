@@ -14,7 +14,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const [slots, setSlots] = useState([]);
   const [notes, setNotes] = useState("");
 
-  // ✅ NEW: Walk-In Client Name State
+  // Walk-In Client Name State
   const [walkInName, setWalkInName] = useState("");
 
   // UI States
@@ -38,20 +38,16 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const [walkInAmount, setWalkInAmount] = useState(service?.price || "");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
 
-  // ✅ Ref for addon dropdown (for reliable outside-click close)
   const addonDropdownRef = useRef(null);
 
   const realServiceId = serviceMeta.service_id || serviceMeta.id;
 
-  // ✅ (19) Lock background scroll while modal is open
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     const prevPaddingRight = document.body.style.paddingRight;
 
     document.body.style.overflow = "hidden";
 
-    // Optional: prevent layout shift if scrollbar disappears
-    // Only apply if scrollbar is present
     const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
     if (scrollBarWidth > 0) {
       document.body.style.paddingRight = `${scrollBarWidth}px`;
@@ -63,7 +59,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     };
   }, []);
 
-  // ✅ 0. FETCH FULL SERVICE DETAILS
+  // FETCH FULL SERVICE DETAILS
   useEffect(() => {
     const fetchServiceDetails = async () => {
       if (service.service_id) {
@@ -227,7 +223,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
 
       const isFull = overlapCount >= serviceCapacity;
 
-      // ✅ Dynamic Past Logic: Disable slot if it's today and time has passed
+      // Dynamic Past Logic: Disable slot if it's today and time has passed
       let isPast = false;
       const isToday = new Date(selectedDate).toDateString() === now.toDateString();
 
@@ -257,7 +253,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     }
   };
 
-  // ✅ (20) Close addon dropdown when clicking anywhere else/outside dropdown
+  // Close addon dropdown when clicking anywhere else/outside dropdown
   useEffect(() => {
     const handleOutside = (event) => {
       if (!showAddonDropdown) return;
@@ -296,7 +292,7 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     try {
       const appointmentDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
 
-      // ✅ Combine Client Name into Notes for storage
+      // Combine Client Name into Notes for storage
       // Format: "Walk-In Client: [Name] | [Other Notes]"
       const combinedNotes = `Walk-In Client: ${walkInName} | ${notes.trim()}`;
 
@@ -434,7 +430,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
   const payDisabled = !selectedDate || !selectedTime || processingPayment;
 
   const getMinDate = () => {
-    // ✅ Enabled same-day booking by returning today
     return new Date().toISOString().split("T")[0];
   };
 
@@ -450,7 +445,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
     <div
       className="modal-overlay"
       onClick={() => {
-        // ✅ (17) Don’t allow closing while processing
         if (!disableClose) onClose?.();
       }}
     >
@@ -467,7 +461,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
             </span>
           </div>
 
-          {/* ✅ Close button is top-right INSIDE the modal (not global screen X) */}
           <button
             className="close-btn"
             onClick={() => {
@@ -557,7 +550,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                       marginBottom: "20px",
                     }}
                   >
-                    {/* ✅ NEW: Walk-In Client Name Input */}
                     <div className="form-group">
                       <label
                         style={{
@@ -655,7 +647,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
               </div>
             ) : (
               <div className="step-2">
-                {/* Step 2 Content (Unchanged except policy placement + dropdown ref) */}
                 <div className="two-column-layout">
                   <div className="column left-col">
                     <h4 className="section-title">2. Add-ons</h4>
@@ -794,7 +785,6 @@ function BookingModal({ service, user, onClose, onBookingSuccess, isWalkIn = fal
                   </div>
                 </div>
 
-                {/* ✅ (21) Policy moved OUTSIDE payment container, full-width */}
                 <div className="booking-policy-container">
                   <div className="policy-text">
                     <strong>Policy:</strong> Refunds are processed for cancellations made{" "}

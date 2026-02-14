@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { authService } from '../services/auth'
 
 function Login({ onLogin }) {
-  // 🆕 Changed 'email' to 'identifier' to accept both Email and Phone
   const [formData, setFormData] = useState({
     identifier: '',
     password: ''

@@ -347,6 +347,6 @@
   }
   .col-notes,
   .col-price {
-    display: none; /* Hide less critical columns on very small screens */
+    display: none;
   }
 }

@@ -5,7 +5,7 @@ import api from '../services/auth';
 import { MessageSquare, Bell, Clock, User, Briefcase } from 'lucide-react'; 
 import './Settings.css';
 
-// 🏙️ Nairobi Suburbs Data
+// Nairobi Suburbs Data
 const NAIROBI_SUBURBS = {
   A: ["Airbase"],
   B: ["Baba Dogo"],
@@ -32,7 +32,7 @@ const NAIROBI_SUBURBS = {
 const Settings = ({ user, setUser }) => {
   const location = useLocation(); 
 
-  // ✅ MOBILE DETECTION (for responsive layout without touching CSS yet)
+  // MOBILE DETECTION (for responsive layout without touching CSS yet)
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(max-width: 768px)').matches;
@@ -84,12 +84,12 @@ const Settings = ({ user, setUser }) => {
   
   const [notifications, setNotifications] = useState({
     confirmation: true, acceptance: true, reminder: true, cancellation: true, receipt: true, new_request: true, refund: true,
-    chat_msg: true // ✅ ADDED: Default to true for Chat SMS Reminders
+    chat_msg: true 
   });
 
   const [inAppPrefs, setInAppPrefs] = useState({
     booking_alerts: true, system_updates: true, payment_alerts: true, reminders: true,
-    review_prompts: true // ✅ ADDED: Default to true
+    review_prompts: true 
   });
   
   const [hours, setHours] = useState({ 
@@ -133,7 +133,6 @@ const Settings = ({ user, setUser }) => {
     }
   }, [user]);
 
-  // ✅ IMPROVED COMPARISON LOGIC
   useEffect(() => {
     if (!user) return;
 
@@ -161,7 +160,7 @@ const Settings = ({ user, setUser }) => {
     }
   }, [location.state]);
 
-  // ✅ AUTOMATIC +254 HANDLER
+  // AUTOMATIC +254 HANDLER
   const handlePhoneChange = (e) => {
     let val = e.target.value;
     
@@ -172,7 +171,7 @@ const Settings = ({ user, setUser }) => {
     
     // Only allow digits after the prefix
     const prefix = '+254';
-    const rest = val.slice(4).replace(/\D/g, '').slice(0, 9); // Limit to 9 digits after prefix
+    const rest = val.slice(4).replace(/\D/g, '').slice(0, 9);
     
     setProfile({ ...profile, phone: prefix + rest });
     setHasChanges(true);
@@ -295,7 +294,7 @@ const Settings = ({ user, setUser }) => {
 
   const smallInputStyle = { padding: '8px 10px', fontSize: '13px', height: 'auto' };
 
-  // ✅ RESPONSIVE WRAPPER STYLES (only affect mobile)
+  // RESPONSIVE WRAPPER STYLES (only affect mobile)
   const profileLayoutStyle = isMobile
     ? { display: 'flex', flexDirection: 'column', gap: '18px' }
     : undefined;
@@ -338,7 +337,6 @@ const Settings = ({ user, setUser }) => {
               </div>
               <div className="form-group">
                 <label>Mobile Number</label>
-                {/* ✅ UPDATED INPUT WITH PREFIX HANDLER */}
                 <input 
                   type="tel" 
                   value={profile.phone} 
@@ -373,7 +371,7 @@ const Settings = ({ user, setUser }) => {
             </form>
           </div>
 
-          {/* ✅ Password section stays BELOW on mobile because layout becomes column */}
+          {/* Password section stays BELOW on mobile because layout becomes column */}
           <div className="profile-column password-column">
             <h3>Change Password</h3>
             <form onSubmit={handlePasswordChange} className="settings-form">
@@ -432,7 +430,6 @@ const Settings = ({ user, setUser }) => {
                   <Toggle label="Booking Confirmation" desc="Sent immediately after booking." checked={true} disabled />
                   <Toggle label="Booking Accepted" desc="When provider confirms." checked={notifications.acceptance} onChange={() => handleNotificationToggle('acceptance')} />
                   
-                  {/* ✅ ADDED: Chat Messages Toggle */}
                   <Toggle label="Chat Messages" desc="Alert when you receive a message while offline." checked={notifications.chat_msg !== false} onChange={() => handleNotificationToggle('chat_msg')} />
                   
                   <Toggle label="Reminders" desc="24 hours before appointment." checked={notifications.reminder} onChange={() => handleNotificationToggle('reminder')} />
@@ -451,7 +448,6 @@ const Settings = ({ user, setUser }) => {
                   <Toggle label="Payment Alerts" desc="Confirmations of deposits." checked={inAppPrefs.payment_alerts} onChange={() => handleInAppToggle('payment_alerts')} />
                   <Toggle label="Reminders" desc="In-app appointment reminders." checked={inAppPrefs.reminders} onChange={() => handleInAppToggle('reminders')} />
                   
-                  {/* ✅ ADDED: Review Prompt Toggle - ONLY FOR CLIENTS */}
                   {user?.user_type === 'client' && (
                     <Toggle label="Review Prompts" desc="Reminders to rate completed services." checked={inAppPrefs.review_prompts !== false} onChange={() => handleInAppToggle('review_prompts')} />
                   )}
@@ -466,7 +462,7 @@ const Settings = ({ user, setUser }) => {
              <div style={{marginBottom: '25px', paddingBottom: '20px', borderBottom: '1px dashed #e2e8f0'}}>
                 <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '15px'}}>📍 Location (Required)</h4>
 
-                {/* ✅ MOBILE: stack Suburb then Address */}
+                {/* MOBILE: stack Suburb then Address */}
                 <div style={businessLocationRowStyle}>
                     <div className="form-group" style={{flex: 1}}>
                         <label>Suburb *</label>
@@ -504,7 +500,7 @@ const Settings = ({ user, setUser }) => {
                 </div>
              </div>
 
-             {/* ✅ MOBILE: stack Mon-Fri Hours then Weekend Ops */}
+             {/* MOBILE: stack Mon-Fri Hours then Weekend Ops */}
              <div style={businessHoursRowStyle}>
                 <div style={{flex: 1}}>
                     <h4 style={{fontSize: '0.95rem', color: '#334155', marginBottom: '15px'}}>⏰ Mon-Fri Hours</h4>

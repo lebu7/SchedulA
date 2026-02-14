@@ -12,7 +12,6 @@ const ReviewModal = ({ appointment, onClose, onSuccess, user }) => {
 
     const isProvider = user?.user_type === 'provider';
 
-    // ✅ (19) Stop background scroll when modal is open
     useEffect(() => {
         const prevOverflow = document.body.style.overflow;
         const prevPaddingRight = document.body.style.paddingRight;
@@ -65,7 +64,6 @@ const ReviewModal = ({ appointment, onClose, onSuccess, user }) => {
             }}
         >
             <div className="review-modal-content" onClick={(e) => e.stopPropagation()}>
-                {/* ✅ (18) Themed header color for Review modal */}
                 <div
                     className="modal-header"
                     style={{
@@ -78,8 +76,6 @@ const ReviewModal = ({ appointment, onClose, onSuccess, user }) => {
                             ? "Review from Client"
                             : (isUpdate ? "Update your Review" : "Rate your experience")}
                     </h3>
-
-                    {/* ✅ (17) Close button stays top-right of THIS modal header, disabled while loading */}
                     <button
                         className="close-btn"
                         onClick={() => {

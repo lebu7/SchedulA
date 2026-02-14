@@ -3,8 +3,6 @@
   position: relative;
   display: flex;
   align-items: center;
-
-  /* ✅ HARD LOCK SIZE so it never overlaps the avatar area */
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
@@ -25,12 +23,10 @@
   justify-content: center;
   flex-shrink: 0;
 
-  /* ✅ make it a real button visually */
+  /* make it a real button visually */
   border: none;
   background: transparent;
   padding: 0;
-
-  /* ✅ prevent weird overlay click issues */
   pointer-events: auto;
 }
 
@@ -72,13 +68,11 @@
   align-items: center;
   justify-content: center;
   border: 1px solid white;
-
-  /* ✅ keep badge from stretching */
   line-height: 1;
   box-sizing: border-box;
 }
 
-/* ✅ Dropdown Container (Portal Target) */
+/* Dropdown Container (Portal Target) */
 .notification-dropdown {
   width: min(340px, calc(100vw - 20px));
   max-width: calc(100vw - 20px);

@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 
-// ✅ 1. Import the Socket Context Provider
 import { SocketProvider } from './contexts/SocketContext'
 
 // Components
@@ -13,7 +12,6 @@ import Register from './components/Register'
 import Dashboard from './components/Dashboard'
 import ForgotPassword from './components/ForgotPassword'
 import ProviderProfile from './components/ProviderProfile' 
-// ✅ 3. Import the new Chat Widget
 import ChatWidget from './components/ChatWidget'
 
 // Services
@@ -59,7 +57,7 @@ function App() {
 
   return (
     <Router>
-      {/* ✅ 2. Wrap the application logic with SocketProvider */}
+      {/* Wrap the application logic with SocketProvider */}
       <SocketProvider user={user}>
         <div className="App">
           <Header user={user} onLogout={handleLogout} />
@@ -107,7 +105,6 @@ function App() {
             </Routes>
           </main>
 
-          {/* ✅ 4. ADD: Fixed Chat Widget (only shows when logged in) */}
           {user && <ChatWidget />}
         </div>
       </SocketProvider>

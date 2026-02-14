@@ -5,7 +5,6 @@
   position: fixed;
   bottom: 24px;
   right: 24px;
-  /* Matches Dashboard Welcome Section Gradient */
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #fff;
   border: none;
@@ -32,7 +31,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  background-color: #ef4444; /* Red-500 */
+  background-color: #ef4444;
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -62,7 +61,7 @@
   overflow: hidden;
   z-index: 2000;
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid #e2e8f0; /* Slate-200 */
+  border: 1px solid #e2e8f0;
 }
 
 @keyframes slideUp {
@@ -82,7 +81,6 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  /* Matches Dashboard Gradient */
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #fff;
   flex-shrink: 0;
@@ -129,7 +127,7 @@
 /* Online Status Text */
 .recipient-status-online {
   font-size: 11px;
-  color: #86efac; /* Green-300 (Lighter for contrast on Blue bg) */
+  color: #86efac;
   font-weight: 700;
   line-height: 1.2;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);

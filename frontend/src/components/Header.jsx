@@ -17,11 +17,11 @@ function Header({ user, onLogout }) {
     upcoming_services: 0,
   });
 
-  // ✅ Mobile dropdown ONLY
+  // Mobile dropdown ONLY
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileBtnRef = useRef(null);
 
-  // ✅ portal coords
+  // portal coords
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 210 });
 
   useEffect(() => {
@@ -55,7 +55,7 @@ function Header({ user, onLogout }) {
     window.dispatchEvent(new CustomEvent('toggleDashboardNav'));
   };
 
-  // ✅ Mobile: open same profile modal as desktop
+  // Mobile: open same profile modal as desktop
   const openProfileModalFromMobile = () => {
     setIsMobileMenuOpen(false);
     setShowModal(true);
@@ -66,7 +66,7 @@ function Header({ user, onLogout }) {
     onLogout?.();
   };
 
-  // ✅ Update portal position (and clamp to viewport)
+  // Update portal position (and clamp to viewport)
   const updateMobileMenuPosition = () => {
     if (!mobileBtnRef.current) return;
 
@@ -74,7 +74,7 @@ function Header({ user, onLogout }) {
     const width = 210;
     const padding = 10;
 
-    let left = rect.right - width; // align right edges
+    let left = rect.right - width;
     left = Math.max(padding, Math.min(left, window.innerWidth - width - padding));
 
     const top = rect.bottom + 12;
@@ -82,14 +82,14 @@ function Header({ user, onLogout }) {
     setMenuPos({ top, left, width });
   };
 
-  // ✅ when menu opens, position it
+  // when menu opens, position it
   useLayoutEffect(() => {
     if (!isMobileMenuOpen) return;
     updateMobileMenuPosition();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobileMenuOpen]);
 
-  // ✅ keep positioned on scroll/resize
+  // keep positioned on scroll/resize
   useEffect(() => {
     if (!isMobileMenuOpen) return;
 
@@ -106,7 +106,7 @@ function Header({ user, onLogout }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobileMenuOpen]);
 
-  // ✅ outside click close (works with portal)
+  // outside click close (works with portal)
   useEffect(() => {
     if (!isMobileMenuOpen) return;
 
@@ -153,7 +153,7 @@ function Header({ user, onLogout }) {
             <div className="user-menu">
               <NotificationCenter />
 
-              {/* ✅ DESKTOP: name + avatar (avatar opens profile modal) */}
+              {/* DESKTOP: name + avatar (avatar opens profile modal) */}
               <div className="user-info desktop-only">
                 <span className="user-name" title="View Profile">
                   {user.name.split(' ')[0]}
@@ -171,7 +171,7 @@ function Header({ user, onLogout }) {
                 </button>
               </div>
 
-              {/* ✅ MOBILE: avatar opens portal dropdown */}
+              {/* MOBILE: avatar opens portal dropdown */}
               <div className="mobile-user-area">
                 <button
                   ref={mobileBtnRef}
@@ -185,7 +185,7 @@ function Header({ user, onLogout }) {
                 </button>
               </div>
 
-              {/* ✅ DESKTOP LOGOUT BUTTON (RESTORED) */}
+              {/* DESKTOP LOGOUT BUTTON (RESTORED) */}
               <button onClick={onLogout} className="btn-logout desktop-only">
                 <LogOut size={18} />
                 <span>Logout</span>
@@ -204,7 +204,7 @@ function Header({ user, onLogout }) {
         </div>
       </header>
 
-      {/* ✅ MOBILE DROPDOWN PORTAL */}
+      {/* MOBILE DROPDOWN PORTAL */}
       {isMobileMenuOpen &&
         createPortal(
           <div
@@ -219,7 +219,7 @@ function Header({ user, onLogout }) {
               <div className="mobile-user-sub">({user?.user_type})</div>
             </div>
 
-            {/* ✅ Profile opens same modal as desktop */}
+            {/* Profile opens same modal as desktop */}
             <button type="button" className="mobile-user-item" onClick={openProfileModalFromMobile} role="menuitem">
               <User size={16} />
               <span>Profile</span>
@@ -233,7 +233,7 @@ function Header({ user, onLogout }) {
           document.body
         )}
 
-      {/* ✅ Profile Modal */}
+      {/* Profile Modal */}
       {showModal && user && (
         <div className="modal-overlay" onPointerDown={() => setShowModal(false)}>
           <div className="modal-content profile-modal" onPointerDown={(e) => e.stopPropagation()}>

@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { authService } from '../services/auth'
-import { Briefcase, MapPin, Check } from 'lucide-react'; // Icons
+import { Briefcase, MapPin, Check } from 'lucide-react';
 
-// 🏙️ Nairobi Suburbs Data
+// Nairobi Suburbs Data
 const NAIROBI_SUBURBS = {
   A: ["Airbase"],
   B: ["Baba Dogo"],
@@ -36,9 +36,9 @@ function Register({ onLogin }) {
     dob: '',    
     user_type: 'client',
     business_name: '',
-    suburb: '',           // 🆕
-    business_address: '', // 🆕
-    google_maps_link: ''  // 🆕
+    suburb: '',           
+    business_address: '', 
+    google_maps_link: ''  
   })
   
   const [confirmPassword, setConfirmPassword] = useState('') 
@@ -50,7 +50,7 @@ function Register({ onLogin }) {
   const [generalError, setGeneralError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // 🆕 Modal State
+  // Modal State
   const [showProviderModal, setShowProviderModal] = useState(false);
 
   const handleChange = (e) => {
@@ -59,7 +59,7 @@ function Register({ onLogin }) {
     if (name === 'user_type') {
         setFormData({ ...formData, user_type: value });
         if (value === 'provider') {
-            setShowProviderModal(true); // 🚨 Trigger Modal
+            setShowProviderModal(true);
         }
     } else {
         setFormData({ ...formData, [name]: value });
@@ -120,7 +120,7 @@ function Register({ onLogin }) {
     // Provider Validation
     if (formData.user_type === 'provider' && !formData.business_name) {
         setGeneralError("Please enter your Business Details.");
-        setShowProviderModal(true); // Re-open modal if missing
+        setShowProviderModal(true);
         setLoading(false); 
         return;
     }
@@ -211,7 +211,7 @@ function Register({ onLogin }) {
             </select>
           </div>
 
-          {/* 🆕 Edit Button if Provider details exist but modal closed */}
+          {/* Edit Button if Provider details exist but modal closed */}
           {formData.user_type === 'provider' && (
             <div style={{marginBottom: '20px', padding: '10px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
                 <div>
@@ -232,7 +232,7 @@ function Register({ onLogin }) {
         <p>Already have an account? <a href="/login">Login here</a></p>
       </div>
 
-      {/* 🆕 PROVIDER DETAILS MODAL */}
+      {/* PROVIDER DETAILS MODAL */}
       {showProviderModal && (
         <div style={modalOverlayStyle} onClick={() => { if(formData.business_name) setShowProviderModal(false); }}> 
           {/* Click outside closes ONLY if data entered, else forces entry? Let's allow close but require business name at submit */}

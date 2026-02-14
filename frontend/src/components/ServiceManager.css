@@ -38,7 +38,7 @@
 
 .header-actions {
   display: flex;
-  gap: 10px; /* Reduced gap between buttons */
+  gap: 10px; 
 }
 
 /* --- BUTTON STYLES (Extra Compact Soft Pill) --- */
@@ -47,24 +47,23 @@
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px; /* Tighter gap */
-  padding: 10px 16px; /* Much tighter padding */
+  gap: 8px; 
+  padding: 10px 16px; 
   border-radius: 50px !important;
   font-weight: 600;
-  font-size: 13px; /* Standard visible size */
+  font-size: 13px; 
   line-height: 1;
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  height: 42px; /* Fixed compact height */
+  height: 42px; 
 }
 
-/* ✅ Issue #4: Header buttons should be smaller + almost boxes */
 .manager-header .header-actions .btn {
-  border-radius: 10px !important; /* ⬅️ boxy instead of pill */
-  height: 38px; /* ⬅️ slightly shorter */
-  padding: 8px 12px; /* ⬅️ tighter */
+  border-radius: 10px !important; 
+  height: 38px; 
+  padding: 8px 12px; 
   font-size: 12.5px;
   gap: 6px;
 }
@@ -82,8 +81,8 @@
 
 /* 2. Close Business (Soft Red Pill) - When business is OPEN */
 .btn-close-biz {
-  background-color: #fff1f2; /* Light Red Background */
-  color: #e11d48; /* Red Text */
+  background-color: #fff1f2; 
+  color: #e11d48; 
   border: 1px solid transparent;
 }
 .btn-close-biz:hover {
@@ -93,12 +92,12 @@
 
 /* When Business is CLOSED -> Button to Open it (Light Green Pill) */
 .btn-open-biz {
-  background-color: #dcfce7; /* Light Green */
-  color: #16a34a; /* Green Text */
+  background-color: #dcfce7;
+  color: #16a34a; 
   border: 1px solid transparent;
 }
 .btn-open-biz:hover {
-  background-color: #bbf7d0; /* Slightly darker on hover */
+  background-color: #bbf7d0; 
   color: #15803d;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(22, 163, 74, 0.15);
@@ -119,7 +118,7 @@
    ========================================= */
 .services-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* ✅ Forced 3 column layout */
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
@@ -139,7 +138,6 @@
   border-color: #cbd5e1;
 }
 
-/* ✅ Issue #3: True black/grey state when closed (not “still colored”) */
 .provider-service-card.dimmed {
   filter: grayscale(1) saturate(0) contrast(0.95);
   opacity: 0.8;
@@ -163,7 +161,7 @@
   justify-content: space-between;
   align-items: flex-start;
   color: white;
-  min-height: 85px; /* Added for consistency */
+  min-height: 85px; 
 }
 
 /* Category Colors */
@@ -187,7 +185,7 @@
 
 .header-top h3 {
   margin: 0;
-  font-size: 16px; /* Optimized for 3-column width */
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.2;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -229,7 +227,6 @@
   backdrop-filter: blur(4px);
 }
 
-/* ✅ RATING UI (Right-aligned minimalist style) */
 .rating-badge-minimal {
   display: flex;
   align-items: center;
@@ -256,7 +253,7 @@
 
 /* Card Body */
 .provider-card-body {
-  padding: 15px; /* Tighter padding for 3-column grid */
+  padding: 15px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -313,6 +310,7 @@
 .addons-wrapper {
   margin-top: auto;
 }
+
 .toggle-addons-link {
   background: none;
   border: none;
@@ -327,6 +325,7 @@
   transition: color 0.2s;
   text-decoration: none !important;
 }
+
 .toggle-addons-link:hover {
   color: #1d4ed8;
 }

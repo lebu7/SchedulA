@@ -7,8 +7,8 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(15, 23, 42, 0.65); /* Dark slate overlay */
-  -webkit-backdrop-filter: blur(5px); /* Modern glass effect */
+  background-color: rgba(15, 23, 42, 0.65); 
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   display: flex;
   justify-content: center;
@@ -16,8 +16,6 @@
   z-index: 1200;
   padding: 16px;
   animation: fadeIn 0.2s ease-out;
-
-  /* ✅ (19) Prevent background scroll interactions on iOS/trackpads */
   overscroll-behavior: contain;
 }
 
@@ -25,7 +23,7 @@
   background: #ffffff;
   border-radius: 16px;
   width: 100%;
-  max-width: 850px; /* Wide enough for 2 columns */
+  max-width: 850px; 
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -65,10 +63,10 @@
   justify-content: space-between;
   align-items: center;
   background: #fff;
-  flex-shrink: 0; /* Header stays fixed */
+  flex-shrink: 0;
 }
 
-/* ✅ (18) Booking modal header color theme hook */
+
 .booking-modal-header {
   background: linear-gradient(180deg, #eff6ff 0%, #ffffff 85%);
   border-bottom: 1px solid #dbeafe;
@@ -78,7 +76,6 @@
   color: #0f172a;
 }
 
-/* ✅ Walk-in variant tint */
 .booking-modal-header.walkin {
   background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 85%);
   border-bottom: 1px solid #bbf7d0;
@@ -114,8 +111,6 @@
   cursor: pointer;
   transition: all 0.2s;
   line-height: 1;
-
-  /* ✅ Keep it aligned on small screens */
   flex: 0 0 auto;
 }
 
@@ -134,12 +129,9 @@
 ========================================= */
 .modal-body {
   overflow-y: auto;
-  flex: 1; /* Takes remaining height */
+  flex: 1;
   padding: 0;
   background: #fff;
-
-  /* ✅ (19) Better inertial scroll on iOS */
-  /* Prevent scroll chaining (bounce effect on parent) */
   overscroll-behavior: contain;
 }
 
@@ -291,7 +283,7 @@
 /* Left Column: Addons */
 .relative-container {
   position: relative;
-  z-index: 50; /* Above payment column */
+  z-index: 50; 
 }
 
 .addon-dropdown-toggle {
@@ -311,7 +303,6 @@
     box-shadow 0.2s;
 }
 
-/* ✅ Slight “open” affordance */
 .addon-dropdown-toggle.active {
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
@@ -330,7 +321,6 @@
   max-height: 240px;
   overflow-y: auto;
 
-  /* ✅ Avoid overlay scroll chain */
   overscroll-behavior: contain;
 }
 
@@ -480,7 +470,6 @@
   border-top: 1px solid #f1f5f9;
 }
 
-/* ✅ (21) Policy full-width container (outside payment column) */
 .booking-policy-container {
   margin-top: 18px;
   padding: 0 32px 18px;
@@ -509,7 +498,7 @@
   background: #fff;
   border-top: 1px solid #f1f5f9;
   display: flex;
-  justify-content: space-between; /* Space out Back and Next */
+  justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
 }
@@ -556,7 +545,7 @@
 }
 
 .pay-btn-wrapper {
-  min-width: 240px; /* Ensure Pay button has width */
+  min-width: 240px;
 }
 
 /* Error Message */
@@ -598,7 +587,6 @@
     gap: 32px;
   }
 
-  /* ✅ (21) Policy padding matches mobile form padding */
   .booking-policy-container {
     padding: 0 20px 18px;
   }
@@ -619,7 +607,6 @@
     min-width: unset;
   }
 
-  /* ✅ Close button stays tidy on mobile */
   .close-btn {
     width: 34px;
     height: 34px;

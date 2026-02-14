@@ -80,7 +80,7 @@
 
 .search-box input {
   width: 100%;
-  padding: 9px 30px 9px 34px; /* Left padding for icon, right for clear btn */
+  padding: 9px 30px 9px 34px; 
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   font-size: 13px;
@@ -132,7 +132,7 @@
   font-size: 13px;
   color: #334155;
   cursor: pointer;
-  appearance: none; /* Hides default arrow */
+  appearance: none;
   transition: all 0.2s;
   font-weight: 500;
   min-width: 160px;
@@ -887,7 +887,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.75rem; /* 12px */
+  font-size: 0.75rem; 
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 6px;
@@ -895,28 +895,28 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   line-height: 1;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow for depth */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); 
 }
 
 /* LOW RISK - Vibrant Green */
 .risk-badge.low {
-  background-color: #dcfce7; /* Light Green */
-  color: #14532d; /* Dark Forest Green */
-  border: 1px solid #22c55e; /* Strong Green Border */
+  background-color: #dcfce7; 
+  color: #14532d; 
+  border: 1px solid #22c55e; 
 }
 
 /* MEDIUM RISK - High Contrast Amber */
 .risk-badge.medium {
-  background-color: #fffbeb; /* Light Yellow */
-  color: #b45309; /* Dark Amber text */
-  border: 1px solid #f59e0b; /* Golden Border */
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #f59e0b; 
 }
 
 /* HIGH RISK - Urgent Red */
 .risk-badge.high {
-  background-color: #fef2f2; /* Light Red */
-  color: #991b1b; /* Dark Red Text */
-  border: 1px solid #ef4444; /* Bright Red Border */
+  background-color: #fef2f2; 
+  color: #991b1b; 
+  border: 1px solid #ef4444; 
   animation: pulse-red 2s infinite;
 }
 
@@ -943,8 +943,8 @@
    8. WALK-IN BADGE
    ========================================= */
 .walk-in-badge {
-  background-color: #f3e8ff; /* Light purple */
-  color: #7e22ce; /* Dark purple */
+  background-color: #f3e8ff; 
+  color: #7e22ce; 
   border: 1px solid #d8b4fe;
   padding: 2px 8px;
   border-radius: 12px;

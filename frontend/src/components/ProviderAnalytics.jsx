@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import api from "../services/auth"; // Your axios instance
+import api from "../services/auth";
 import {
   BarChart,
   Bar,
@@ -31,7 +31,6 @@ const ProviderAnalytics = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // 🔄 RENAMED ROUTES to avoid ad-blockers blocking "analytics"
         const [summaryRes, trendsRes] = await Promise.all([
           api.get("/insights/summary"),
           api.get("/insights/trends"),

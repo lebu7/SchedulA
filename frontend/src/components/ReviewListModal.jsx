@@ -11,7 +11,7 @@ const ReviewListModal = ({ serviceId, serviceName, onClose, user, preFilter = 'a
     const [serviceDetails, setServiceDetails] = useState(null);
     const [loading, setLoading] = useState(true);
     
-    // ✅ Initializing state with the preFilter prop
+    // Initializing state with the preFilter prop
     const [filterRating, setFilterRating] = useState(preFilter);
     const [sortBy, setSortBy] = useState('newest');
 
@@ -25,7 +25,7 @@ const ReviewListModal = ({ serviceId, serviceName, onClose, user, preFilter = 'a
         };
     }, []);
 
-    // ✅ Sync state if prop changes (e.g. user clicks a different rating while modal logic resets)
+    // Sync state if prop changes (e.g. user clicks a different rating while modal logic resets)
     useEffect(() => {
         setFilterRating(preFilter);
     }, [preFilter, serviceId]);
@@ -36,7 +36,7 @@ const ReviewListModal = ({ serviceId, serviceName, onClose, user, preFilter = 'a
             try {
                 let endpoint = `/reviews/service/${serviceId}`;
                 
-                // ✅ Handle Provider-wide reviews fetch
+                // Handle Provider-wide reviews fetch
                 if (serviceId === 'provider') {
                     // Get provider ID from URL params as a safe fallback
                     const pathParts = window.location.pathname.split('/');
@@ -47,7 +47,6 @@ const ReviewListModal = ({ serviceId, serviceName, onClose, user, preFilter = 'a
                 const reviewsRes = await api.get(endpoint);
                 setReviews(reviewsRes.data.reviews || []);
 
-                // Only fetch service details if we aren't in the generic 'provider' mode
                 if (serviceId !== 'provider') {
                     const servicesRes = await api.get('/services');
                     const currentService = servicesRes.data.services.find(s => s.id === serviceId);

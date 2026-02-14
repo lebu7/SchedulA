@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden; /* Ensure content stays in modal */
+  overflow: hidden; 
 }
 
 .wide-modal {
@@ -192,7 +192,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 14px; /* Matches MapPin size */
+  width: 14px; 
 }
 
 /* Force override standard ChatButton styles to make it tiny */
@@ -501,7 +501,7 @@
   font-size: 1rem;
   margin-bottom: 25px;
   font-weight: 700;
-  height: 1.2rem; /* Prevents layout jump when text changes */
+  height: 1.2rem; 
 }
 
 /* Form Elements */
@@ -538,7 +538,7 @@
   border-radius: 10px;
 }
 .review-modal-content .modal-header {
-  position: relative; /* anchor for absolute children */
+  position: relative;
 }
 
 .review-modal-content .close-btn {

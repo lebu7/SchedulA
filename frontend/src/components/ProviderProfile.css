@@ -54,16 +54,15 @@
   font-size: 14px;
 }
 
-/* ✅ UPDATED: Premium Rating Pill Styling */
 .provider-rating-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #fffbeb; /* Amber-50 */
+  background: #fffbeb;
   padding: 6px 12px;
   border-radius: 20px;
-  border: 1px solid #fcd34d; /* Amber-300 */
-  color: #b45309; /* Amber-700 */
+  border: 1px solid #fcd34d;
+  color: #b45309;
   font-size: 0.9rem;
 }
 
@@ -73,7 +72,7 @@
 }
 
 .provider-rating-pill .review-count {
-  color: #92400e; /* Amber-800 */
+  color: #92400e;
   opacity: 0.8;
   font-size: 0.85rem;
 }
@@ -174,7 +173,6 @@
   color: #1e293b;
 }
 
-/* ✅ UPDATED: Service Rating Mini */
 .service-rating-mini {
   display: inline-flex;
   align-items: center;

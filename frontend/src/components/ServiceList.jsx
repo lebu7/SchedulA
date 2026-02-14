@@ -13,7 +13,7 @@ import {
 } from "lucide-react"; 
 import "./ServiceList.css";
 
-// 🏙️ Nairobi Suburbs Data
+// Nairobi Suburbs Data
 const NAIROBI_SUBURBS = {
   A: ["Airbase"],
   B: ["Baba Dogo"],
@@ -69,13 +69,10 @@ function ServiceList({ user }) {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [subServices, setSubServices] = useState({});
 
-  // 🆕 Location Modal State
   const [mapService, setMapService] = useState(null);
 
-  // ✅ Reviews Modal State
   const [viewReviewsService, setViewReviewsService] = useState(null);
 
-  // ❤️ Favorites State
   const [favoriteIds, setFavoriteIds] = useState(new Set());
 
   const { roomUnreadCounts, resetRoomUnread } = useSocket();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../services/auth";
-import "./BookingModal.css"; // Reuse existing styles
+import "./BookingModal.css"; 
 
 function RescheduleModal({ appointment, onClose, onSuccess }) {
   const [selectedDate, setSelectedDate] = useState("");
@@ -8,9 +8,8 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false); // 🔒 Lock state for double-submit prevention
+  const [saving, setSaving] = useState(false); 
 
-  // ✅ (19) Stop background scroll when modal is open
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     const prevPaddingRight = document.body.style.paddingRight;
@@ -75,7 +74,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     const [openH, openM] = openTime.split(":").map(Number);
     const [closeH, closeM] = closeTime.split(":").map(Number);
 
-    // ✅ Base time generation on the selected date (prevents wrong-day times)
     const current = new Date(selectedDate);
     current.setHours(openH, openM, 0, 0);
 
@@ -92,7 +90,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
       );
       const timeStringEnd = slotEndTime.toTimeString().slice(0, 5);
 
-      // Respect booked ranges (keeps existing behavior but actually uses the data)
       const overlapCount = (bookedRanges || []).filter((booking) => {
         return (
           (timeString >= booking.start && timeString < booking.end) ||
@@ -121,7 +118,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     try {
       onClose?.();
     } catch (e) {
-      // ignore
     }
   };
 
@@ -129,7 +125,7 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     try {
       await onSuccess?.();
     } catch (e) {
-      // ✅ Even if refresh fails, we already closed the modal.
+      // Even if refresh fails, we already closed the modal.
       console.warn("onSuccess failed:", e);
     }
   };
@@ -150,7 +146,7 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
 
       alert("Appointment rescheduled successfully!");
 
-      // ✅ Close FIRST (so UI always closes), then refresh in the background
+      // Close FIRST (so UI always closes), then refresh in the background
       safeClose();
       await safeSuccess();
     } catch (err) {
@@ -159,11 +155,10 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     }
   };
 
-  // ✅ Reject handler (closes modal ONLY if the reject update succeeded)
+  // Reject handler (closes modal ONLY if the reject update succeeded)
   const handleRejectReschedule = async () => {
     if (saving) return;
 
-    // Try common field names (use whichever you set from backend)
     const oldDateISO =
       appointment?.old_appointment_date ||
       appointment?.original_appointment_date ||
@@ -197,7 +192,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
 
       alert("Reschedule rejected. Appointment reverted to the original time.");
 
-      // ✅ Close FIRST (so it always closes if API succeeded)
       safeClose();
       await safeSuccess();
     } catch (err) {
@@ -212,7 +206,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
     return today.toISOString().split("T")[0];
   };
 
-  // ✅ Only show Reject button when backend provided an "old/original" date to revert to
   const canRejectReschedule = !!(
     appointment?.old_appointment_date ||
     appointment?.original_appointment_date ||
@@ -235,7 +228,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
         <div
           className="modal-header booking-modal-header"
           style={{
-            // ✅ (18) Colored header for Reschedule
             background: "linear-gradient(180deg, #fff7ed 0%, #ffffff 85%)",
             borderBottom: "1px solid #fed7aa",
           }}
@@ -244,8 +236,6 @@ function RescheduleModal({ appointment, onClose, onSuccess }) {
             <h3 style={{ margin: 0 }}>Reschedule Appointment</h3>
             <span className="subtitle">Select a new date and time</span>
           </div>
-
-          {/* ✅ (17) Close button stays in top-right of this modal (and disabled while saving) */}
           <button
             className="close-btn"
             onClick={() => {

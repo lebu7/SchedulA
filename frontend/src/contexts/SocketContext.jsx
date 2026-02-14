@@ -83,7 +83,7 @@ const handlers = {
     fetchUnreadCount();
   },
 
-  // ✅ Per-room increments (supports backend: room_id) + ignores my own outgoing messages
+  // Per-room increments (supports backend: room_id) + ignores my own outgoing messages
   new_message: (msg) => {
     const roomId = Number(msg?.roomId ?? msg?.room_id);
     if (!roomId) return;
@@ -106,7 +106,7 @@ const handlers = {
   user_connected: (userId) =>
     setOnlineUsers((prev) => new Set(prev).add(Number(userId))),
 
-  // ✅ Backend sends: { userId, lastSeen }, but sometimes you may emit just userId
+  // Backend sends: { userId, lastSeen }, but sometimes you may emit just userId
   user_disconnected: (payload) =>
     setOnlineUsers((prev) => {
       const newSet = new Set(prev);
@@ -122,7 +122,7 @@ const handlers = {
 
     setSocket(newSocket);
 
-    // ✅ FALLBACK: Poll every 2 seconds to ensure count is always accurate
+    // FALLBACK: Poll every 2 seconds to ensure count is always accurate
     const intervalId = setInterval(fetchUnreadCount, 2000);
 
     return () => {
@@ -138,9 +138,9 @@ const handlers = {
       value={{
         socket,
         unreadCount, // legacy
-        globalUnreadCount, // 🔹 use ONLY on dashboard main button
-        roomUnreadCounts, // 🆕 per room unread count (key: roomId)
-        resetRoomUnread, // 🆕 call when a room opens
+        globalUnreadCount, // use ONLY on dashboard main button
+        roomUnreadCounts, // per room unread count (key: roomId)
+        resetRoomUnread, // call when a room opens
         setUnreadCount,
         fetchUnreadCount,
         onlineUsers,

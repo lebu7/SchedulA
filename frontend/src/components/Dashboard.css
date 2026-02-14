@@ -151,7 +151,6 @@
   color: #2563eb;
 }
 
-/* --- MAIN FEED SECTION --- */
 .main-feed {
   display: flex;
   flex-direction: column;
@@ -912,7 +911,6 @@
     display: none;
   }
 
-  /* Client updates under banner */
   .updates-mobile-only {
     display: block;
   }
@@ -921,7 +919,6 @@
     display: none;
   }
 
-  /* Provider updates last */
   .updates-mobile-provider-only {
     display: block;
   }
@@ -937,7 +934,6 @@
     display: none !important;
   }
 
-  /* Insights go one column */
   .insights-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -957,7 +953,6 @@
     justify-content: center;
   }
 
-  /* Favorite Services compact on mobile */
   .favorite-service-card {
     padding: 18px 16px;
   }
@@ -978,7 +973,6 @@
     font-size: 0.8rem;
   }
 
-  /* Up next: compact */
   .next-body {
     flex-direction: row;
     gap: 12px;
@@ -999,7 +993,6 @@
     font-size: 0.85rem;
   }
 
-  /* Timeline tighter */
   .timeline-item {
     padding: 0.9rem 1rem;
     gap: 10px;

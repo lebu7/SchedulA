@@ -6,13 +6,12 @@ import './ReviewComponents.css';
 const ReviewCarousel = ({ reviews }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
 
-    // ✅ Auto-play Logic (7 seconds)
     useEffect(() => {
         if (!reviews || reviews.length <= 1) return;
 
         const interval = setInterval(() => {
             setCurrentIndex((prevIndex) => (prevIndex + 1) % reviews.length);
-        }, 7000); // 7000ms = 7 seconds
+        }, 7000);
 
         return () => clearInterval(interval);
     }, [reviews]);

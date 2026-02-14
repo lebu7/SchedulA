@@ -19,7 +19,7 @@ const ChatButton = ({
   const { globalUnreadCount } = useSocket();
 
   const countToDisplay = useMemo(() => {
-    // If parent passed a count (even 0), always trust it
+    // If parent passed a count (even 0)
     if (typeof propCount === "number") return propCount;
 
     // Otherwise, optionally fall back to global

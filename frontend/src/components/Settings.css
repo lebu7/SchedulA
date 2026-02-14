@@ -52,7 +52,7 @@
   gap: 8px;
   transition: all 0.2s;
   position: relative;
-  white-space: nowrap; /* ✅ helps on mobile */
+  white-space: nowrap; 
 }
 
 .tab-btn:hover {
@@ -168,7 +168,7 @@
   outline: none;
 }
 
-/* 🆕 Side-by-side Layouts */
+/* Side-by-side Layouts */
 .flex-row {
   display: flex;
   gap: 20px;
@@ -183,7 +183,7 @@
   flex: 2;
 }
 
-/* 🆕 Business/Weekend Section */
+/* Business/Weekend Section */
 .business-hours-split {
   display: flex;
   gap: 30px;
@@ -242,7 +242,7 @@
   cursor: pointer;
 }
 
-/* 🆕 Single Line Description Truncation */
+/* Single Line Description Truncation */
 .service-description {
   color: #64748b;
   font-size: 13px;
@@ -307,7 +307,7 @@ input:checked + .slider:before {
   }
 }
 
-/* 🔔 Notifications Section Specific Styling */
+/* Notifications Section Specific Styling */
 .section-header-row {
   display: flex;
   justify-content: space-between;
@@ -356,7 +356,7 @@ input:checked + .slider:before {
   flex-direction: column;
 }
 
-/* 🆕 Refined Toggle Row for Notifications */
+/* Refined Toggle Row for Notifications */
 .toggle-row {
   display: flex;
   justify-content: space-between;
@@ -399,15 +399,15 @@ input:checked + .slider:before {
 }
 
 .save-btn:disabled {
-  background-color: #94a3b8; /* Faded blue-gray */
+  background-color: #94a3b8;
   cursor: not-allowed;
-  opacity: 0.5; /* Makes it look transparent/blurred */
-  filter: grayscale(0.5); /* Removes some color saturation */
+  opacity: 0.5; 
+  filter: grayscale(0.5); 
   box-shadow: none;
   transform: none;
 }
 
-/* ✅ MOBILE RESPONSIVENESS (Issue #2) */
+/* MOBILE RESPONSIVENESS */
 @media (max-width: 768px) {
   .settings-container {
     margin: 16px auto;
@@ -430,10 +430,10 @@ input:checked + .slider:before {
     overflow-x: auto;
     overflow-y: hidden;
     overflow-y: auto;
-    scrollbar-width: none; /* Firefox */
+    scrollbar-width: none;
   }
   .settings-tabs::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+    display: none;
   }
 
   .tab-btn {
@@ -442,7 +442,6 @@ input:checked + .slider:before {
     flex: 0 0 auto;
   }
 
-  /* ✅ Profile: stack -> password goes below personal details */
   .profile-layout {
     grid-template-columns: 1fr;
     gap: 18px;
@@ -453,7 +452,6 @@ input:checked + .slider:before {
     margin-bottom: 14px;
   }
 
-  /* ✅ Notifications header row: stack title and pills */
   .section-header-row {
     flex-direction: column;
     align-items: flex-start;
@@ -471,13 +469,11 @@ input:checked + .slider:before {
     padding: 8px 10px;
   }
 
-  /* ✅ Business info (suburb + address) should be vertical */
   .flex-row {
     flex-direction: column;
     gap: 12px;
   }
 
-  /* ✅ Business hours split should be vertical */
   .business-hours-split {
     flex-direction: column;
     gap: 14px;
@@ -500,7 +496,6 @@ input:checked + .slider:before {
     padding-right: 12px;
   }
 
-  /* Buttons: full width + cleaner tap target */
   .save-btn {
     width: 100%;
     border-radius: 10px;

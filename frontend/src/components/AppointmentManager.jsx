@@ -453,7 +453,7 @@ function AppointmentManager({ user }) {
   const [showAptPreviewModal, setShowAptPreviewModal] = useState(false);
   const [previewApt, setPreviewApt] = useState(null);
 
-  // ✅ FIX: prevent modal "close then reopen" from click-through
+
   const rescheduleBlockUntilRef = useRef(0);
 
   const openRescheduleModal = (apt) => {
@@ -478,7 +478,6 @@ function AppointmentManager({ user }) {
     setPreviewApt(null);
   };
 
-  // ✅ NEW: close preview modal if the action was performed inside it
   const closePreviewIfOpenFor = (aptId) => {
     if (showAptPreviewModal && previewApt?.id === aptId) {
       closeAptPreview();
@@ -487,7 +486,6 @@ function AppointmentManager({ user }) {
 
   const { roomUnreadCounts, resetRoomUnread } = useSocket();
 
-  // ✅ NEW: appointmentId -> roomId map (so badges match SocketContext which keys by roomId)
   const [appointmentRoomMap, setAppointmentRoomMap] = useState({});
 
   const buildAppointmentRoomMap = (rooms) => {
@@ -515,7 +513,6 @@ function AppointmentManager({ user }) {
   useEffect(() => {
     fetchAppointments();
     fetchRoomsForMapping();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -653,7 +650,6 @@ function AppointmentManager({ user }) {
 
       const room = res.data.room;
 
-      // ✅ ensure mapping exists for this appointment immediately
       if (room?.id) {
         setAppointmentRoomMap((prev) => ({ ...prev, [apt.id]: Number(room.id) }));
         resetRoomUnread(Number(room.id)); // ✅ clear badge by ROOM id (correct)
@@ -699,7 +695,6 @@ function AppointmentManager({ user }) {
     }
   };
 
-  // ✅ UPDATED: detect your backend tag format too
   const isReschedulePending = (apt) => {
     const notes = typeof apt?.notes === "string" ? apt.notes : "";
     const hasSysTag = notes.includes("[SYS_RESCHEDULE]");
@@ -774,7 +769,6 @@ function AppointmentManager({ user }) {
 
       await api.put(`/appointments/${id}`, payload);
 
-      // ✅ close Appointment Details modal immediately
       closePreviewIfOpenFor(id);
 
       await fetchAppointments();
@@ -846,7 +840,6 @@ function AppointmentManager({ user }) {
         amount_paid: paidAmount,
       });
 
-      // ✅ close preview if payment was processed from it
       closePreviewIfOpenFor(apt.id);
 
       alert("✅ Payment processed successfully!");
@@ -951,7 +944,6 @@ function AppointmentManager({ user }) {
 
     const showReschedulePill = isReschedulePending(apt);
 
-    // ✅ IMPORTANT: roomUnreadCounts keys by ROOM id, not appointment id
     const roomId = appointmentRoomMap[apt.id];
     const unreadForThisAppointment = roomId ? roomUnreadCounts[roomId] || 0 : 0;
 
@@ -1183,13 +1175,11 @@ function AppointmentManager({ user }) {
             )}
           </div>
 
-          {/* ✅ Add-ons dropdown (closed by default) */}
           <details className="addons-dropdown">
             <summary className="addons-summary">💅 Add-ons ({parseAddons(apt).length})</summary>
             <div className="addons-dropdown-content">{renderAddons(apt)}</div>
           </details>
 
-          {/* ✅ Total cost box ALSO for walk-ins */}
           <div className="total-cost-box">
             <div className="total-row">
               <span>Base Price:</span>
@@ -1518,7 +1508,6 @@ function AppointmentManager({ user }) {
           </h2>
 
           <div className="am-controls" style={{ display: "flex", gap: "10px" }}>
-            {/* ✅ Desktop-only view toggles. Mobile forced to list. */}
             {!isMobile && (
               <div
                 className="view-toggle-pills"
@@ -1734,7 +1723,6 @@ function AppointmentManager({ user }) {
           </>
         )}
 
-        {/* ✅ LIST VIEW PREVIEW MODAL */}
         {showAptPreviewModal && previewApt && (
           <div className="apt-preview-overlay" onClick={closeAptPreview} role="presentation">
             <div className="apt-preview-modal" onClick={(e) => e.stopPropagation()} role="presentation">

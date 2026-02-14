@@ -260,7 +260,6 @@
   opacity: 0.9;
 }
 
-/* ✅ UPDATED: MINIMALIST RATING UI */
 .rating-badge-minimal {
   display: flex;
   align-items: center;
@@ -270,7 +269,7 @@
 }
 
 .rating-num {
-  font-size: 11px; /* Reduced font size */
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -457,11 +456,9 @@
   cursor: not-allowed;
 }
 
-/* ✅ Issue #3: Strong “closed” look (no visible colors) */
 .closed-client-card {
   opacity: 0.78;
   filter: grayscale(1) saturate(0) contrast(0.95);
-  /* NOTE: removed pointer-events:none so icons/links can still be tapped if you allow it in JS */
 }
 
 /* Ensure header gradients + badges also appear grey */

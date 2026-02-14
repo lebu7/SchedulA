@@ -359,3 +359,47 @@
     transform: scale(1);
   }
 }
+@media (max-width: 480px) {
+  .chat-context-banner-centered {
+    margin: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .chat-messages {
+    padding: 10px 12px;
+  }
+
+  .msg {
+    max-width: 90%;
+    font-size: 14px;
+  }
+
+  .chat-input {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .chat-input input {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .send-btn {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* ✅ Ensure widget chat fills fully and scrolls correctly */
+.chat-modal.in-widget {
+  height: 100%;
+  width: 100%;
+}
+
+/* ✅ Fix for mobile Safari viewport height issues */
+@media (max-width: 480px) {
+  .chat-modal {
+    height: 100vh;
+  }
+}

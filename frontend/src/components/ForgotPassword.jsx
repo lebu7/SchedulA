@@ -68,7 +68,7 @@ function ForgotPassword() {
       return;
     }
 
-    // Basic password strength check (same as register)
+    // Basic password strength check
     if (formData.newPassword.length < 8) {
       setError("Password must be at least 8 characters.");
       setLoading(false);

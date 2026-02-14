@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import './Dashboard.css';
 
-// ✅ HELPER TO EXTRACT WALK-IN NAME
+// HELPER TO EXTRACT WALK-IN NAME
 const getWalkInClientName = (notes) => {
   if (!notes) return 'Walk-In Client';
   const match = notes.match(/Walk-In Client: (.*?)(?: \||$)/);
@@ -279,7 +279,6 @@ function Dashboard({ user, setUser }) {
           </button>
         </div>
 
-        {/* ✅ MOBILE: Client wants Favorite Services visible */}
         {user.user_type === 'client' && favorites.services.length > 0 && (
           <div className="section-block fade-in fav-services-mobile-ok">
             <div
@@ -331,7 +330,7 @@ function Dashboard({ user, setUser }) {
           </div>
         )}
 
-        {/* ✅ MOBILE: Updates under banner ONLY for CLIENT (provider wants Updates last) */}
+        {/* MOBILE: Updates under banner ONLY for CLIENT (provider wants Updates last) */}
         {user.user_type === 'client' && <UpdatesCard className="updates-mobile-only" />}
 
         {/* --- PROVIDER VIEW --- */}
@@ -390,7 +389,6 @@ function Dashboard({ user, setUser }) {
               </div>
             </div>
 
-            {/* ✅ Provider wants Today's Schedule as SECOND on mobile */}
             <div className="section-block provider-schedule-second">
               <div
                 style={{
@@ -527,7 +525,6 @@ function Dashboard({ user, setUser }) {
               </div>
             </div>
 
-            {/* ✅ Provider wants Updates LAST on mobile */}
             <UpdatesCard className="updates-provider-mobile-bottom updates-mobile-provider-only" />
           </>
         )}
@@ -577,7 +574,7 @@ function Dashboard({ user, setUser }) {
               </div>
             )}
 
-            {/* Book Again (hidden on mobile via CSS, feature not removed) */}
+            {/* Book Again (hidden on mobile via CSS) */}
             {dashboardData.rebook_suggestions?.length > 0 && (
               <div className="section-block hide-mobile">
                 <h3>Book Again</h3>
@@ -698,7 +695,7 @@ function Dashboard({ user, setUser }) {
           </div>
         )}
 
-        {/* Reviews carousel (hidden on mobile via CSS, feature not removed) */}
+        {/* Reviews carousel (hidden on mobile via CSS) */}
         {user.user_type === 'provider' && (
           <div className="sidebar-card hide-mobile">
             <h4>
