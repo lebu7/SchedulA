@@ -111,7 +111,7 @@ router.get("/rooms", authenticateToken, (req, res) => {
 
      WHERE (cr.client_id = ? OR cr.provider_id = ?)
 
-     /* ✅ IMPORTANT: hide rooms with no messages */
+     /* IMPORTANT: hide rooms with no messages */
      AND EXISTS (
         SELECT 1 FROM chat_messages m
         WHERE m.room_id = cr.id

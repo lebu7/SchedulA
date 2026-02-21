@@ -19,12 +19,12 @@ const loadModelFromDisk = async (dirPath) => {
         throw new Error(`Model files not found at ${dirPath}. Did you run 'npm run train'?`);
     }
 
-    // 1. Read files
+    // Read files
     const modelJson = JSON.parse(fs.readFileSync(modelJsonPath, 'utf8'));
     const weightsBuffer = fs.readFileSync(weightsPath);
 
-    // 2. Construct the specific "ModelArtifacts" object
-    // We convert buffer to Uint8Array first to ensure we get the exact bytes
+    // Construct the specific "ModelArtifacts" object
+    // convert buffer to Uint8Array first to ensure we get the exact bytes
     // (Node Buffers can sometimes point to a larger shared memory pool)
     const weightData = new Uint8Array(weightsBuffer).buffer;
 

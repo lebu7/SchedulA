@@ -8,7 +8,7 @@ import { createNotification } from "../services/notificationService.js";
 const router = express.Router();
 
 /* ------------------------------------------------
-   🧱 Ensure sub_services table exists
+   Ensure sub_services table exists
 ------------------------------------------------ */
 db.run(`
   CREATE TABLE IF NOT EXISTS sub_services (
@@ -23,7 +23,7 @@ db.run(`
 `);
 
 /* ------------------------------------------------
-   ✅ Ensure closed_by_business column exists
+   Ensure closed_by_business column exists
 ------------------------------------------------ */
 db.run(
   `ALTER TABLE services ADD COLUMN closed_by_business INTEGER DEFAULT 0`,
@@ -35,12 +35,12 @@ db.run(
 );
 
 /* ---------------------------------------------
-   ✅ GET all services (includes location, maps link, & RATINGS)
+   GET all services (includes location, maps link, & RATINGS)
 --------------------------------------------- */
 router.get("/", (req, res) => {
   const { search, category, provider, location } = req.query;
 
-  // ✅ UPDATED: Added subqueries for avg_rating and review_count
+  // UPDATED: Added subqueries for avg_rating and review_count
   let query = `
     SELECT 
       s.*, 
@@ -88,7 +88,7 @@ router.get("/", (req, res) => {
 
     if (!services.length) return res.json({ services: [] });
 
-    // 🔹 Fetch sub-services for all main services
+    // Fetch sub-services for all main services
     const serviceIds = services.map((s) => s.id);
     const placeholders = serviceIds.map(() => "?").join(",");
 
@@ -122,7 +122,7 @@ router.get("/", (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ POST create service
+   POST create service
 --------------------------------------------- */
 router.post(
   "/",
@@ -206,7 +206,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ PUT update service
+   PUT update service
 --------------------------------------------- */
 router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
   const serviceId = req.params.id;
@@ -232,7 +232,7 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
     }
   }
 
-  // 🔄 Automatically sync slot_interval with duration if provided
+  // Automatically sync slot_interval with duration if provided
   if (req.body.duration !== undefined) {
     updates.push(`slot_interval = ?`);
     params.push(req.body.duration);
@@ -268,7 +268,7 @@ router.put("/:id", authenticateToken, requireRole("provider"), (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ PATCH toggle single service (open/close)
+   PATCH toggle single service (open/close)
 --------------------------------------------- */
 router.patch(
   "/:id/closure",
@@ -324,7 +324,7 @@ router.patch(
 );
 
 /* ---------------------------------------------
-   ✅ PATCH toggle all services for a provider
+   PATCH toggle all services for a provider
 --------------------------------------------- */
 router.patch(
   "/provider/:providerId/closure",
@@ -384,7 +384,7 @@ router.patch(
 );
 
 /* ---------------------------------------------
-   ✅ DELETE service
+   DELETE service
 --------------------------------------------- */
 router.delete(
   "/:id",
@@ -403,7 +403,7 @@ router.delete(
         if (this.changes === 0)
           return res.status(404).json({ error: "Service not found" });
 
-        // 🔔 Notification
+        // Notification
         createNotification(
           provider_id,
           "system",
@@ -418,7 +418,7 @@ router.delete(
 );
 
 /* =====================================================
-   🧩 SUB-SERVICES
+   SUB-SERVICES
 ===================================================== */
 
 router.post(
@@ -454,7 +454,7 @@ router.post(
                 .json({ error: "Failed to add sub-service" });
             }
 
-            // 🔔 Notification
+            // Notification
             createNotification(
               providerId,
               "system",
@@ -510,7 +510,7 @@ router.delete(
         if (this.changes === 0)
           return res.status(404).json({ error: "Sub-service not found" });
 
-        // 🔔 Notification
+        // Notification
         createNotification(
           providerId,
           "system",

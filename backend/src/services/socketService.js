@@ -40,7 +40,7 @@ export const initializeSocket = (server) => {
     onlineUsers.add(userId);
     socket.join(`user:${userId}`);
 
-    // 2. ✅ UPDATE LAST SEEN ON CONNECT
+    // UPDATE LAST SEEN ON CONNECT
     // This ensures we have a valid timestamp even if the user crashes/closes tab without clean disconnect
     const now = new Date().toISOString();
     db.run(
@@ -179,7 +179,7 @@ export const initializeSocket = (server) => {
       console.log(`❌ User ${userId} disconnected`);
       const disconnectTime = new Date().toISOString();
 
-      // ✅ UPDATE LAST SEEN ON DISCONNECT
+      // UPDATE LAST SEEN ON DISCONNECT
       db.run(
         `UPDATE users SET last_seen = ? WHERE id = ?`,
         [disconnectTime, userId],

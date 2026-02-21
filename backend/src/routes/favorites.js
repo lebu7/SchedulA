@@ -6,13 +6,13 @@ import { authenticateToken } from "../middleware/auth.js";
 const router = express.Router();
 
 /**
- * ✅ GET /api/favorites
+ * GET /api/favorites
  * Fetch all favorites for the logged-in client.
  */
 router.get("/", authenticateToken, (req, res) => {
   const userId = req.user.userId;
 
-  // 1. Fetch Favorite Services
+  // Fetch Favorite Services
   const servicesQuery = `
     SELECT f.id as favorite_id, f.item_id, f.created_at,
            s.name, s.description, s.price, s.duration, s.category,
@@ -24,7 +24,7 @@ router.get("/", authenticateToken, (req, res) => {
     ORDER BY f.created_at DESC
   `;
 
-  // 2. Fetch Favorite Providers
+  // Fetch Favorite Providers
   const providersQuery = `
     SELECT f.id as favorite_id, f.item_id, f.created_at,
            u.name, u.business_name, u.suburb, u.phone, u.opening_time, u.closing_time
@@ -55,7 +55,7 @@ router.get("/", authenticateToken, (req, res) => {
 });
 
 /**
- * ✅ POST /api/favorites/toggle
+ * POST /api/favorites/toggle
  * Toggle favorite status (Add if not exists, Remove if exists).
  * Body: { itemId: 123, type: 'service' | 'provider' }
  */

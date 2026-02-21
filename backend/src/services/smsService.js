@@ -38,7 +38,7 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
-// ✅ CHECK PREFERENCES HELPER
+// CHECK PREFERENCES HELPER
 function shouldSend(user, type) {
   if (!user || !user.phone) return false;
 
@@ -80,12 +80,11 @@ async function logSMS(phone, message, status, details) {
     else if (message.includes("Reminder")) messageType = "reminder";
     else if (message.includes("CANCELLED")) messageType = "cancellation";
     else if (message.includes("REFUND")) messageType = "refund";
-    // ✅ Keep all reschedule-related messages within allowed enum:
     else if (message.toUpperCase().includes("RESCHEDULE"))
       messageType = "notification";
 
     if (db) {
-      // ✅ Add callback so logging failures NEVER crash node
+      // callback so logging failures NEVER crash node
       db.run(
         `INSERT INTO sms_logs (recipient_phone, message_type, message_content, status, details, sent_at)
          VALUES (?, ?, ?, ?, ?, datetime('now'))`,
@@ -102,7 +101,6 @@ async function logSMS(phone, message, status, details) {
   }
 }
 
-// ✅ EXPORTED: This function is now available for socketService
 export async function sendSMS(phoneNumber, message) {
   const formattedPhone = formatPhoneNumber(phoneNumber);
   if (!formattedPhone) return { success: false, error: "Invalid phone number" };
@@ -302,7 +300,7 @@ export async function sendRescheduleNotification(
 }
 
 /* ---------------------------------------------
-   ✅ NEW: Reschedule Rejected Notice (Requirement #4)
+    NEW: Reschedule Rejected Notice (Requirement #4)
 --------------------------------------------- */
 export async function sendRescheduleRejectedNotice(
   appointment,

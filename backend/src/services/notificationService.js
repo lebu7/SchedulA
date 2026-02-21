@@ -7,7 +7,7 @@ export async function createNotification(
   message,
   referenceId = null,
 ) {
-  // ✅ Capture exact server time in ISO format (Real Time)
+  // Capture exact server time in ISO format (Real Time)
   const now = new Date().toISOString();
 
   return new Promise((resolve, reject) => {

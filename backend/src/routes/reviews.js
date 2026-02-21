@@ -8,7 +8,7 @@ import { createNotification } from "../services/notificationService.js";
 const router = express.Router();
 
 /* ---------------------------------------------
-   ✅ POST: Submit OR Update a Review
+   POST: Submit OR Update a Review
 --------------------------------------------- */
 router.post(
   "/",
@@ -32,7 +32,7 @@ router.post(
       `📝 Processing review: User ${client_id}, Appointment ${appointment_id}`,
     );
 
-    // 1. Fetch Appointment Details
+    // Fetch Appointment Details
     db.get(
       `SELECT * FROM appointments WHERE id = ?`,
       [appointment_id],
@@ -46,7 +46,7 @@ router.post(
           return res.status(404).json({ error: "Appointment not found" });
         }
 
-        // 🛑 SECURITY CHECK: Prevent Reviews for Walk-Ins
+        // SECURITY CHECK: Prevent Reviews for Walk-Ins
         const isWalkIn =
           apt.payment_reference &&
           (apt.payment_reference.startsWith("WALK-IN") ||
@@ -59,7 +59,7 @@ router.post(
             .json({ error: "Walk-in appointments cannot be reviewed." });
         }
 
-        // 2. Validate Ownership & Status
+        // Validate Ownership & Status
         if (apt.client_id !== client_id) {
           return res
             .status(403)
@@ -71,7 +71,7 @@ router.post(
             .json({ error: "You can only review completed appointments." });
         }
 
-        // 3. Check if Review Exists (Upsert Logic)
+        // Check if Review Exists (Upsert Logic)
         db.get(
           `SELECT id FROM reviews WHERE appointment_id = ?`,
           [appointment_id],
@@ -82,12 +82,12 @@ router.post(
                 .json({ error: "Error checking existing reviews" });
             }
 
-            // ✅ Logic Fork:
+            // Logic Fork:
             // If Review Exists -> Allow Update (Ignore Date)
             // If New Review -> Check Date (Must be < 1 Month)
 
             if (existingReview) {
-              // ✅ UPDATE existing review (Allowed for all past appointments)
+              // UPDATE existing review (Allowed for all past appointments)
               console.log(
                 `🔄 Updating existing review for Appointment ${appointment_id}`,
               );
@@ -107,7 +107,7 @@ router.post(
                 },
               );
             } else {
-              // ✅ INSERT new review (Must be within 1 month)
+              // INSERT new review (Must be within 1 month)
               const appointmentDate = new Date(apt.appointment_date);
               const oneMonthAgo = new Date();
               oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
@@ -164,7 +164,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ GET: Reviews for a Provider (ALL)
+   GET: Reviews for a Provider (ALL)
 --------------------------------------------- */
 router.get("/provider/:providerId", (req, res) => {
   const { providerId } = req.params;
@@ -186,7 +186,7 @@ router.get("/provider/:providerId", (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ GET: Reviews for a Service (All)
+   GET: Reviews for a Service (All)
 --------------------------------------------- */
 router.get("/service/:serviceId", (req, res) => {
   const { serviceId } = req.params;

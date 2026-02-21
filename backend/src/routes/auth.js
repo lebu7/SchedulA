@@ -11,7 +11,7 @@ import smsService from "../services/smsService.js"; // Import smsService
 const router = express.Router();
 
 /* ---------------------------------------------
-   ✅ Public Provider Profile (For Clients)
+   Public Provider Profile (For Clients)
    UPDATED: Includes Average Ratings & Reviews
 --------------------------------------------- */
 router.get("/public-profile/:id", authenticateToken, (req, res) => {
@@ -68,7 +68,7 @@ router.get("/public-profile/:id", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Register
+   Register
 --------------------------------------------- */
 router.post(
   "/register",
@@ -214,7 +214,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Login
+   Login
 --------------------------------------------- */
 router.post(
   "/login",
@@ -285,7 +285,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Forgot Password - Request OTP
+   Forgot Password - Request OTP
 --------------------------------------------- */
 router.post(
   "/forgot-password",
@@ -349,7 +349,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Reset Password
+   Reset Password
 --------------------------------------------- */
 router.post(
   "/reset-password",
@@ -417,7 +417,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ GET Notifications
+   GET Notifications
 --------------------------------------------- */
 router.get("/notifications", authenticateToken, (req, res) => {
   db.all(
@@ -434,7 +434,7 @@ router.get("/notifications", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ MARK NOTIFICATIONS READ
+   MARK NOTIFICATIONS READ
 --------------------------------------------- */
 router.put("/notifications/read", authenticateToken, (req, res) => {
   db.run(
@@ -448,7 +448,7 @@ router.put("/notifications/read", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Get Profile
+   Get Profile
 --------------------------------------------- */
 router.get("/profile", authenticateToken, (req, res) => {
   db.get(
@@ -474,7 +474,7 @@ router.get("/profile", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE PROFILE
+   UPDATE PROFILE
 --------------------------------------------- */
 router.put(
   "/profile",
@@ -579,7 +579,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ CHANGE PASSWORD
+   CHANGE PASSWORD
 --------------------------------------------- */
 router.put(
   "/password",
@@ -635,7 +635,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ GET Chat Room Messages
+   GET Chat Room Messages
 --------------------------------------------- */
 router.get("/chat/rooms/:id/messages", authenticateToken, (req, res) => {
   const roomId = req.params.id;
@@ -659,7 +659,7 @@ router.get("/chat/rooms/:id/messages", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE NOTIFICATION PREFERENCES
+   UPDATE NOTIFICATION PREFERENCES
 --------------------------------------------- */
 router.put("/notifications", authenticateToken, (req, res) => {
   const { preferences } = req.body;
@@ -685,7 +685,7 @@ router.put("/notifications", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ UPDATE BUSINESS HOURS
+   UPDATE BUSINESS HOURS
 --------------------------------------------- */
 router.put(
   "/business-hours",

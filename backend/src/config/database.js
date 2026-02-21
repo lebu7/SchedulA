@@ -17,7 +17,7 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, "schedula.db");
 console.log(`📊 Database path: ${dbPath}`);
 
-// ✅ Open the database with explicit READWRITE | CREATE modes
+// Open the database with explicit READWRITE | CREATE modes
 export const db = new sqlite3.Database(
   dbPath,
   sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
@@ -304,7 +304,7 @@ function initializeDatabase() {
   }
 
   /* ---------------------------------------------
-     🛠️ FIX REVIEWS TABLE SCHEMA (Improved Check)
+     FIX REVIEWS TABLE SCHEMA (Improved Check)
   --------------------------------------------- */
   db.get(
     `SELECT sql FROM sqlite_master WHERE type='table' AND name='reviews'`,
@@ -373,7 +373,7 @@ function initializeDatabase() {
   );
 
   /* ---------------------------------------------
-     🔍 MIGRATIONS (Column Checks)
+     MIGRATIONS (Column Checks)
   --------------------------------------------- */
   tryAddColumn("users", "gender", "TEXT");
   tryAddColumn("users", "dob", "DATE");

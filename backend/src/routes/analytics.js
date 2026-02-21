@@ -6,14 +6,14 @@ import { authenticateToken } from "../middleware/auth.js";
 const router = express.Router();
 
 /* --------------------------------------------------------------------------
-   📊 GET /insights/summary
+   GET /insights/summary
    Returns metrics for Dashboard & Analytics
 -------------------------------------------------------------------------- */
 router.get("/summary", authenticateToken, (req, res) => {
   const userId = req.user.userId;
   const userType = req.user.user_type;
 
-  // ✅ 1. CLIENT LOGIC
+  // CLIENT LOGIC
   if (userType === "client") {
     const nextApptQuery = `
       SELECT a.id, a.appointment_date, s.name as service_name, u.name as provider_name, u.business_name
@@ -55,7 +55,7 @@ router.get("/summary", authenticateToken, (req, res) => {
     return;
   }
 
-  // ✅ 2. PROVIDER LOGIC
+  // PROVIDER LOGIC
   if (userType === "provider") {
     // Query A: HISTORICAL STATS
     const overallStatsQuery = `
@@ -132,7 +132,7 @@ router.get("/summary", authenticateToken, (req, res) => {
         LIMIT 5
     `;
 
-    // ✅ Query H: RATINGS (NEW)
+    // Query H: RATINGS (NEW)
     const ratingQuery = `
         SELECT AVG(rating) as avg_rating, COUNT(*) as review_count
         FROM reviews
@@ -159,7 +159,7 @@ router.get("/summary", authenticateToken, (req, res) => {
                   if (err7)
                     return res.status(500).json({ error: "Database error G" });
 
-                  // ✅ Fetch Ratings
+                  // Fetch Ratings
                   db.get(ratingQuery, [userId], (err8, ratings) => {
                     if (err8)
                       return res
@@ -194,7 +194,7 @@ router.get("/summary", authenticateToken, (req, res) => {
                       peak_hours: peakHours || [],
                       top_services: topServices || [],
 
-                      // ✅ Ratings Data
+                      // Ratings Data
                       avg_rating: ratings ? ratings.avg_rating : 0,
                       review_count: ratings ? ratings.review_count : 0,
                     });

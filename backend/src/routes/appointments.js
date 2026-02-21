@@ -15,7 +15,7 @@ import { predictNoShow } from "../services/aiPredictor.js";
 const router = express.Router();
 
 /* ---------------------------------------------
-   🧠 Helper: Calculate No-Show Risk Score
+   Helper: Calculate No-Show Risk Score
 --------------------------------------------- */
 async function calculateNoShowRisk({
   client_id,
@@ -125,7 +125,7 @@ async function calculateNoShowRisk({
 }
 
 /* ---------------------------------------------
-   🧠 Helper: Process Multi-Transaction Refund
+   Helper: Process Multi-Transaction Refund
 --------------------------------------------- */
 async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
   return new Promise((resolve, reject) => {
@@ -187,7 +187,7 @@ async function processMultiTransactionRefund(appointmentId, totalRefundAmount) {
 }
 
 /* ---------------------------------------------
-   🧠 Helper: Check In-App Notification Preferences
+   Helper: Check In-App Notification Preferences
 --------------------------------------------- */
 const shouldNotify = (prefsString, category) => {
   try {
@@ -200,7 +200,7 @@ const shouldNotify = (prefsString, category) => {
 };
 
 /* ---------------------------------------------
-   ✅ RESCHEDULE META HELPERS (NO DB MIGRATION)
+   RESCHEDULE META HELPERS (NO DB MIGRATION)
    We store a small "system" blob inside notes:
    \n\n[SYS_RESCHEDULE]{"prev_date":"...","prev_status":"scheduled"}[/SYS_RESCHEDULE]
 --------------------------------------------- */
@@ -240,7 +240,7 @@ function appendRescheduleMeta(existingNotes, metaObj) {
 }
 
 /* ---------------------------------------------
-   ✅ Fetch appointments (client & provider)
+   Fetch appointments (client & provider)
 --------------------------------------------- */
 router.get("/", authenticateToken, (req, res) => {
   const userId = req.user.userId;
@@ -322,7 +322,7 @@ router.get("/", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   🧾 GET Transaction History for Appointment
+   GET Transaction History for Appointment
 --------------------------------------------- */
 router.get("/:id/transactions", authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -355,7 +355,7 @@ router.get("/:id/transactions", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   📊 GET SMS Statistics
+   GET SMS Statistics
 --------------------------------------------- */
 router.get("/sms-stats", authenticateToken, async (req, res) => {
   try {
@@ -390,7 +390,7 @@ router.get("/sms-stats", authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   👤 GET Client History (Provider Only) - ✅ NEW ENDPOINT
+   GET Client History (Provider Only) - NEW ENDPOINT
 --------------------------------------------- */
 router.get("/client-history/:clientId", authenticateToken, (req, res) => {
   const providerId = req.user.userId;
@@ -449,7 +449,7 @@ router.get("/client-history/:clientId", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Check provider availability (UPDATED)
+   Check provider availability (UPDATED)
 --------------------------------------------- */
 router.get("/providers/:id/availability", (req, res) => {
   const providerId = req.params.id;
@@ -513,7 +513,7 @@ router.get("/providers/:id/availability", (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Create appointment (Updated Walk-In Status)
+   Create appointment (Updated Walk-In Status)
 --------------------------------------------- */
 router.post(
   "/",
@@ -865,7 +865,7 @@ router.post(
 );
 
 /* ---------------------------------------------
-   ✅ Provider toggle open/closed
+   Provider toggle open/closed
 --------------------------------------------- */
 router.put("/providers/:id/closed", authenticateToken, (req, res) => {
   const providerId = req.params.id;
@@ -888,7 +888,7 @@ router.put("/providers/:id/closed", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider sets business hours
+   Provider sets business hours
 --------------------------------------------- */
 router.put(
   "/providers/:id/hours",
@@ -931,7 +931,7 @@ router.put(
 );
 
 /* ---------------------------------------------
-   ✅ Update appointment (UPDATED FOR RESCHEDULE REJECTION + SAFE META)
+   Update appointment (UPDATED FOR RESCHEDULE REJECTION + SAFE META)
 --------------------------------------------- */
 router.put("/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -956,11 +956,11 @@ router.put("/:id", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Appointment status locked." });
     }
 
-    // ✅ Detect if this appointment currently holds a reschedule request meta
+    // Detect if this appointment currently holds a reschedule request meta
     const { meta: existingResMeta, cleanNotes: cleanExistingNotes } =
       extractRescheduleMeta(apt.notes);
 
-    // ✅ SPECIAL CASE: Provider "rejects" a RESCHEDULE request
+    // SPECIAL CASE: Provider "rejects" a RESCHEDULE request
     // Frontend currently calls status="cancelled" for reject.
     // If appointment is pending and contains reschedule meta, we treat it as "reschedule rejected"
     // and revert to the previous date + previous status (pending OR scheduled).
@@ -1045,7 +1045,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
                   );
                 }
 
-                // ✅ SMS to client: reschedule rejected, suggest next steps
+                // SMS to client: reschedule rejected, suggest next steps
                 // (Fallback-safe: if helper isn't implemented yet, don't crash route)
                 try {
                   if (
@@ -1149,7 +1149,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
       params.push(appointment_date);
     }
 
-    // ✅ Notes update:
+    // Notes update:
     // - If caller sends notes explicitly, keep them.
     // - If client is rescheduling, ALWAYS append SYS meta (even if they sent notes),
     //   and ensure we don't double-stack old SYS blocks.
@@ -1205,7 +1205,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
         );
       }
 
-      // IMPORTANT: This remains for true cancellations (not reschedule rejection)
       if (status === "cancelled") {
         try {
           await handleAutomaticRefund(id, userType, notes);
@@ -1355,7 +1354,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Soft delete appointment (WITH 6-MONTH CHECK & NO DATA LOSS)
+   Soft delete appointment (WITH 6-MONTH CHECK & NO DATA LOSS)
 --------------------------------------------- */
 router.delete("/:id", authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -1414,7 +1413,7 @@ router.delete("/:id", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Update payment (With Notification Check)
+   Update payment (With Notification Check)
 --------------------------------------------- */
 router.put("/:id/payment", authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -1499,7 +1498,7 @@ router.put("/:id/payment", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Pay remaining balance (With Notification Check)
+   Pay remaining balance (With Notification Check)
 --------------------------------------------- */
 router.put("/:id/pay-balance", authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -1621,7 +1620,7 @@ router.put("/:id/pay-balance", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ Provider can prompt client for remaining balance
+   Provider can prompt client for remaining balance
 --------------------------------------------- */
 router.post("/:id/request-balance", authenticateToken, (req, res) => {
   const { id } = req.params;
@@ -1680,7 +1679,7 @@ router.post("/:id/request-balance", authenticateToken, (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ MANUAL REFUND PROCESSING (Provider Only)
+   MANUAL REFUND PROCESSING (Provider Only)
 --------------------------------------------- */
 router.post("/:id/process-refund", authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -1771,7 +1770,7 @@ router.post("/:id/process-refund", authenticateToken, async (req, res) => {
 });
 
 /* ---------------------------------------------
-   ✅ AUTOMATIC REFUND HANDLER FUNCTION
+   AUTOMATIC REFUND HANDLER FUNCTION
 --------------------------------------------- */
 async function handleAutomaticRefund(appointmentId, cancelledBy, reason) {
   return new Promise((resolve, reject) => {

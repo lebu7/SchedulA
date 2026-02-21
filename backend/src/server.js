@@ -27,7 +27,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ CREATE HTTP SERVER
 const httpServer = createServer(app);
 
 // Middleware
@@ -54,14 +53,13 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// ✅ INITIALIZE SOCKET.IO
 initializeSocket(httpServer);
 
 /* =====================================================
-   ⏰ BACKGROUND SCHEDULER (Cron Jobs)
+    BACKGROUND SCHEDULER (Cron Jobs)
 ===================================================== */
 
-// 1. Auto-cleanup Inactive Chat Rooms (Every 10 mins)
+// Auto-cleanup Inactive Chat Rooms (Every 10 mins)
 cron.schedule("*/10 * * * *", () => {
   db.run("PRAGMA foreign_keys = ON;", (err) => {
     if (err) return console.error("❌ DB Pragma Error:", err);
@@ -81,7 +79,7 @@ cron.schedule("*/10 * * * *", () => {
   });
 });
 
-// 2. Auto-cancel past pending appointments (Hourly)
+// Auto-cancel past pending appointments (Hourly)
 const autoCancelPastAppointments = async () => {
   try {
     await db.run(`
@@ -96,7 +94,7 @@ const autoCancelPastAppointments = async () => {
   }
 };
 
-// 3. SMS Reminders (Every 10 mins)
+// SMS Reminders (Every 10 mins)
 cron.schedule("*/10 * * * *", async () => {
   console.log("🔔 CRON: Checking for SMS reminders...");
   try {
@@ -106,7 +104,7 @@ cron.schedule("*/10 * * * *", async () => {
   }
 });
 
-// 4. Chat Expiry Warning (Every 10 mins)
+// Chat Expiry Warning (Every 10 mins)
 cron.schedule("*/10 * * * *", () => {
   const startWindow = "datetime('now', '-11 hours', '-10 minutes')";
   const endWindow = "datetime('now', '-11 hours')";
@@ -134,7 +132,7 @@ cron.schedule("*/10 * * * *", () => {
   );
 });
 
-// 5. Morning Brief for Providers (Daily at 7:00 AM)
+// Morning Brief for Providers (Daily at 7:00 AM)
 cron.schedule("0 7 * * *", () => {
   console.log("☀️ CRON: Sending Morning Briefs...");
   db.all(
@@ -162,7 +160,7 @@ cron.schedule("0 7 * * *", () => {
   );
 });
 
-// 6. General Cleanup Tasks (Hourly)
+// General Cleanup Tasks (Hourly)
 cron.schedule("0 * * * *", async () => {
   console.log("🧹 CRON: Running hourly maintenance...");
   try {
@@ -172,7 +170,7 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
-// 7. ✅ Review Prompts for Completed Appointments (Every 30 mins)
+// Review Prompts for Completed Appointments (Every 30 mins)
 cron.schedule("*/30 * * * *", () => {
   console.log("⭐ CRON: Checking for review prompts...");
 
@@ -221,7 +219,7 @@ console.log("🚀 Initializing background tasks...");
 autoCancelPastAppointments();
 sendScheduledReminders();
 
-// ✅ Use httpServer instead of app.listen
+// httpServer instead of app.listen
 httpServer.listen(PORT, () => {
   console.log(`🚀 Schedula backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
