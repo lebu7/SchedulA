@@ -1,5 +1,9 @@
 /* frontend/src/components/ChatWidget.css */
 
+:root {
+  --chat-widget-z: 9999998;
+}
+
 /* Floating chat button */
 .chat-widget-button {
   position: fixed;

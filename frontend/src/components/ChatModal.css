@@ -391,13 +391,13 @@
   }
 }
 
-/* ✅ Ensure widget chat fills fully and scrolls correctly */
+/* Ensure widget chat fills fully and scrolls correctly */
 .chat-modal.in-widget {
   height: 100%;
   width: 100%;
 }
 
-/* ✅ Fix for mobile Safari viewport height issues */
+/* Fix for mobile Safari viewport height issues */
 @media (max-width: 480px) {
   .chat-modal {
     height: 100vh;

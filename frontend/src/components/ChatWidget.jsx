@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+/* frontend/src/components/ChatWidget.jsx */
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { MessageCircle, X, ArrowLeft, SquareUser } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
@@ -33,7 +36,7 @@ const ChatWidget = () => {
     if (!dateStr) return 'Offline';
 
     try {
-      // 1. Normalize Date: Ensure UTC ('Z') if missing, to match DB 'CURRENT_TIMESTAMP'
+      // Normalize Date: Ensure UTC ('Z') if missing, to match DB 'CURRENT_TIMESTAMP'
       let standardized = dateStr;
       if (!standardized.endsWith('Z') && !standardized.includes('+')) {
         standardized = standardized.replace(' ', 'T') + 'Z';
@@ -46,18 +49,17 @@ const ChatWidget = () => {
       const diffInSeconds = Math.floor((now - date) / 1000);
 
       if (diffInSeconds < 0) return 'Last seen just now';
-
       if (diffInSeconds < 60) return 'Last seen just now';
-      
+
       const minutes = Math.floor(diffInSeconds / 60);
       if (minutes < 60) return `Last seen ${minutes}m ago`;
-      
+
       const hours = Math.floor(minutes / 60);
       if (hours < 24) return `Last seen ${hours}h ago`;
 
       return `Last seen ${date.toLocaleDateString('en-GB', {
         day: 'numeric',
-        month: 'short'
+        month: 'short',
       })}`;
     } catch (err) {
       return 'Offline';
@@ -74,35 +76,34 @@ const ChatWidget = () => {
         setLastSeen(res.data.last_seen);
       }
     } catch (err) {
-      console.error("Failed to fetch status", err);
+      console.error('Failed to fetch status', err);
     }
   };
 
   /* ------------------ Socket Updates ------------------ */
 
   useEffect(() => {
-    // 1. When user disconnects, update state immediately
     const handleUserOffline = (data) => {
       if (recipientId && Number(data.userId) === Number(recipientId)) {
-        setLastSeen(data.lastSeen); 
+        setLastSeen(data.lastSeen);
       }
     };
 
-    // 2. When user connects
     const handleUserOnline = (userId) => {
-       if (recipientId && Number(userId) === Number(recipientId)) {
-       }
+      if (recipientId && Number(userId) === Number(recipientId)) {
+        // You already compute online from onlineUsers Set, so no extra state needed here.
+      }
     };
 
     socket?.on('user_disconnected', handleUserOffline);
     socket?.on('user_connected', handleUserOnline);
-    
+
     // Auto-refresh text every 60s
     const ticker = setInterval(() => {
-        setTick(t => t + 1);
-        if (recipientId && !onlineUsers.has(recipientId)) {
-            fetchRecipientStatus(recipientId);
-        }
+      setTick((t) => t + 1);
+      if (recipientId && !onlineUsers.has(recipientId)) {
+        fetchRecipientStatus(recipientId);
+      }
     }, 60000);
 
     return () => {
@@ -114,7 +115,7 @@ const ChatWidget = () => {
 
   useEffect(() => {
     if (recipientId && !onlineUsers.has(recipientId)) {
-        fetchRecipientStatus(recipientId);
+      fetchRecipientStatus(recipientId);
     }
   }, [recipientId, onlineUsers]);
 
@@ -122,13 +123,7 @@ const ChatWidget = () => {
 
   useEffect(() => {
     const handleOpenSpecificChat = (e) => {
-      const {
-        room,
-        context,
-        autoFocus: af,
-        scrollToUnread: stu,
-        recipientName: customName
-      } = e.detail;
+      const { room, context, autoFocus: af, scrollToUnread: stu, recipientName: customName } = e.detail;
 
       setIsOpen(true);
       setAutoFocus(!!af);
@@ -138,9 +133,7 @@ const ChatWidget = () => {
       const isClient = Number(room.client_id) === userId;
 
       const rId = isClient ? Number(room.provider_id) : Number(room.client_id);
-      const name = customName || (
-        isClient ? room.business_name || room.provider_name : room.client_name
-      );
+      const name = customName || (isClient ? room.business_name || room.provider_name : room.client_name);
 
       setSelectedRoom({ ...room, contextInfo: context });
       setRecipientName(name);
@@ -149,7 +142,7 @@ const ChatWidget = () => {
       setLastSeen(isClient ? room.provider_last_seen : room.client_last_seen);
     };
 
-    const handleToggle = () => setIsOpen(prev => !prev);
+    const handleToggle = () => setIsOpen((prev) => !prev);
     const handleForceOpen = () => setIsOpen(true);
 
     window.addEventListener('openChatRoom', handleOpenSpecificChat);
@@ -180,13 +173,15 @@ const ChatWidget = () => {
         const res = await api.get(`/chat/rooms/${chatRoomId}`);
         const room = res.data.room;
 
-        window.dispatchEvent(new CustomEvent('openChatRoom', {
-          detail: {
-            room,
-            autoFocus: true,
-            scrollToUnread: true
-          }
-        }));
+        window.dispatchEvent(
+          new CustomEvent('openChatRoom', {
+            detail: {
+              room,
+              autoFocus: true,
+              scrollToUnread: true,
+            },
+          })
+        );
       } catch (err) {
         console.error('Failed to open chat from URL', err);
       }
@@ -197,17 +192,47 @@ const ChatWidget = () => {
 
   /* ------------------ Utility ------------------ */
 
+  const modalClickSelectors = useMemo(
+    () =>
+      [
+        // your common overlays/modals across the app
+        '.modal-overlay',
+        '.apt-preview-overlay',
+        '.payment-modal-overlay',
+        '.report-modal-overlay',
+        '.chat-list-overlay',
+        '.dash-nav-overlay',
+
+        // safety: anything explicitly marked as dialog
+        '[role="dialog"]',
+        '[aria-modal="true"]',
+      ].join(','),
+    []
+  );
+
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (isOpen && widgetRef.current && !widgetRef.current.contains(e.target)) {
-        const btn = document.querySelector('.chat-widget-button');
-        if (btn && btn.contains(e.target)) return;
-        setIsOpen(false);
-      }
+      if (!isOpen) return;
+
+      const target = e.target;
+
+      // If click is inside the chat widget itself, do nothing
+      if (widgetRef.current && widgetRef.current.contains(target)) return;
+
+      // If click is on the floating button, do nothing
+      const btn = document.querySelector('.chat-widget-button');
+      if (btn && btn.contains(target)) return;
+
+      // If user is interacting with ANY other modal/overlay, do NOT auto-close chat
+      // This is the key fix so closing appointment/service/profile modals doesn't close chat.
+      if (target?.closest?.(modalClickSelectors)) return;
+
+      setIsOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+
+    document.addEventListener('mousedown', handleClickOutside, true);
+    return () => document.removeEventListener('mousedown', handleClickOutside, true);
+  }, [isOpen, modalClickSelectors]);
 
   const handleRoomSelect = (room, name) => {
     const userId = Number(localStorage.getItem('userId'));
@@ -217,7 +242,7 @@ const ChatWidget = () => {
     setRecipientName(name);
     setRecipientRole(isClient ? 'Service Provider' : 'Client');
     setRecipientId(isClient ? Number(room.provider_id) : Number(room.client_id));
-    
+
     setLastSeen(isClient ? room.provider_last_seen : room.client_last_seen);
   };
 
@@ -225,18 +250,12 @@ const ChatWidget = () => {
 
   /* ------------------ Render ------------------ */
 
-  return (
+  const ui = (
     <>
       {!isOpen && (
-        <button
-          className="chat-widget-button"
-          onClick={() => setIsOpen(true)}
-          aria-label="Open messages"
-        >
+        <button className="chat-widget-button" onClick={() => setIsOpen(true)} aria-label="Open messages">
           <MessageCircle size={28} />
-          {globalUnreadCount > 0 && (
-            <span className="chat-widget-badge">{globalUnreadCount}</span>
-          )}
+          {globalUnreadCount > 0 && <span className="chat-widget-badge">{globalUnreadCount}</span>}
         </button>
       )}
 
@@ -245,20 +264,24 @@ const ChatWidget = () => {
           <div className="chat-widget-header">
             {selectedRoom ? (
               <div className="header-left">
-                <button onClick={() => setSelectedRoom(null)} className="nav-btn">
+                <button onClick={() => setSelectedRoom(null)} className="nav-btn" aria-label="Back to chats">
                   <ArrowLeft size={18} />
                 </button>
-                {/* Avatar Icon */}
-                <SquareUser size={38} strokeWidth={1.5} color="#e2e8f0" fill="#ffffff33" style={{ marginRight: '0px' }} />
-                
+
+                <SquareUser
+                  size={38}
+                  strokeWidth={1.5}
+                  color="#e2e8f0"
+                  fill="#ffffff33"
+                  style={{ marginRight: '0px' }}
+                />
+
                 <div className="header-info">
                   <span className="recipient-name-header">{recipientName}</span>
                   {isOnline ? (
                     <span className="recipient-status-online">Online</span>
                   ) : (
-                    <span className="recipient-status-offline">
-                      {formatLastSeen(lastSeen)}
-                    </span>
+                    <span className="recipient-status-offline">{formatLastSeen(lastSeen)}</span>
                   )}
                 </div>
               </div>
@@ -266,7 +289,7 @@ const ChatWidget = () => {
               <h3 className="widget-title">Messages</h3>
             )}
 
-            <button onClick={() => setIsOpen(false)} className="nav-btn close-btn">
+            <button onClick={() => setIsOpen(false)} className="nav-btn close-btn" aria-label="Close chat">
               <X size={18} />
             </button>
           </div>
@@ -282,17 +305,16 @@ const ChatWidget = () => {
                 inWidget
               />
             ) : (
-              <ChatListModal
-                onClose={() => setIsOpen(false)}
-                inWidget
-                onRoomSelect={handleRoomSelect}
-              />
+              <ChatListModal onClose={() => setIsOpen(false)} inWidget onRoomSelect={handleRoomSelect} />
             )}
           </div>
         </div>
       )}
     </>
   );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(ui, document.body);
 };
 
 export default ChatWidget;
