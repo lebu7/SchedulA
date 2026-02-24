@@ -123,12 +123,14 @@ function Register({ onLogin }) {
     const ageErr = checkAgeRequirements(formData.dob);
     if (ageErr) { setDobError(ageErr); setLoading(false); return; }
 
-    // Provider Validation
-    if (formData.user_type === 'provider' && !formData.business_name) {
-      setGeneralError("Please enter your Business Details.");
-      setShowProviderModal(true);
-      setLoading(false);
-      return;
+    // Provider Validation (updated): Business Name + Suburb + Business Address required
+    if (formData.user_type === 'provider') {
+      if (!formData.business_name || !formData.suburb || !formData.business_address) {
+        setGeneralError("Please enter your Business Details (Business Name, Suburb, and Business Address are required).");
+        setShowProviderModal(true);
+        setLoading(false);
+        return;
+      }
     }
 
     try {
@@ -269,6 +271,7 @@ function Register({ onLogin }) {
               <div>
                 <span style={{ fontWeight: 'bold', color: '#1e40af', fontSize: '0.9rem', display: 'block' }}>{formData.business_name || "Business Name Missing"}</span>
                 <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{formData.suburb || "Location not set"}</span>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{formData.business_address || "Business address missing"}</span>
               </div>
               <button type="button" onClick={() => setShowProviderModal(true)} style={{ background: 'white', border: '1px solid #bfdbfe', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#2563eb' }}>
                 Edit Details
@@ -298,13 +301,19 @@ function Register({ onLogin }) {
               <label>Business Name *</label>
               <div style={{ position: 'relative' }}>
                 <Briefcase size={16} style={{ position: 'absolute', top: '12px', left: '10px', color: '#94a3b8' }} />
-                <input type="text" name="business_name" value={formData.business_name} onChange={handleChange} placeholder="e.g. Jane's Spa" style={{ paddingLeft: '35px' }} autoFocus />
+                <input type="text" name="business_name" value={formData.business_name} onChange={handleChange} placeholder="e.g. Jane's Spa" style={{ paddingLeft: '35px' }} autoFocus required />
               </div>
             </div>
 
             <div className="form-group">
               <label>Suburb *</label>
-              <select name="suburb" value={formData.suburb} onChange={(e) => setFormData({ ...formData, suburb: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}>
+              <select
+                name="suburb"
+                value={formData.suburb}
+                onChange={(e) => setFormData({ ...formData, suburb: e.target.value })}
+                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
+                required
+              >
                 <option value="">Select Suburb</option>
                 {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
                   <optgroup key={letter} label={letter}>
@@ -317,10 +326,18 @@ function Register({ onLogin }) {
             </div>
 
             <div className="form-group">
-              <label>Business Address / Landmark</label>
+              <label>Business Address / Landmark *</label>
               <div style={{ position: 'relative' }}>
                 <MapPin size={16} style={{ position: 'absolute', top: '12px', left: '10px', color: '#94a3b8' }} />
-                <input type="text" name="business_address" value={formData.business_address} onChange={handleChange} placeholder="e.g. 1st Floor, City Mall" style={{ paddingLeft: '35px' }} />
+                <input
+                  type="text"
+                  name="business_address"
+                  value={formData.business_address}
+                  onChange={handleChange}
+                  placeholder="e.g. 1st Floor, City Mall"
+                  style={{ paddingLeft: '35px' }}
+                  required
+                />
               </div>
             </div>
 
@@ -333,8 +350,10 @@ function Register({ onLogin }) {
               type="button"
               className="btn btn-primary"
               onClick={() => {
-                if (!formData.business_name) alert("Business Name is required");
-                else setShowProviderModal(false);
+                if (!formData.business_name) return alert("Business Name is required");
+                if (!formData.suburb) return alert("Suburb is required");
+                if (!formData.business_address) return alert("Business Address is required");
+                setShowProviderModal(false);
               }}
               style={{ width: '100%', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
