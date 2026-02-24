@@ -1,6 +1,7 @@
+/* frontend/src/components/Register.jsx */
 import React, { useState } from 'react'
 import { authService } from '../services/auth'
-import { Briefcase, MapPin, Check } from 'lucide-react';
+import { Briefcase, MapPin, Check, Eye, EyeOff } from 'lucide-react';
 
 // Nairobi Suburbs Data
 const NAIROBI_SUBURBS = {
@@ -32,17 +33,22 @@ function Register({ onLogin }) {
     email: '',
     password: '',
     phone: '',
-    gender: '', 
-    dob: '',    
+    gender: '',
+    dob: '',
     user_type: 'client',
     business_name: '',
-    suburb: '',           
-    business_address: '', 
-    google_maps_link: ''  
+    suburb: '',
+    business_address: '',
+    google_maps_link: ''
   })
-  
-  const [confirmPassword, setConfirmPassword] = useState('') 
-  
+
+  const [confirmPassword, setConfirmPassword] = useState('')
+
+  const [showPw, setShowPw] = useState({
+    password: false,
+    confirm: false,
+  });
+
   // Validation States
   const [passwordError, setPasswordError] = useState('')
   const [confirmPasswordError, setConfirmPasswordError] = useState('')
@@ -55,16 +61,16 @@ function Register({ onLogin }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     if (name === 'user_type') {
-        setFormData({ ...formData, user_type: value });
-        if (value === 'provider') {
-            setShowProviderModal(true);
-        }
+      setFormData({ ...formData, user_type: value });
+      if (value === 'provider') {
+        setShowProviderModal(true);
+      }
     } else {
-        setFormData({ ...formData, [name]: value });
+      setFormData({ ...formData, [name]: value });
     }
-    
+
     if (name === 'password') setPasswordError('')
     if (name === 'dob') setDobError('')
   }
@@ -82,7 +88,7 @@ function Register({ onLogin }) {
     if (!hasLowerCase) return "Must contain at least one lowercase letter.";
     if (!hasNumber) return "Must contain at least one number.";
     if (!hasSymbol) return "Must contain at least one special symbol.";
-    return null; 
+    return null;
   }
 
   // Age Validation
@@ -119,10 +125,10 @@ function Register({ onLogin }) {
 
     // Provider Validation
     if (formData.user_type === 'provider' && !formData.business_name) {
-        setGeneralError("Please enter your Business Details.");
-        setShowProviderModal(true);
-        setLoading(false); 
-        return;
+      setGeneralError("Please enter your Business Details.");
+      setShowProviderModal(true);
+      setLoading(false);
+      return;
     }
 
     try {
@@ -137,7 +143,7 @@ function Register({ onLogin }) {
 
   // Styles
   const errorInputStyle = { border: '1px solid red', backgroundColor: '#fff0f0' };
-  
+
   // Modal Style (Inline for simplicity within this component)
   const modalOverlayStyle = {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -153,7 +159,7 @@ function Register({ onLogin }) {
       <div className="card">
         <h2>Join Schedula</h2>
         {generalError && <div className="error-message">{generalError}</div>}
-        
+
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Full Name: *</label>
@@ -164,10 +170,33 @@ function Register({ onLogin }) {
             <label>Email: *</label>
             <input type="email" name="email" value={formData.email} onChange={handleChange} required />
           </div>
-          
+
           <div className="form-group">
             <label>Password: *</label>
-            <input type="password" name="password" value={formData.password} onChange={handleChange} onBlur={handlePasswordBlur} required style={passwordError ? errorInputStyle : {}} />
+
+            {/* Show/hide password */}
+            <div className="password-field">
+              <input
+                type={showPw.password ? "text" : "password"}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                onBlur={handlePasswordBlur}
+                required
+                style={passwordError ? errorInputStyle : {}}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="toggle-password-btn"
+                onClick={() => setShowPw(p => ({ ...p, password: !p.password }))}
+                aria-label={showPw.password ? "Hide password" : "Show password"}
+                title={showPw.password ? "Hide password" : "Show password"}
+              >
+                {showPw.password ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
             <div style={{ marginTop: '5px', fontSize: '0.85rem' }}>
               {passwordError ? <span style={{ color: 'red', fontWeight: 'bold' }}>⚠️ {passwordError}</span> : <span style={{ color: '#666' }}>Requirement: 8+ chars, Uppercase, Lowercase, Number & Symbol.</span>}
             </div>
@@ -175,7 +204,30 @@ function Register({ onLogin }) {
 
           <div className="form-group">
             <label>Confirm Password: *</label>
-            <input type="password" name="confirmPassword" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setConfirmPasswordError(''); }} onBlur={handleConfirmBlur} required style={confirmPasswordError ? errorInputStyle : {}} />
+
+            {/* Show/hide confirm */}
+            <div className="password-field">
+              <input
+                type={showPw.confirm ? "text" : "password"}
+                name="confirmPassword"
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setConfirmPasswordError(''); }}
+                onBlur={handleConfirmBlur}
+                required
+                style={confirmPasswordError ? errorInputStyle : {}}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="toggle-password-btn"
+                onClick={() => setShowPw(p => ({ ...p, confirm: !p.confirm }))}
+                aria-label={showPw.confirm ? "Hide confirm password" : "Show confirm password"}
+                title={showPw.confirm ? "Hide password" : "Show password"}
+              >
+                {showPw.confirm ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
             {confirmPasswordError && <div style={{ color: 'red', fontSize: '0.85rem', marginTop: '5px', fontWeight: 'bold' }}>⚠️ {confirmPasswordError}</div>}
           </div>
 
@@ -213,80 +265,80 @@ function Register({ onLogin }) {
 
           {/* Edit Button if Provider details exist but modal closed */}
           {formData.user_type === 'provider' && (
-            <div style={{marginBottom: '20px', padding: '10px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
-                <div>
-                    <span style={{fontWeight: 'bold', color: '#1e40af', fontSize: '0.9rem', display: 'block'}}>{formData.business_name || "Business Name Missing"}</span>
-                    <span style={{fontSize: '0.8rem', color: '#64748b'}}>{formData.suburb || "Location not set"}</span>
-                </div>
-                <button type="button" onClick={() => setShowProviderModal(true)} style={{background: 'white', border: '1px solid #bfdbfe', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#2563eb'}}>
-                    Edit Details
-                </button>
+            <div style={{ marginBottom: '20px', padding: '10px', background: '#eff6ff', borderRadius: '8px', border: '1px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontWeight: 'bold', color: '#1e40af', fontSize: '0.9rem', display: 'block' }}>{formData.business_name || "Business Name Missing"}</span>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{formData.suburb || "Location not set"}</span>
+              </div>
+              <button type="button" onClick={() => setShowProviderModal(true)} style={{ background: 'white', border: '1px solid #bfdbfe', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#2563eb' }}>
+                Edit Details
+              </button>
             </div>
           )}
-          
+
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? 'Creating Account...' : 'Register'}
           </button>
         </form>
-        
+
         <p>Already have an account? <a href="/login">Login here</a></p>
       </div>
 
       {/* PROVIDER DETAILS MODAL */}
       {showProviderModal && (
-        <div style={modalOverlayStyle} onClick={() => { if(formData.business_name) setShowProviderModal(false); }}> 
-          {/* Click outside closes ONLY if data entered, else forces entry? Let's allow close but require business name at submit */}
+        <div style={modalOverlayStyle} onClick={() => { if (formData.business_name) setShowProviderModal(false); }}>
+          {/* Click outside closes ONLY if data entered */}
           <div style={modalContentStyle} onClick={e => e.stopPropagation()}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-                <h3 style={{margin:0, color:'#1e293b'}}>🏢 Business Details</h3>
-                {formData.business_name && <button type="button" onClick={() => setShowProviderModal(false)} style={{background:'none', border:'none', fontSize:'20px', cursor:'pointer'}}>×</button>}
-            </div>
-            
-            <div className="form-group">
-                <label>Business Name *</label>
-                <div style={{position:'relative'}}>
-                    <Briefcase size={16} style={{position:'absolute', top:'12px', left:'10px', color:'#94a3b8'}} />
-                    <input type="text" name="business_name" value={formData.business_name} onChange={handleChange} placeholder="e.g. Jane's Spa" style={{paddingLeft:'35px'}} autoFocus />
-                </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: '#1e293b' }}>🏢 Business Details</h3>
+              {formData.business_name && <button type="button" onClick={() => setShowProviderModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>}
             </div>
 
             <div className="form-group">
-                <label>Suburb *</label>
-                <select name="suburb" value={formData.suburb} onChange={(e) => setFormData({...formData, suburb: e.target.value})} style={{width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ddd'}}>
-                    <option value="">Select Suburb</option>
-                    {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
-                        <optgroup key={letter} label={letter}>
-                            {NAIROBI_SUBURBS[letter].map(sub => (
-                                <option key={sub} value={sub}>{sub}</option>
-                            ))}
-                        </optgroup>
+              <label>Business Name *</label>
+              <div style={{ position: 'relative' }}>
+                <Briefcase size={16} style={{ position: 'absolute', top: '12px', left: '10px', color: '#94a3b8' }} />
+                <input type="text" name="business_name" value={formData.business_name} onChange={handleChange} placeholder="e.g. Jane's Spa" style={{ paddingLeft: '35px' }} autoFocus />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Suburb *</label>
+              <select name="suburb" value={formData.suburb} onChange={(e) => setFormData({ ...formData, suburb: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}>
+                <option value="">Select Suburb</option>
+                {Object.keys(NAIROBI_SUBURBS).sort().map(letter => (
+                  <optgroup key={letter} label={letter}>
+                    {NAIROBI_SUBURBS[letter].map(sub => (
+                      <option key={sub} value={sub}>{sub}</option>
                     ))}
-                </select>
+                  </optgroup>
+                ))}
+              </select>
             </div>
 
             <div className="form-group">
-                <label>Business Address / Landmark</label>
-                <div style={{position:'relative'}}>
-                    <MapPin size={16} style={{position:'absolute', top:'12px', left:'10px', color:'#94a3b8'}} />
-                    <input type="text" name="business_address" value={formData.business_address} onChange={handleChange} placeholder="e.g. 1st Floor, City Mall" style={{paddingLeft:'35px'}} />
-                </div>
+              <label>Business Address / Landmark</label>
+              <div style={{ position: 'relative' }}>
+                <MapPin size={16} style={{ position: 'absolute', top: '12px', left: '10px', color: '#94a3b8' }} />
+                <input type="text" name="business_address" value={formData.business_address} onChange={handleChange} placeholder="e.g. 1st Floor, City Mall" style={{ paddingLeft: '35px' }} />
+              </div>
             </div>
 
             <div className="form-group">
-                <label>Google Maps Link <small style={{color:'#999'}}>(Optional)</small></label>
-                <input type="url" name="google_maps_link" value={formData.google_maps_link} onChange={handleChange} placeholder="https://maps.google.com/..." />
+              <label>Google Maps Link <small style={{ color: '#999' }}>(Optional)</small></label>
+              <input type="url" name="google_maps_link" value={formData.google_maps_link} onChange={handleChange} placeholder="https://maps.google.com/..." />
             </div>
 
-            <button 
-                type="button" 
-                className="btn btn-primary" 
-                onClick={() => {
-                    if(!formData.business_name) alert("Business Name is required");
-                    else setShowProviderModal(false);
-                }}
-                style={{width: '100%', marginTop:'10px', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                if (!formData.business_name) alert("Business Name is required");
+                else setShowProviderModal(false);
+              }}
+              style={{ width: '100%', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
-                <Check size={18} /> Save & Continue
+              <Check size={18} /> Save & Continue
             </button>
           </div>
         </div>
