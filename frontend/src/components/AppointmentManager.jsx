@@ -1386,9 +1386,13 @@ function AppointmentManager({ user }) {
     });
 
     if (type === "history") {
-      if (historyFilter === "completed") displayList = displayList.filter((apt) => apt.status === "completed");
-      else if (historyFilter === "cancelled")
+      if (historyFilter === "completed") {
+        displayList = displayList.filter((apt) => apt.status === "completed");
+      } else if (historyFilter === "cancelled") {
         displayList = displayList.filter((apt) => apt.status === "cancelled" || apt.status === "no-show");
+      } else if (historyFilter === "rebooked") {
+        displayList = displayList.filter((apt) => apt.status === "rebooked");
+      }
 
       const now = new Date();
       if (dateFilter === "this_year") {
@@ -1696,6 +1700,12 @@ function AppointmentManager({ user }) {
                     onClick={() => setHistoryFilter("cancelled")}
                   >
                     Cancelled
+                  </button>
+                  <button
+                    className={`filter-pill ${historyFilter === "rebooked" ? "active" : ""}`}
+                    onClick={() => setHistoryFilter("rebooked")}
+                  >
+                    Rebooked
                   </button>
                 </div>
 
