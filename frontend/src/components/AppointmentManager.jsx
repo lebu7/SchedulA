@@ -583,6 +583,7 @@ function AppointmentManager({ user }) {
   };
 
   const handleRebook = (apt) => {
+    closePreviewIfOpenFor(apt.id);
     setRebookService({
       service_id: apt.service_id,
       id: apt.service_id,
@@ -622,15 +623,19 @@ function AppointmentManager({ user }) {
   };
 
   const handleReschedule = (apt) => {
+    closePreviewIfOpenFor(apt.id);
     openRescheduleModal(apt);
   };
 
   const handleReviewClick = (apt) => {
-    setReviewAppointment(apt);
-    setShowReviewModal(true);
+      closePreviewIfOpenFor(apt.id);
+      setReviewAppointment(apt);
+      setShowReviewModal(true);
   };
 
   const openAppointmentChat = async (apt) => {
+    closePreviewIfOpenFor(apt.id);
+
     const recipientId = user.user_type === "client" ? apt.provider_id : apt.client_id;
     const recipientName = user.user_type === "client" ? apt.provider_name || apt.business_name : apt.client_name;
 
@@ -639,7 +644,7 @@ function AppointmentManager({ user }) {
         recipientId,
         contextType: "appointment",
         contextId: apt.id,
-      });
+    });
 
       const contextData = {
         service_name: apt.service_name,
