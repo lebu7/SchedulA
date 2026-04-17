@@ -29,7 +29,8 @@ const sms = africastalking.SMS;
 
 function formatPhoneNumber(phoneNumber) {
   if (!phoneNumber) return null;
-  let cleaned = phoneNumber.toString().replace(/[\s-]/g, "");
+  // Aggressively strip EVERYTHING that is not a digit or a plus sign
+  let cleaned = phoneNumber.toString().replace(/[^\d+]/g, "");
   if (cleaned.startsWith("0")) cleaned = "+254" + cleaned.substring(1);
   else if (cleaned.startsWith("254")) cleaned = "+" + cleaned;
   else if (cleaned.startsWith("7") || cleaned.startsWith("1"))
@@ -105,7 +106,10 @@ export async function sendSMS(phoneNumber, message) {
   const formattedPhone = formatPhoneNumber(phoneNumber);
   if (!formattedPhone) return { success: false, error: "Invalid phone number" };
 
-  console.log(`📱 Sending SMS to ${formattedPhone}...`);
+  // Added brackets to expose any hidden characters
+  console.log(
+    `📱 Sending SMS to [${formattedPhone}] (Length: ${formattedPhone.length})...`,
+  );
 
   try {
     const result = await sms.send({ to: [formattedPhone], message });
