@@ -32,6 +32,14 @@
   font-weight: 700;
 }
 
+/* Base Controls Wrapper */
+.am-controls {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
+}
+
 /* Walk-In Button Styling (Matches Logout Style) */
 .btn-walk-in {
   display: inline-flex;
@@ -756,13 +764,40 @@
 
   .am-controls {
     width: 100%;
-    flex-direction: column;
+    display: flex;
+    flex-direction: row !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    /* -webkit-overflow-scrolling: touch; */
+    gap: 10px;
+  }
+
+  .am-controls::-webkit-scrollbar {
+    display: none;
+  }
+
+  .view-toggle-pills {
+    flex: 0 0 auto;
+    width: auto !important;
   }
 
   .search-box,
-  .sort-box,
+  .sort-box {
+    width: auto !important;
+    flex: 0 0 auto;
+  }
+
+  .search-box {
+    min-width: 200px;
+  }
+
+  .sort-box {
+    min-width: 160px;
+  }
+
   .sort-box select {
-    width: 100%;
+    width: 100% !important;
   }
 
   /* Keep tabs/filters/sub-tabs on a single line (horizontal scroll) */
@@ -843,17 +878,6 @@
     margin-left: 0;
     white-space: nowrap;
   }
-}
-
-.am-controls {
-  width: 100%;
-  flex-direction: column;
-}
-
-.search-box,
-.sort-box,
-.sort-box select {
-  width: 100%;
 }
 
 .appointments-list {
