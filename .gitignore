@@ -1,6 +1,3 @@
 **/node_modules/
 **/.DS_Store
 **/.env
-**/database/schedula.db
-**/database/schedula.db-wal
-**/database/schedula.db-shm

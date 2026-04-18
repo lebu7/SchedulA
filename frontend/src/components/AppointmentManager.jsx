@@ -1050,6 +1050,7 @@ function AppointmentManager({ user }) {
                     <span
                       onClick={(e) => {
                         e.stopPropagation();
+                        closePreviewIfOpenFor(apt.id);
                         setReportClientId(apt.client_id);
                       }}
                       style={{
@@ -1115,6 +1116,7 @@ function AppointmentManager({ user }) {
                   className="receipt-wrapper"
                   onClick={(e) => {
                     e.stopPropagation();
+                    closePreviewIfOpenFor(apt.id);
                     setSelectedPayment(apt);
                   }}
                   title="View Payment Receipt"
